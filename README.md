@@ -55,8 +55,15 @@ Rust 侧提供 `get_paths` 命令，首次调用会确保以下目录存在：
 1. 按 [gateway/README.md](./gateway/README.md) 下载 Windows 版 octopus 并放到 `bin_dir`，或设置 `MODEL_HUB_GATEWAY_BIN`。
 2. 运行 `pnpm tauri dev`，在应用内查看状态条或设置页启动/停止。
 3. 默认监听 `http://127.0.0.1:8080`（本机绑定）。
+4. 在 **渠道 / 分组 / 日志** 页面完成配置（无登录页；静默管理鉴权）。
 
 缺少二进制时应用仍可打开，并显示可行动错误提示。
+
+## 文档
+
+- [客户端对接](./docs/client-integration.md)
+- [M1 验收清单](./docs/mvp-acceptance.md)
+- [网关侧车说明](./gateway/README.md)
 
 ## 致谢与许可证提示
 

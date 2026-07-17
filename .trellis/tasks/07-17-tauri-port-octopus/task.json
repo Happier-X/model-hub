@@ -21,7 +21,8 @@
   "children": [
     "07-17-mvp-scaffold",
     "07-17-mvp-gateway-sidecar",
-    "07-17-mvp-admin-ui"
+    "07-17-mvp-admin-ui",
+    "07-17-mvp-e2e-docs"
   ],
   "parent": null,
   "relatedFiles": [],
