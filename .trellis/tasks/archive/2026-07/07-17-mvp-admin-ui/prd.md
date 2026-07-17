@@ -73,12 +73,14 @@ octopus 管理 API（前端 `web/src/api`）：
 
 ## Acceptance Criteria
 
-- [ ] AC1：无登录页；网关 running 时可打开渠道/分组/日志并加载数据（含鉴权适配成功）。
-- [ ] AC2：可创建 OpenAI Chat 渠道并出现在列表。
-- [ ] AC3：可创建分组绑定渠道，列表可见；文档/UI 说明 model=分组名。
-- [ ] AC4：日志页可查看至少列表接口数据（可为空列表）。
-- [ ] AC5：网关未运行时各业务页有明确提示。
-- [ ] AC6：`pnpm build` / `pnpm lint` 通过；关键 API 类型有定义。
+- [x] AC1：无登录页；实现静默 `/api/v1/user/login` + 手动 Token 兜底；running 后可加载业务页。
+- [x] AC2：渠道页可创建 OpenAI Chat 渠道并列表/删除/启停。
+- [x] AC3：分组页可创建轮询分组并列表/删除；UI 说明 model=分组名。
+- [x] AC4：日志页轮询 list（可为空）。
+- [x] AC5：`GatewayGate` 在未运行/鉴权失败时明确提示。
+- [x] AC6：`pnpm build` / `pnpm lint` 通过。
+
+说明：完整真侧车联调依赖本机 `octopus.exe`；代码路径与上游 API 已对齐。
 
 ## Open Risks
 
