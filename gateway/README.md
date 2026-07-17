@@ -53,13 +53,25 @@ $env:MODEL_HUB_GATEWAY_BIN = "$PWD\tools\octopus\octopus.exe"
 | 监听地址 | 默认 **`127.0.0.1`** |
 | 端口 | 默认 **8080** |
 | 管理 UI | Model Hub **无登录页**；静默 `POST /api/v1/user/login`（默认 admin/admin） |
-| 客户端网关 Key | MVP 文档占位；v0.9.28 的 `/v1/*` 可能仍校验 `sk-octopus-...` 形式的 API Key（见下） |
+| 客户端网关 Key | **必须**使用侧车签发的 `sk-octopus-...`（应用 **API 密钥** 页创建）；与管理 JWT 分离 |
+
+## 两套凭证
+
+| 路径 | 鉴权 | 说明 |
+|------|------|------|
+| `/api/v1/*` | Bearer **管理 JWT** | 渠道/分组/API Key/日志等管理接口 |
+| `/v1/*` | Bearer **`sk-octopus-...`** 或 `x-api-key` | OpenAI 兼容客户端（models / chat 等） |
+
+管理创建 Key：
+
+- `POST /api/v1/apikey/create` body：`{"name":"local-client","enabled":true}`
+- `GET /api/v1/apikey/list` / `POST /api/v1/apikey/update` / `DELETE /api/v1/apikey/delete/:id`
 
 ## 联调发现（v0.9.28）
 
 1. **配置路径**：必须 `data/config.json` + `start --config data/config.json`。
 2. **渠道 `type` 字段**：该版本二进制绑定为 **数字**；传字符串会返回 `Invalid JSON format`。OpenAI Chat 使用 **`type: 0`**。
-3. **对外 `/v1/models`**：可能返回 401（需侧车内创建的网关 API Key，前缀形如 `sk-octopus-`）。管理 API（`/api/v1/*`）使用登录 JWT，与客户端 Key 不同。
+3. **对外 `/v1/*`**：校验网关 API Key（前缀 `sk-octopus-`）。错误/占位 Key → **401**；正确 Key → `/v1/models` 可 200（data 可为空）。
 4. **清理进程**：开发脚本应只结束测试端口/测试 PID，不要 `Stop-Process -Name octopus`，以免误杀你本机正式实例。
 
 ## 启停
@@ -73,3 +85,4 @@ $env:MODEL_HUB_GATEWAY_BIN = "$PWD\tools\octopus\octopus.exe"
 2. 端口占用 → 换端口或结束占用进程（不要误杀其他 octopus）
 3. 管理 API 401 → 设置页粘贴 Token，或确认默认 admin 未改密
 4. 创建渠道 Invalid JSON → 确认使用数字 `type`（前端已按 v0.9.28 适配）
+5. 客户端 `/v1/*` 401 → 到 **API 密钥** 页创建 Key，并确认 Header 使用完整 `sk-octopus-...`（不是管理 JWT）

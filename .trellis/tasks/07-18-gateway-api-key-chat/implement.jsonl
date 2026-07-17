@@ -1,0 +1,12 @@
+{"path":".trellis/spec/frontend/index.md","reason":"前端层约定"}
+{"path":".trellis/spec/frontend/directory-structure.md","reason":"pages/api 目录"}
+{"path":".trellis/spec/frontend/component-guidelines.md","reason":"页面组件风格"}
+{"path":".trellis/spec/backend/directory-structure.md","reason":"gateway 配置路径契约"}
+{"path":"src/api/gatewayHttp.ts","reason":"HTTP 客户端与鉴权"}
+{"path":"src/api/channel.ts","reason":"API 模块与 mask 模式参考"}
+{"path":"src/pages/ChannelsPage.tsx","reason":"列表页交互参考"}
+{"path":"src/App.tsx","reason":"导航与设置提示"}
+{"path":"src/components/layout/Sidebar.tsx","reason":"导航项"}
+{"path":"docs/client-integration.md","reason":"客户端文档"}
+{"path":"gateway/README.md","reason":"侧车与 Key 说明"}
+{"path":"scripts/e2e-octopus-smoke.py","reason":"冒烟扩展"}

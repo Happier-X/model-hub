@@ -1,6 +1,6 @@
 # Model Hub
 
-Model Hub 是一个 Windows 优先的 Tauri 2 桌面应用脚手架，用于后续承载本地网关侧车与管理 UI。本阶段仅包含无登录主窗口、中文占位导航和应用数据目录路径契约，不包含网关进程启停或业务 CRUD。
+Model Hub 是一个 Windows 优先的 Tauri 2 桌面应用，用于承载本地网关侧车（octopus 兼容）与管理 UI：渠道、分组、**API 密钥**、日志与设置。
 
 ## Windows 开发前置
 
@@ -55,7 +55,8 @@ Rust 侧提供 `get_paths` 命令，首次调用会确保以下目录存在：
 1. 按 [gateway/README.md](./gateway/README.md) 下载 Windows 版 octopus 并放到 `bin_dir`，或设置 `MODEL_HUB_GATEWAY_BIN`。
 2. 运行 `pnpm tauri dev`，在应用内查看状态条或设置页启动/停止。
 3. 默认监听 `http://127.0.0.1:8080`（本机绑定）。
-4. 在 **渠道 / 分组 / 日志** 页面完成配置（无登录页；静默管理鉴权）。
+4. 在 **渠道 / 分组 / API 密钥 / 日志** 完成配置（无登录页；静默管理鉴权）。
+5. 客户端调用 `/v1/*` 时须使用 **网关 API Key**（`sk-octopus-...`），与管理 JWT 不同。详见 [客户端对接](./docs/client-integration.md)。
 
 缺少二进制时应用仍可打开，并显示可行动错误提示。
 

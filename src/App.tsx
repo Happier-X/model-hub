@@ -14,6 +14,7 @@ import {
   type NavigationItem,
 } from "./components/layout/Sidebar";
 import { StatusBar } from "./components/layout/StatusBar";
+import { ApiKeysPage } from "./pages/ApiKeysPage";
 import { ChannelsPage } from "./pages/ChannelsPage";
 import { GroupsPage } from "./pages/GroupsPage";
 import { LogsPage } from "./pages/LogsPage";
@@ -238,7 +239,13 @@ function AuthPanel({
   );
 }
 
-function ClientHintPanel({ baseUrl }: { baseUrl: string }) {
+function ClientHintPanel({
+  baseUrl,
+  onOpenApiKeys,
+}: {
+  baseUrl: string;
+  onOpenApiKeys: () => void;
+}) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <h3 className="text-lg font-semibold">客户端对接提示</h3>
@@ -246,13 +253,31 @@ function ClientHintPanel({ baseUrl }: { baseUrl: string }) {
         <li>
           Base URL：
           <code className="ml-1 rounded bg-slate-100 px-1 font-mono text-xs">
+            {baseUrl}
+          </code>
+        </li>
+        <li>
+          OpenAI 兼容根：
+          <code className="ml-1 rounded bg-slate-100 px-1 font-mono text-xs">
             {baseUrl}/v1
           </code>
         </li>
         <li>
           <code className="rounded bg-slate-100 px-1">model</code> 填分组名（不是上游模型名）
         </li>
-        <li>网关本机免鉴权时，SDK 的 api_key 可填任意占位值</li>
+        <li>
+          客户端必须使用网关 API Key（前缀{" "}
+          <code className="rounded bg-slate-100 px-1">sk-octopus-</code>
+          ），与上方管理 JWT 不是同一套。请到{" "}
+          <button
+            type="button"
+            className="font-medium text-cyan-700 underline"
+            onClick={onOpenApiKeys}
+          >
+            API 密钥
+          </button>{" "}
+          页创建并复制完整 Key。
+        </li>
       </ul>
     </section>
   );
@@ -263,7 +288,7 @@ function DashboardPage() {
     <div className="space-y-4">
       <h2 className="text-2xl font-bold">仪表盘</h2>
       <p className="text-sm text-slate-600">
-        MVP 仪表盘为占位。请使用「渠道」「分组」「日志」「设置」完成配置闭环。
+        MVP 仪表盘为占位。请使用「渠道」「分组」「API 密钥」「日志」「设置」完成配置闭环。
       </p>
       <section className="grid gap-4 md:grid-cols-3">
         {[
@@ -417,6 +442,13 @@ export function App() {
                 authMessage={authMessage}
               />
             ) : null}
+            {activeItem === "API 密钥" ? (
+              <ApiKeysPage
+                running={!!running}
+                authOk={authOk}
+                authMessage={authMessage}
+              />
+            ) : null}
             {activeItem === "日志" ? (
               <LogsPage
                 running={!!running}
@@ -445,7 +477,10 @@ export function App() {
                   authMessage={authMessage}
                   onRetry={() => void refreshAuth()}
                 />
-                <ClientHintPanel baseUrl={baseUrl} />
+                <ClientHintPanel
+                  baseUrl={baseUrl}
+                  onOpenApiKeys={() => setActiveItem("API 密钥")}
+                />
                 <PathsPanel paths={paths} pathError={pathError} />
               </div>
             ) : null}

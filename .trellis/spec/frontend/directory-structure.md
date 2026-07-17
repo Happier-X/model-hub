@@ -17,6 +17,7 @@ src/
 │   ├── auth.ts                 # 静默 login / 手动 token
 │   ├── channel.ts
 │   ├── group.ts
+│   ├── apikey.ts
 │   └── log.ts
 ├── components/
 │   ├── GatewayGate.tsx         # 网关未运行 / 鉴权失败门禁
@@ -26,6 +27,7 @@ src/
 └── pages/
     ├── ChannelsPage.tsx
     ├── GroupsPage.tsx
+    ├── ApiKeysPage.tsx
     └── LogsPage.tsx
 ```
 
@@ -39,7 +41,7 @@ src/
 
 1. **业务请求走 `api/`**，不在组件内散落裸 `fetch` URL 字符串（可集中 baseURL）。
 2. **Tauri 专用**放 `lib/tauri.ts` 或 `api/tauri.ts`，浏览器纯 dev 时可 mock。
-3. **路由**：MVP 扁平：渠道、分组、日志、设置；（可选）仪表盘占位。
+3. **路由**：MVP 扁平：渠道、分组、API 密钥、日志、设置；（可选）仪表盘占位。
 4. **无** `login` / `auth` 页面与会话存储（产品 D3）。
 
 ---

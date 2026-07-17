@@ -15,7 +15,7 @@
 | 网关侧车 | HTTP 管理 API + OpenAI 兼容转发 + SQLite | 阶段 1：外部/内嵌兼容进程；接口以 HTTP 契约为准 |
 | 持久化（MVP） | 渠道/分组/日志等 | **仅 SQLite** |
 
-管理 UI **无登录**；默认监听 **`127.0.0.1`**；对外 LLM API **本机免鉴权**（见产品 PRD D3/D6）。
+管理 UI **无登录**；默认监听 **`127.0.0.1`**；管理 API 用 JWT，客户端 `/v1/*` 须使用侧车签发的网关 API Key（`sk-octopus-...`，见任务 `07-18-gateway-api-key-chat`）。
 
 ---
 
@@ -33,7 +33,8 @@
 
 ## Related Product Decisions
 
-- 路径 C 混合渐进、M1 MVP、Windows only、无管理登录、本机免鉴权：见任务 `07-17-tauri-port-octopus/prd.md`。
+- 路径 C 混合渐进、M1 MVP、Windows only、无管理登录：见任务 `07-17-tauri-port-octopus/prd.md`。
+- 客户端网关 API Key 与鉴权闭环：见任务 `07-18-gateway-api-key-chat/prd.md`。
 
 ---
 

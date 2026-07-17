@@ -1,0 +1,4 @@
+{"path":".trellis/spec/frontend/quality-guidelines.md","reason":"前端质量门"}
+{"path":".trellis/spec/frontend/type-safety.md","reason":"类型"}
+{"path":"docs/mvp-acceptance.md","reason":"验收表述一致性"}
+{"path":"src/components/GatewayGate.tsx","reason":"网关门控复用"}

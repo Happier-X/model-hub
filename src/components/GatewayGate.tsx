@@ -21,7 +21,7 @@ export function GatewayGate({
       >
         <p className="font-semibold">网关未运行</p>
         <p className="mt-2 leading-6">
-          请先在「设置」中启动网关侧车，再管理渠道、分组与日志。业务数据通过本机
+          请先在「设置」中启动网关侧车，再管理渠道、分组、API 密钥与日志。业务数据通过本机
           HTTP API 访问，不会在网关停止时假装加载成功。
         </p>
       </div>

@@ -187,9 +187,53 @@ def main() -> int:
         code, _ = http("GET", "/api/v1/log/list?page=1&page_size=5", token=token)
         print("OK log_list" if code == 200 else f"FAIL log_list {code}")
 
-        # 客户端 Key 与管理 JWT 不同；401 也说明网关在响应
-        code, _ = http("GET", "/v1/models", token="sk-placeholder")
-        print(f"OK v1_models_reachable status={code}")
+        # 管理 JWT 创建网关客户端 API Key，再探测 /v1 鉴权闭环
+        code, key_resp = http(
+            "POST",
+            "/api/v1/apikey/create",
+            {"name": "smoke-client", "enabled": True},
+            token=token,
+        )
+        if code != 200 or not isinstance(key_resp, dict):
+            print("FAIL apikey_create", code, key_resp)
+            return 1
+        gateway_key = (key_resp.get("data") or {}).get("api_key")
+        if not gateway_key or not str(gateway_key).startswith("sk-octopus-"):
+            print("FAIL apikey_create missing sk-octopus key", key_resp)
+            return 1
+        print("OK apikey_create")
+
+        code, _ = http("GET", "/api/v1/apikey/list", token=token)
+        print("OK apikey_list" if code == 200 else f"FAIL apikey_list {code}")
+
+        # 错误占位 Key 应 401（证明不是免鉴权）
+        bad_code, _ = http("GET", "/v1/models", token="sk-placeholder")
+        if bad_code != 401:
+            print(f"FAIL v1_models_bad_key expected 401 got {bad_code}")
+            return 1
+        print("OK v1_models_bad_key 401")
+
+        # 正确网关 Key：期望非 401（200 或业务空列表均可）
+        models_code, models_body = http("GET", "/v1/models", token=str(gateway_key))
+        if models_code == 401:
+            print("FAIL v1_models with gateway key still 401", models_body)
+            return 1
+        print(f"OK v1_models status={models_code}")
+
+        # 可选：无真实上游时 Chat 可为业务错误，但不能是鉴权失败
+        chat_code, chat_body = http(
+            "POST",
+            "/v1/chat/completions",
+            {
+                "model": "smoke-group",
+                "messages": [{"role": "user", "content": "ping"}],
+            },
+            token=str(gateway_key),
+        )
+        if chat_code == 401:
+            print("FAIL chat auth 401", chat_body)
+            return 1
+        print(f"OK v1_chat_auth_ok status={chat_code} (业务错误可接受)")
 
         print("SMOKE_PASS")
         return 0
