@@ -20,7 +20,8 @@
   "subtasks": [],
   "children": [
     "07-17-mvp-scaffold",
-    "07-17-mvp-gateway-sidecar"
+    "07-17-mvp-gateway-sidecar",
+    "07-17-mvp-admin-ui"
   ],
   "parent": null,
   "relatedFiles": [],

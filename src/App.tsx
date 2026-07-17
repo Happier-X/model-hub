@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { applyManualAdminToken, ensureAdminSession } from "./api/auth";
+import { setBaseUrlProvider } from "./api/gatewayHttp";
 import {
   gatewayStart,
   gatewayStatus,
@@ -12,6 +14,9 @@ import {
   type NavigationItem,
 } from "./components/layout/Sidebar";
 import { StatusBar } from "./components/layout/StatusBar";
+import { ChannelsPage } from "./pages/ChannelsPage";
+import { GroupsPage } from "./pages/GroupsPage";
+import { LogsPage } from "./pages/LogsPage";
 
 const pathLabels: Array<[keyof AppPaths, string]> = [
   ["app_data_dir", "应用数据根目录"],
@@ -104,7 +109,9 @@ function GatewayPanel({
           <button
             type="button"
             onClick={onStart}
-            disabled={busy || gateway?.state === "running" || gateway?.state === "starting"}
+            disabled={
+              busy || gateway?.state === "running" || gateway?.state === "starting"
+            }
             className="rounded-lg bg-cyan-600 px-3 py-2 text-sm font-medium text-white hover:bg-cyan-500 disabled:opacity-50"
           >
             启动网关
@@ -170,6 +177,113 @@ function GatewayPanel({
   );
 }
 
+function AuthPanel({
+  authOk,
+  authMessage,
+  onRetry,
+}: {
+  authOk: boolean;
+  authMessage: string;
+  onRetry: () => void;
+}) {
+  const [tokenDraft, setTokenDraft] = useState("");
+
+  const onSaveToken = (event: FormEvent) => {
+    event.preventDefault();
+    applyManualAdminToken(tokenDraft);
+    onRetry();
+  };
+
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h3 className="text-lg font-semibold">管理 API 鉴权（无登录页）</h3>
+      <p className="mt-1 text-sm text-slate-500">
+        网关运行后会静默使用侧车默认 admin 账号换取 Bearer Token。失败时可粘贴 Token 兜底。
+      </p>
+      <p
+        className={`mt-4 rounded-lg p-3 text-sm ${
+          authOk ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"
+        }`}
+      >
+        {authMessage || (authOk ? "管理 API 已就绪" : "尚未鉴权")}
+      </p>
+      <form onSubmit={onSaveToken} className="mt-4 space-y-3">
+        <label className="block text-sm">
+          <span className="font-medium text-slate-700">管理 Token（可选兜底）</span>
+          <input
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
+            value={tokenDraft}
+            onChange={(e) => setTokenDraft(e.target.value)}
+            placeholder="粘贴 JWT / 管理令牌"
+            autoComplete="off"
+          />
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="submit"
+            className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white"
+          >
+            保存 Token 并重试
+          </button>
+          <button
+            type="button"
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            onClick={onRetry}
+          >
+            重新静默鉴权
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+function ClientHintPanel({ baseUrl }: { baseUrl: string }) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h3 className="text-lg font-semibold">客户端对接提示</h3>
+      <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-600">
+        <li>
+          Base URL：
+          <code className="ml-1 rounded bg-slate-100 px-1 font-mono text-xs">
+            {baseUrl}/v1
+          </code>
+        </li>
+        <li>
+          <code className="rounded bg-slate-100 px-1">model</code> 填分组名（不是上游模型名）
+        </li>
+        <li>网关本机免鉴权时，SDK 的 api_key 可填任意占位值</li>
+      </ul>
+    </section>
+  );
+}
+
+function DashboardPage() {
+  return (
+    <div className="space-y-4">
+      <h2 className="text-2xl font-bold">仪表盘</h2>
+      <p className="text-sm text-slate-600">
+        MVP 仪表盘为占位。请使用「渠道」「分组」「日志」「设置」完成配置闭环。
+      </p>
+      <section className="grid gap-4 md:grid-cols-3">
+        {[
+          ["渠道管理", "添加 OpenAI Chat 兼容上游。"],
+          ["分组路由", "对外 model 名与轮询负载。"],
+          ["运行日志", "查看转发请求摘要。"],
+        ].map(([title, description]) => (
+          <article
+            key={title}
+            className="rounded-xl border border-dashed border-slate-300 bg-white/70 p-5"
+          >
+            <h3 className="font-semibold">{title}</h3>
+            <p className="mt-2 text-sm text-slate-500">{description}</p>
+          </article>
+        ))}
+      </section>
+    </div>
+  );
+}
+
 export function App() {
   const [activeItem, setActiveItem] = useState<NavigationItem>("仪表盘");
   const [paths, setPaths] = useState<AppPaths | null>(null);
@@ -177,6 +291,17 @@ export function App() {
   const [gateway, setGateway] = useState<GatewayStatus | null>(null);
   const [gatewayBusy, setGatewayBusy] = useState(false);
   const [gatewayActionError, setGatewayActionError] = useState<string | null>(null);
+  const [authOk, setAuthOk] = useState(false);
+  const [authMessage, setAuthMessage] = useState("等待网关运行后鉴权…");
+
+  useEffect(() => {
+    setBaseUrlProvider(() => {
+      if (gateway?.state === "running") {
+        return gateway.base_url;
+      }
+      return null;
+    });
+  }, [gateway]);
 
   const refreshGateway = useCallback(async () => {
     try {
@@ -201,6 +326,17 @@ export function App() {
     }
   }, []);
 
+  const refreshAuth = useCallback(async () => {
+    if (gateway?.state !== "running") {
+      setAuthOk(false);
+      setAuthMessage("网关未运行，跳过管理 API 鉴权");
+      return;
+    }
+    const result = await ensureAdminSession();
+    setAuthOk(result.ok);
+    setAuthMessage(result.message);
+  }, [gateway?.state]);
+
   useEffect(() => {
     getPaths()
       .then(setPaths)
@@ -217,6 +353,10 @@ export function App() {
     }, 2000);
     return () => window.clearInterval(timer);
   }, [refreshGateway]);
+
+  useEffect(() => {
+    void refreshAuth();
+  }, [refreshAuth]);
 
   const handleStart = async () => {
     setGatewayBusy(true);
@@ -248,6 +388,9 @@ export function App() {
     }
   };
 
+  const running = gateway?.state === "running";
+  const baseUrl = gateway?.base_url ?? "http://127.0.0.1:8080";
+
   return (
     <div className="flex min-h-screen bg-slate-100 text-slate-900">
       <Sidebar
@@ -258,19 +401,37 @@ export function App() {
       <div className="flex min-w-0 flex-1 flex-col">
         <StatusBar gateway={gateway} />
         <main className="flex-1 overflow-auto p-8">
-          <div className="mx-auto flex max-w-5xl flex-col gap-6">
-            <div>
-              <p className="text-sm font-medium text-cyan-700">{activeItem}</p>
-              <h2 className="mt-1 text-3xl font-bold tracking-tight">
-                欢迎使用 Model Hub
-              </h2>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                桌面壳已支持网关侧车启停。渠道、分组与日志管理界面将在后续任务接入。
-              </p>
-            </div>
-
+          <div className="mx-auto max-w-5xl">
+            {activeItem === "仪表盘" ? <DashboardPage /> : null}
+            {activeItem === "渠道" ? (
+              <ChannelsPage
+                running={!!running}
+                authOk={authOk}
+                authMessage={authMessage}
+              />
+            ) : null}
+            {activeItem === "分组" ? (
+              <GroupsPage
+                running={!!running}
+                authOk={authOk}
+                authMessage={authMessage}
+              />
+            ) : null}
+            {activeItem === "日志" ? (
+              <LogsPage
+                running={!!running}
+                authOk={authOk}
+                authMessage={authMessage}
+              />
+            ) : null}
             {activeItem === "设置" ? (
-              <>
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-2xl font-bold">设置</h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    网关生命周期、路径契约与管理 API 鉴权适配。
+                  </p>
+                </div>
                 <GatewayPanel
                   gateway={gateway}
                   busy={gatewayBusy}
@@ -279,39 +440,15 @@ export function App() {
                   onStop={() => void handleStop()}
                   onRefresh={() => void refreshGateway()}
                 />
-                <PathsPanel paths={paths} pathError={pathError} />
-              </>
-            ) : (
-              <>
-                <GatewayPanel
-                  gateway={gateway}
-                  busy={gatewayBusy}
-                  actionError={gatewayActionError}
-                  onStart={() => void handleStart()}
-                  onStop={() => void handleStop()}
-                  onRefresh={() => void refreshGateway()}
+                <AuthPanel
+                  authOk={authOk}
+                  authMessage={authMessage}
+                  onRetry={() => void refreshAuth()}
                 />
+                <ClientHintPanel baseUrl={baseUrl} />
                 <PathsPanel paths={paths} pathError={pathError} />
-                <section className="grid gap-4 md:grid-cols-3">
-                  {[
-                    ["渠道管理", "添加和维护上游模型渠道。"],
-                    ["分组路由", "组织渠道并配置转发策略。"],
-                    ["运行日志", "查看网关请求与运行状态。"],
-                  ].map(([title, description]) => (
-                    <article
-                      key={title}
-                      className="rounded-xl border border-dashed border-slate-300 bg-white/70 p-5"
-                    >
-                      <h3 className="font-semibold">{title}</h3>
-                      <p className="mt-2 text-sm text-slate-500">{description}</p>
-                      <span className="mt-4 inline-block text-xs font-medium text-slate-400">
-                        即将提供
-                      </span>
-                    </article>
-                  ))}
-                </section>
-              </>
-            )}
+              </div>
+            ) : null}
           </div>
         </main>
       </div>

@@ -9,18 +9,27 @@
 ```
 src/
 ├── main.tsx
-├── App.tsx                     # 无登录单页壳与占位内容
-├── index.css                   # Tailwind 入口与全局样式
-├── vite-env.d.ts
+├── App.tsx                     # 无登录导航壳 + 设置/鉴权
+├── index.css
 ├── api/
-│   └── tauri.ts                # get_paths + gateway_start/stop/status
-└── components/
-    └── layout/
-        ├── Sidebar.tsx         # 中文导航与网关状态摘要
-        └── StatusBar.tsx       # 全局网关状态条（轮询）
+│   ├── tauri.ts                # get_paths + gateway_*
+│   ├── gatewayHttp.ts          # 侧车 HTTP + Bearer
+│   ├── auth.ts                 # 静默 login / 手动 token
+│   ├── channel.ts
+│   ├── group.ts
+│   └── log.ts
+├── components/
+│   ├── GatewayGate.tsx         # 网关未运行 / 鉴权失败门禁
+│   └── layout/
+│       ├── Sidebar.tsx
+│       └── StatusBar.tsx
+└── pages/
+    ├── ChannelsPage.tsx
+    ├── GroupsPage.tsx
+    └── LogsPage.tsx
 ```
 
-`App.tsx` 设置区含网关启停面板；网关业务 CRUD 仍走后续 HTTP API，不经 invoke。
+业务 CRUD 只走 HTTP `/api/v1/*`；进程启停只走 Tauri invoke。
 
 后续业务页面放入 `routes/` 或 `pages/`，领域状态按需增加 `features/`、`hooks/`、`stores/`；通用组件放入 `components/ui/`。
 
