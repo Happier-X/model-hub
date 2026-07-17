@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "默认桌面窗口能力。当前仅使用自定义 get_paths 命令。",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

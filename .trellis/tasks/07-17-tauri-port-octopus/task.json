@@ -1,0 +1,28 @@
+{
+  "id": "tauri-port-octopus",
+  "name": "tauri-port-octopus",
+  "title": "Tauri 移植 octopus LLM 网关",
+  "description": "用 Tauri 完整移植 bestruirui/octopus 的 LLM API 聚合网关能力（桌面端）",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "happier",
+  "assignee": "happier",
+  "createdAt": "2026-07-17",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-17-mvp-scaffold"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
