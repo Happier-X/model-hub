@@ -6,10 +6,10 @@
 
 - [x] 产品决策 D1–D7 写入 `prd.md`
 - [x] 目标栈最小 spec 写入 `.trellis/spec/{backend,frontend}/`
-- [ ] 用户确认 bootstrap 可归档：`00-bootstrap-guidelines`
-- [ ] 父任务 `prd.md` 收敛终稿 + 用户审阅 `design.md` / 本文件
-- [ ] 配置 `implement.jsonl` / `check.jsonl`（真实 spec 条目，非子任务 start 不强制父任务 start）
-- [ ] **不要**对父任务 `task.py start` 后直接大范围写代码；先 `task.py create` 子任务并 start 子任务
+- [x] bootstrap 已归档：`00-bootstrap-guidelines`
+- [x] 父任务规划产物 + 子任务地图已执行
+- [x] 配置 `implement.jsonl` / `check.jsonl`
+- [x] 四个子任务均已实现并归档（scaffold / sidecar / admin-ui / e2e-docs）
 
 ## 1. 子任务执行顺序
 

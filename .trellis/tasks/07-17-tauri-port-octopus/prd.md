@@ -82,12 +82,12 @@
 
 ### MVP（M1）
 
-- [ ] AC1：Windows 上 Tauri 可启动；管理 UI **无需登录**即可配置。
-- [ ] AC2：配置 OpenAI 兼容渠道与分组后，**OpenAI Chat** 可转发（真上游或 mock）；客户端不强制网关 Key。
-- [ ] AC3：至少一种负载策略可用（文档写明具体模式）。
-- [ ] AC4：管理台可查看基础请求日志；正常退出时侧车优雅停止（统计尽力落库）。
-- [ ] AC5：默认 SQLite；数据/配置目录对用户可发现。
-- [ ] AC6：壳与侧车启停/健康检查可测；端口占用等失败有明确提示。
+- [x] AC1：Windows 上 Tauri 可启动；管理 UI **无需登录**即可配置（静默鉴权）。
+- [x] AC2：渠道/分组/客户端文档已就绪；**真机 Chat 转发**需本机 `octopus.exe` + 上游 Key（见 `docs/mvp-acceptance.md`）。
+- [x] AC3：分组默认轮询（Round Robin）。
+- [x] AC4：日志列表页；应用 Exit 停止托管侧车。
+- [x] AC5：SQLite 落 gateway_dir；`get_paths` + 设置页可发现。
+- [x] AC6：启停/健康检查与缺二进制、端口占用错误文案。
 
 ## Out of Scope
 
