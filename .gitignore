@@ -43,3 +43,8 @@ coverage/
 tmp/
 temp/
 .cache/
+
+# 本地下载的侧车二进制（AGPL，勿提交）
+tools/octopus/
+*.exe
+!src-tauri/icons/**

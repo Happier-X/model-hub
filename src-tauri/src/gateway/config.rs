@@ -6,24 +6,32 @@ use crate::error::AppError;
 
 pub const DEFAULT_HOST: &str = "127.0.0.1";
 pub const DEFAULT_PORT: u16 = 8080;
+/// 相对 gateway 工作目录的默认配置文件（对齐 octopus `start --config`）
+pub const DEFAULT_CONFIG_RELATIVE: &str = "data/config.json";
+/// 相对 gateway 工作目录的 SQLite 路径
+pub const DEFAULT_DATABASE_RELATIVE: &str = "data/data.db";
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct GatewayRuntimeConfig {
     pub host: String,
     pub port: u16,
     pub database_type: String,
+    /// 相对 gateway 工作目录，或绝对路径
     pub database_path: String,
     pub log_level: String,
+    /// 传给 `octopus start --config`
+    pub config_relative: String,
 }
 
 impl GatewayRuntimeConfig {
-    pub fn default_local(gateway_dir: &Path) -> Self {
+    pub fn default_local(_gateway_dir: &Path) -> Self {
         Self {
             host: DEFAULT_HOST.to_string(),
             port: DEFAULT_PORT,
             database_type: "sqlite".to_string(),
-            database_path: gateway_dir.join("data.db").display().to_string(),
+            database_path: DEFAULT_DATABASE_RELATIVE.to_string(),
             log_level: "info".to_string(),
+            config_relative: DEFAULT_CONFIG_RELATIVE.to_string(),
         }
     }
 }
@@ -57,8 +65,24 @@ pub fn write_config_file(
     gateway_dir: &Path,
     config: &GatewayRuntimeConfig,
 ) -> Result<(), AppError> {
-    fs::create_dir_all(gateway_dir).map_err(|source| AppError::CreateDirectory {
-        path: gateway_dir.display().to_string(),
+    let config_path = gateway_dir.join(&config.config_relative);
+    if let Some(parent) = config_path.parent() {
+        fs::create_dir_all(parent).map_err(|source| AppError::CreateDirectory {
+            path: parent.display().to_string(),
+            source,
+        })?;
+    }
+
+    // 确保数据库父目录存在（相对路径相对 gateway_dir）
+    let db_path = Path::new(&config.database_path);
+    let db_parent_rel = db_path.parent().unwrap_or_else(|| Path::new("."));
+    let db_parent = if db_path.is_absolute() {
+        db_parent_rel.to_path_buf()
+    } else {
+        gateway_dir.join(db_parent_rel)
+    };
+    fs::create_dir_all(&db_parent).map_err(|source| AppError::CreateDirectory {
+        path: db_parent.display().to_string(),
         source,
     })?;
 
@@ -76,14 +100,13 @@ pub fn write_config_file(
         },
     };
 
-    let path = gateway_dir.join("config.json");
     let body =
         serde_json::to_string_pretty(&payload).map_err(|source| AppError::SerializeConfig {
-            path: path.display().to_string(),
+            path: config_path.display().to_string(),
             source,
         })?;
-    fs::write(&path, body).map_err(|source| AppError::WriteConfig {
-        path: path.display().to_string(),
+    fs::write(&config_path, body).map_err(|source| AppError::WriteConfig {
+        path: config_path.display().to_string(),
         source,
     })?;
     Ok(())
@@ -104,17 +127,19 @@ mod tests {
     use std::path::PathBuf;
 
     use super::{
-        env_overrides, write_config_file, GatewayRuntimeConfig, DEFAULT_HOST, DEFAULT_PORT,
+        env_overrides, write_config_file, GatewayRuntimeConfig, DEFAULT_CONFIG_RELATIVE,
+        DEFAULT_DATABASE_RELATIVE, DEFAULT_HOST, DEFAULT_PORT,
     };
 
     #[test]
-    fn default_config_binds_loopback_and_sqlite() {
+    fn default_config_binds_loopback_and_relative_sqlite() {
         let dir = PathBuf::from("C:/tmp/gateway");
         let config = GatewayRuntimeConfig::default_local(&dir);
         assert_eq!(config.host, DEFAULT_HOST);
         assert_eq!(config.port, DEFAULT_PORT);
         assert_eq!(config.database_type, "sqlite");
-        assert!(config.database_path.ends_with("data.db"));
+        assert_eq!(config.database_path, DEFAULT_DATABASE_RELATIVE);
+        assert_eq!(config.config_relative, DEFAULT_CONFIG_RELATIVE);
     }
 
     #[test]
@@ -128,17 +153,18 @@ mod tests {
     }
 
     #[test]
-    fn writes_config_json_to_gateway_dir() {
+    fn writes_config_json_under_data_dir() {
         let dir =
             std::env::temp_dir().join(format!("model-hub-gateway-config-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let config = GatewayRuntimeConfig::default_local(&dir);
         write_config_file(&dir, &config).unwrap();
-        let text = std::fs::read_to_string(dir.join("config.json")).unwrap();
+        let text = std::fs::read_to_string(dir.join("data/config.json")).unwrap();
         assert!(text.contains("127.0.0.1"));
         assert!(text.contains("8080"));
         assert!(text.contains("sqlite"));
+        assert!(text.contains("data/data.db"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

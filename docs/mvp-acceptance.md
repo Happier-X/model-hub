@@ -34,6 +34,8 @@ cargo check --manifest-path src-tauri/Cargo.toml
 
 ## 已知边界
 
-- 未在 CI 下载/运行真实 octopus 二进制。
-- 上游若改密或强制网关 Key，需设置页 Token / 后续适配。
-- Windows 停止子进程以 `kill` 为主；守护化残留需手动结束端口占用进程。
+- 真机钉扎 **octopus v0.9.28**（见 `gateway/README.md`、`scripts/fetch-octopus-windows.ps1`、`scripts/e2e-octopus-smoke.py`）。
+- 该版本渠道 `type` 为 **数字**（OpenAI Chat = `0`）；字符串 type 会 Invalid JSON。
+- `/v1/*` 客户端可能仍需侧车签发的 `sk-octopus-...` Key；管理 API 用 JWT。
+- 上游若改密，需设置页 Token。
+- 开发清理**只结束测试端口/PID**，勿按进程名杀掉本机全部 octopus。

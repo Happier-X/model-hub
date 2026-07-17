@@ -143,7 +143,7 @@ TypeScript：`gatewayStart` / `gatewayStop` / `gatewayStatus`（`src/api/tauri.t
 | `data_dir` | `gateway_dir` |
 | `binary_path` | 解析到的 exe，可空 |
 
-启动前写入 `{gateway_dir}/config.json`，并注入 `OCTOPUS_SERVER_HOST/PORT` 等环境变量。工作目录为 `gateway_dir`。
+启动前写入 **`{gateway_dir}/data/config.json`**，并以 `octopus start --config data/config.json` 启动；注入 `OCTOPUS_SERVER_HOST/PORT` 等环境变量。工作目录为 `gateway_dir`。数据库默认相对路径 `data/data.db`。
 
 ### 4. Validation & Error Matrix
 

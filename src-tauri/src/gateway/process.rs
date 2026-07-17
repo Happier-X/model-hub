@@ -70,6 +70,8 @@ impl GatewayRuntime {
         let mut command = Command::new(&binary);
         command
             .arg("start")
+            .arg("--config")
+            .arg(&config.config_relative)
             .current_dir(gateway_dir)
             .stdin(Stdio::null())
             .stdout(Stdio::null())

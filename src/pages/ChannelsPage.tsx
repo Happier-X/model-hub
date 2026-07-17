@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
+  channelTypeLabel,
   createOpenAiChatChannel,
   deleteChannel,
   listChannels,
@@ -65,7 +66,7 @@ export function ChannelsPage({ running, authOk, authMessage }: ChannelsPageProps
       <div>
         <h2 className="text-2xl font-bold">渠道</h2>
         <p className="mt-1 text-sm text-slate-600">
-          MVP 支持 OpenAI Chat 兼容渠道（类型 openai/chat_completions）。
+          MVP 支持 OpenAI Chat 兼容渠道（侧车 v0.9.28 使用数字 type=0）。
         </p>
       </div>
 
@@ -171,8 +172,8 @@ export function ChannelsPage({ running, authOk, authMessage }: ChannelsPageProps
                       </p>
                       <p className="mt-1 font-mono text-xs text-slate-500">{firstUrl}</p>
                       <p className="mt-1 text-xs text-slate-500">
-                        模型 {channel.model} · Key {maskSecret(firstKey)} ·{" "}
-                        {channel.enabled ? "启用" : "禁用"}
+                        {channelTypeLabel(channel.type)} · 模型 {channel.model} · Key{" "}
+                        {maskSecret(firstKey)} · {channel.enabled ? "启用" : "禁用"}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
