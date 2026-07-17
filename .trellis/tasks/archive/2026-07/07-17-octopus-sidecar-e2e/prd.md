@@ -30,11 +30,11 @@
 
 ## Acceptance Criteria
 
-- [ ] AC1：`gateway/README.md` 钉扎 v0.9.28 + Windows x64 下载步骤
-- [ ] AC2：本机可 start 真实二进制至 running
-- [ ] AC3：静默鉴权 + channel/group/log API 至少 list 成功
-- [ ] AC4：联调问题已修或文档记录 workaround
-- [ ] AC5：`pnpm build` / `cargo test` 仍通过
+- [x] AC1：`gateway/README.md` 钉扎 v0.9.28 + Windows x64 下载步骤
+- [x] AC2：本机可 start 真实二进制至 running（`scripts/e2e-octopus-smoke.py`）
+- [x] AC3：login + channel/group create/list + log list 成功
+- [x] AC4：配置路径 `data/config.json`、`type` 数字枚举、清理策略已修/文档化
+- [x] AC5：`pnpm build` / `cargo test` / smoke 通过
 
 ## Out of Scope
 
