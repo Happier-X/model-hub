@@ -10,25 +10,30 @@
 
 ```
 /
+├── gateway/
+│   └── README.md              # 侧车二进制钉扎、放置路径、AGPL
 ├── src-tauri/                 # Tauri / Rust 壳
 │   ├── src/
-│   │   ├── main.rs            # 桌面入口
-│   │   ├── lib.rs             # Builder、命令注册
-│   │   ├── paths.rs           # 应用数据目录契约与 get_paths
-│   │   └── error.rs           # 可序列化 invoke 错误
+│   │   ├── main.rs
+│   │   ├── lib.rs             # Builder、命令注册、退出停侧车
+│   │   ├── paths.rs           # get_paths
+│   │   ├── error.rs
+│   │   └── gateway/           # 侧车进程管理
+│   │       ├── mod.rs         # gateway_start/stop/status
+│   │       ├── state.rs
+│   │       ├── process.rs
+│   │       ├── health.rs
+│   │       ├── config.rs
+│   │       └── binary.rs
 │   ├── capabilities/
-│   │   └── default.json
 │   ├── icons/
-│   │   └── icon.ico
 │   ├── Cargo.toml
-│   ├── Cargo.lock
-│   ├── build.rs
 │   └── tauri.conf.json
-├── src/                       # 前端 SPA（见 frontend/directory-structure.md）
-└── .trellis/                  # Trellis 任务与 spec
+├── src/                       # 前端 SPA
+└── .trellis/
 ```
 
-后续侧车任务在 `src-tauri/src/gateway/` 增加进程管理模块；需要打包二进制时再建立 `src-tauri/binaries/`。
+Windows 侧车默认可执行文件：`{bin_dir}/octopus.exe`；可用环境变量 `MODEL_HUB_GATEWAY_BIN` 覆盖。勿将大型 exe 提交进 Git。
 
 ---
 
@@ -109,8 +114,76 @@ const { gateway_dir: gateway } = await getPaths();
 
 ---
 
+## 网关侧车 invoke 契约
+
+### 1. Scope / Trigger
+
+新增/修改侧车启停、健康检查、配置注入或前端网关状态展示时，必须同步本契约。
+
+### 2. Signatures
+
+- `gateway_start(app) -> Result<GatewayStatus, InvokeError>`
+- `gateway_stop() -> Result<GatewayStatus, InvokeError>`
+- `gateway_status(app) -> Result<GatewayStatus, InvokeError>`
+
+TypeScript：`gatewayStart` / `gatewayStop` / `gatewayStatus`（`src/api/tauri.ts`）。
+
+### 3. Contracts
+
+`GatewayStatus` 字段（snake_case）：
+
+| 字段 | 说明 |
+|------|------|
+| `state` | `idle` \| `starting` \| `running` \| `stopping` \| `error` |
+| `host` | 默认 `127.0.0.1` |
+| `port` | 默认 `8080` |
+| `pid` | 可选 |
+| `last_error` | 可行动错误文案 |
+| `base_url` | `http://{host}:{port}` |
+| `data_dir` | `gateway_dir` |
+| `binary_path` | 解析到的 exe，可空 |
+
+启动前写入 `{gateway_dir}/config.json`，并注入 `OCTOPUS_SERVER_HOST/PORT` 等环境变量。工作目录为 `gateway_dir`。
+
+### 4. Validation & Error Matrix
+
+| 条件 | code / 行为 |
+|------|-------------|
+| 缺少 exe | `GATEWAY_BINARY_MISSING`，提示放置路径或 `MODEL_HUB_GATEWAY_BIN` |
+| 端口占用 | `GATEWAY_PORT_IN_USE` |
+| 健康检查超时 | `GATEWAY_HEALTH_TIMEOUT`，清理残留子进程 |
+| 配置写入失败 | `GATEWAY_CONFIG_FAILED` |
+| 应用退出 | `RunEvent::Exit` 时 `stop_managed` |
+
+### 5. Good / Base / Bad
+
+- Good：设置页启停，状态条显示 running + port。
+- Base：无 exe 时 UI 显示可行动错误，窗口仍可打开。
+- Bad：前端写死 exe 绝对路径；默认监听 `0.0.0.0` 且无提示。
+
+### 6. Tests Required
+
+- config 默认 host/port/sqlite 与 env key 单测
+- 二进制缺失错误单测
+- 健康探测/端口可达单测
+- 状态机字段单测
+
+### 7. Wrong vs Correct
+
+```ts
+// Wrong
+await fetch("http://127.0.0.1:8080/admin/start");
+
+// Correct
+await gatewayStart();
+const { state, base_url } = await gatewayStatus();
+```
+
+---
+
 ## Anti-Patterns
 
 - 在前端硬编码绝对路径到侧车 exe。
 - 管理 API 与转发 API 混在同一无区分路由且无法文档化。
 - 为「完整移植」在壳里重写一套与侧车重复的配置存储。
+- 将 `octopus.exe` 无说明地提交进 Git。

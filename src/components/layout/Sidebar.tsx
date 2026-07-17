@@ -1,3 +1,6 @@
+import type { GatewayStatus } from "../../api/tauri";
+import { gatewayStateLabel } from "../../api/tauri";
+
 const navigationItems = ["仪表盘", "渠道", "分组", "日志", "设置"] as const;
 
 export type NavigationItem = (typeof navigationItems)[number];
@@ -5,9 +8,12 @@ export type NavigationItem = (typeof navigationItems)[number];
 interface SidebarProps {
   activeItem: NavigationItem;
   onNavigate: (item: NavigationItem) => void;
+  gateway: GatewayStatus | null;
 }
 
-export function Sidebar({ activeItem, onNavigate }: SidebarProps) {
+export function Sidebar({ activeItem, onNavigate, gateway }: SidebarProps) {
+  const label = gateway ? gatewayStateLabel(gateway.state) : "读取中";
+
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-950 px-4 py-6 text-slate-100">
       <div className="mb-8 px-3">
@@ -37,10 +43,22 @@ export function Sidebar({ activeItem, onNavigate }: SidebarProps) {
 
       <div className="mt-auto rounded-xl border border-slate-800 bg-slate-900/70 p-3">
         <div className="flex items-center gap-2 text-sm font-medium">
-          <span className="h-2.5 w-2.5 rounded-full bg-slate-500" />
-          网关未集成
+          <span
+            className={`h-2.5 w-2.5 rounded-full ${
+              gateway?.state === "running"
+                ? "bg-emerald-400"
+                : gateway?.state === "error"
+                  ? "bg-red-400"
+                  : "bg-slate-500"
+            }`}
+          />
+          网关{label}
         </div>
-        <p className="mt-1 text-xs text-slate-500">当前状态：空闲</p>
+        <p className="mt-1 truncate text-xs text-slate-500">
+          {gateway?.state === "running"
+            ? gateway.base_url
+            : gateway?.last_error ?? "等待启动"}
+        </p>
       </div>
     </aside>
   );

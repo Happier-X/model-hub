@@ -19,7 +19,8 @@
   "pr_url": null,
   "subtasks": [],
   "children": [
-    "07-17-mvp-scaffold"
+    "07-17-mvp-scaffold",
+    "07-17-mvp-gateway-sidecar"
   ],
   "parent": null,
   "relatedFiles": [],

@@ -1,0 +1,92 @@
+mod binary;
+mod config;
+mod health;
+mod process;
+mod state;
+
+use std::sync::Mutex;
+
+use tauri::{AppHandle, Manager, State};
+
+use crate::{
+    error::{AppError, InvokeError},
+    paths,
+};
+
+use self::{
+    config::{DEFAULT_HOST, DEFAULT_PORT},
+    process::GatewayRuntime,
+    state::GatewayStatus,
+};
+
+pub struct GatewayHandle(pub Mutex<GatewayRuntime>);
+
+impl GatewayHandle {
+    pub fn new(data_dir: String) -> Self {
+        Self(Mutex::new(GatewayRuntime::new(
+            DEFAULT_HOST.to_string(),
+            DEFAULT_PORT,
+            data_dir,
+        )))
+    }
+}
+
+fn with_runtime<T>(
+    handle: &GatewayHandle,
+    f: impl FnOnce(&mut GatewayRuntime) -> Result<T, AppError>,
+) -> Result<T, AppError> {
+    let mut guard = handle.0.lock().map_err(|_| AppError::GatewayLockPoisoned)?;
+    f(&mut guard)
+}
+
+#[tauri::command]
+pub fn gateway_status(
+    app: AppHandle,
+    gateway: State<'_, GatewayHandle>,
+) -> Result<GatewayStatus, InvokeError> {
+    let paths = paths::resolve_paths(&app).map_err(InvokeError::from)?;
+    with_runtime(&gateway, |runtime| {
+        let mut status = runtime.status_snapshot();
+        status.data_dir = paths.gateway_dir.clone();
+        Ok(status)
+    })
+    .map_err(InvokeError::from)
+}
+
+#[tauri::command]
+pub fn gateway_start(
+    app: AppHandle,
+    gateway: State<'_, GatewayHandle>,
+) -> Result<GatewayStatus, InvokeError> {
+    let paths = paths::resolve_paths(&app).map_err(InvokeError::from)?;
+    let gateway_dir = std::path::PathBuf::from(&paths.gateway_dir);
+    let bin_dir = std::path::PathBuf::from(&paths.bin_dir);
+    with_runtime(&gateway, |runtime| runtime.start(&gateway_dir, &bin_dir))
+        .map_err(InvokeError::from)
+}
+
+#[tauri::command]
+pub fn gateway_stop(gateway: State<'_, GatewayHandle>) -> Result<GatewayStatus, InvokeError> {
+    with_runtime(&gateway, |runtime| runtime.stop()).map_err(InvokeError::from)
+}
+
+pub fn stop_managed(gateway: &GatewayHandle) {
+    if let Ok(mut runtime) = gateway.0.lock() {
+        let _ = runtime.stop();
+    }
+}
+
+pub fn try_autostart(app: &AppHandle) {
+    let Some(gateway) = app.try_state::<GatewayHandle>() else {
+        return;
+    };
+    let paths = match paths::resolve_paths(app) {
+        Ok(paths) => paths,
+        Err(_) => return,
+    };
+    let gateway_dir = std::path::PathBuf::from(&paths.gateway_dir);
+    let bin_dir = std::path::PathBuf::from(&paths.bin_dir);
+    let _ = with_runtime(gateway.inner(), |runtime| {
+        runtime.start(&gateway_dir, &bin_dir)
+    });
+}

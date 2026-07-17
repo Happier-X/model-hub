@@ -13,12 +13,14 @@ src/
 ├── index.css                   # Tailwind 入口与全局样式
 ├── vite-env.d.ts
 ├── api/
-│   └── tauri.ts                # get_paths 封装与浏览器预览降级
+│   └── tauri.ts                # get_paths + gateway_start/stop/status
 └── components/
     └── layout/
-        ├── Sidebar.tsx         # 中文导航与网关状态占位
-        └── StatusBar.tsx       # 全局状态条
+        ├── Sidebar.tsx         # 中文导航与网关状态摘要
+        └── StatusBar.tsx       # 全局网关状态条（轮询）
 ```
+
+`App.tsx` 设置区含网关启停面板；网关业务 CRUD 仍走后续 HTTP API，不经 invoke。
 
 后续业务页面放入 `routes/` 或 `pages/`，领域状态按需增加 `features/`、`hooks/`、`stores/`；通用组件放入 `components/ui/`。
 

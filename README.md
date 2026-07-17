@@ -43,10 +43,20 @@ Rust 侧提供 `get_paths` 命令，首次调用会确保以下目录存在：
 
 - `app_data_dir`：应用数据根目录
 - `config_dir`：配置目录
-- `gateway_dir`：网关数据目录
-- `bin_dir`：后续侧车二进制目录
+- `gateway_dir`：网关数据目录（配置、SQLite）
+- `bin_dir`：侧车二进制目录（放置 `octopus.exe`）
 
 前端设置区会展示这些路径，用于验证桌面壳与 UI 的基础通信。
+
+## 网关侧车
+
+桌面壳已集成侧车启停（`gateway_start` / `gateway_stop` / `gateway_status`）：
+
+1. 按 [gateway/README.md](./gateway/README.md) 下载 Windows 版 octopus 并放到 `bin_dir`，或设置 `MODEL_HUB_GATEWAY_BIN`。
+2. 运行 `pnpm tauri dev`，在应用内查看状态条或设置页启动/停止。
+3. 默认监听 `http://127.0.0.1:8080`（本机绑定）。
+
+缺少二进制时应用仍可打开，并显示可行动错误提示。
 
 ## 致谢与许可证提示
 
