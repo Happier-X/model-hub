@@ -77,6 +77,11 @@ pub fn stop_managed(gateway: &GatewayHandle) {
 }
 
 pub fn try_autostart(app: &AppHandle) {
+    start_managed(app);
+}
+
+/// 托盘/自动启动共用：尝试启动托管侧车。
+pub fn start_managed(app: &AppHandle) {
     let Some(gateway) = app.try_state::<GatewayHandle>() else {
         return;
     };

@@ -1,10 +1,12 @@
 mod error;
 mod gateway;
 mod paths;
+mod tray;
 
-use tauri::Manager;
+use tauri::{Manager, WindowEvent};
 
 use crate::gateway::GatewayHandle;
+use crate::tray::AppExitState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -16,10 +18,30 @@ pub fn run() {
             })?;
 
             app.manage(GatewayHandle::new(app_paths.gateway_dir.clone()));
+            app.manage(AppExitState::new());
+
+            tray::setup_tray(app)?;
 
             // 自动尝试启动侧车：二进制缺失时保持 error/idle 语义，不阻止窗口打开。
             gateway::try_autostart(app.handle());
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                let exiting = window
+                    .app_handle()
+                    .try_state::<AppExitState>()
+                    .map(|s| s.is_exiting())
+                    .unwrap_or(false);
+                if !exiting {
+                    // 关窗 → 隐藏到托盘，不停止网关
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             paths::get_paths,

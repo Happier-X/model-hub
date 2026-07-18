@@ -1,0 +1,3 @@
+{"path":".trellis/spec/backend/quality-guidelines.md","reason":"Rust 质量"}
+{"path":"docs/mvp-acceptance.md","reason":"验收"}
+{"path":"gateway/README.md","reason":"生命周期文档"}

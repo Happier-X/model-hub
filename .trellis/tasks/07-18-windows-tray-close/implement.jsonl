@@ -1,0 +1,8 @@
+{"path":".trellis/spec/backend/index.md","reason":"Rust/Tauri 约定"}
+{"path":".trellis/spec/backend/directory-structure.md","reason":"壳目录"}
+{"path":".trellis/spec/backend/error-handling.md","reason":"错误"}
+{"path":"src-tauri/src/lib.rs","reason":"生命周期"}
+{"path":"src-tauri/src/gateway/mod.rs","reason":"启停复用"}
+{"path":"src-tauri/tauri.conf.json","reason":"图标窗口"}
+{"path":"src-tauri/Cargo.toml","reason":"Tauri features"}
+{"path":"src/App.tsx","reason":"设置文案"}

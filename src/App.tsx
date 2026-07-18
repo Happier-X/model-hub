@@ -97,6 +97,7 @@ function GatewayPanel({
           <h3 className="text-lg font-semibold">网关侧车</h3>
           <p className="mt-1 text-sm text-slate-500">
             默认监听 127.0.0.1。请将 octopus.exe 放到程序目录，详见 gateway/README.md。
+            关闭主窗口会<strong>隐藏到系统托盘</strong>，网关继续运行；请从托盘菜单选择「退出」才会停止网关并关闭应用。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
