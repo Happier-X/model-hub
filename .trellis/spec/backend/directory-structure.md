@@ -11,7 +11,12 @@
 ```
 /
 ├── gateway/
-│   └── README.md              # 侧车二进制钉扎、放置路径、AGPL
+│   └── README.md              # 侧车二进制钉扎、解析优先级、AGPL
+├── third-party/octopus/       # AGPL 全文、NOTICE、对应源码链接
+├── tools/octopus/             # 本地下载的 exe（gitignore，勿提交）
+├── scripts/
+│   ├── prepare-bundled-octopus.ps1  # 下载+SHA-256 校验
+│   └── e2e-octopus-smoke.py
 ├── src-tauri/                 # Tauri / Rust 壳
 │   ├── src/
 │   │   ├── main.rs
@@ -24,16 +29,18 @@
 │   │       ├── process.rs
 │   │       ├── health.rs
 │   │       ├── config.rs
-│   │       └── binary.rs
+│   │       └── binary.rs      # 解析优先级 + 内嵌部署
 │   ├── capabilities/
 │   ├── icons/
 │   ├── Cargo.toml
-│   └── tauri.conf.json
+│   ├── tauri.conf.json
+│   └── tauri.release.conf.json  # NSIS + bundle.resources 内嵌侧车
+├── .github/workflows/release-windows.yml
 ├── src/                       # 前端 SPA
 └── .trellis/
 ```
 
-Windows 侧车默认可执行文件：`{bin_dir}/octopus.exe`；可用环境变量 `MODEL_HUB_GATEWAY_BIN` 覆盖。勿将大型 exe 提交进 Git。
+Windows 侧车解析优先级：`MODEL_HUB_GATEWAY_BIN` → （若存在）安装资源 `sidecar/octopus.exe` 按哈希原子部署到 `{bin_dir}/octopus.exe` → 否则直接使用已有 `bin_dir` 副本。安装态以内嵌为版本真源；勿将大型 exe 提交进 Git。
 
 ---
 
@@ -149,7 +156,8 @@ TypeScript：`gatewayStart` / `gatewayStop` / `gatewayStatus`（`src/api/tauri.t
 
 | 条件 | code / 行为 |
 |------|-------------|
-| 缺少 exe | `GATEWAY_BINARY_MISSING`，提示放置路径或 `MODEL_HUB_GATEWAY_BIN` |
+| 缺少 exe | `GATEWAY_BINARY_MISSING`，提示内置网关/prepare/`MODEL_HUB_GATEWAY_BIN` |
+| 内嵌部署失败 | `GATEWAY_BINARY_DEPLOY_FAILED`，提示目标路径占用或权限 |
 | 端口占用 | `GATEWAY_PORT_IN_USE` |
 | 健康检查超时 | `GATEWAY_HEALTH_TIMEOUT`，清理残留子进程 |
 | 配置写入失败 | `GATEWAY_CONFIG_FAILED` |

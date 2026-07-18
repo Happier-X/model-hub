@@ -1,14 +1,16 @@
 {
   "name": "model-hub",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "prepare:octopus": "powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-octopus.ps1",
+    "release:windows": "powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-octopus.ps1 && tauri build --bundles nsis -c src-tauri/tauri.release.conf.json"
   },
   "dependencies": {
     "@tauri-apps/api": "2.8.0",

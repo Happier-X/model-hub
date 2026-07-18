@@ -5,7 +5,7 @@
 | ID | 标准 | 状态 | 说明 |
 |----|------|------|------|
 | AC1 | Windows 启动；管理 UI **无需登录** | 代码完成 | 无登录页；静默 admin + Token 兜底 |
-| AC2 | OpenAI 渠道 + 分组 Chat 转发 | 代码完成 / 环境待验 | 需本机放置 `octopus.exe` 与真实上游 Key |
+| AC2 | OpenAI 渠道 + 分组 Chat 转发 | 代码完成 / 环境待验 | 安装版内嵌侧车；开发需 prepare 或 `MODEL_HUB_GATEWAY_BIN`；Chat 需真实上游 Key |
 | AC3 | 至少一种负载策略 | 代码完成 | 分组默认 **轮询 (mode=1)** |
 | AC4 | 基础请求日志；正常退出停侧车 | 代码完成 | 日志轮询 list；Exit 时 stop 托管进程 |
 | AC5 | SQLite；目录可发现 | 代码完成 | `get_paths` + 设置页路径；DB 在 gateway_dir |
@@ -21,7 +21,7 @@
 ## 手工验收步骤
 
 1. `pnpm install`
-2. 放置 `octopus.exe` → `bin_dir` 或 `MODEL_HUB_GATEWAY_BIN`
+2. 安装版可跳过；开发执行 `pnpm prepare:octopus` 或设置 `MODEL_HUB_GATEWAY_BIN`
 3. `pnpm tauri dev`
 4. 仪表盘 → 查看配置检查清单（网关未启动时 3–5 应为「等待前置」）
 5. 设置 → 启动网关 → 状态「运行中」
@@ -48,7 +48,8 @@ python scripts/e2e-octopus-smoke.py
 
 ## 已知边界
 
-- 真机钉扎 **octopus v0.9.28**（见 `gateway/README.md`、`scripts/fetch-octopus-windows.ps1`、`scripts/e2e-octopus-smoke.py`）。
+- 真机钉扎 **octopus v0.9.28**（见 `gateway/README.md`、`scripts/prepare-bundled-octopus.ps1`、`scripts/e2e-octopus-smoke.py`）。
+- 公开安装包通过 `bundle.resources` 内嵌侧车；Git 不提交 `tools/octopus/` 大二进制。
 - 该版本渠道 `type` 为 **数字**（OpenAI Chat = `0`）；字符串 type 会 Invalid JSON。
 - `/v1/*` 客户端 **必须** 使用侧车签发的 `sk-octopus-...` Key；管理 API 用 JWT。
 - 上游若改密，需设置页 Token。

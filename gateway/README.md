@@ -1,32 +1,51 @@
 # 网关侧车（octopus 兼容）
 
-Model Hub 阶段 1 通过 **外部网关进程** 提供 LLM 聚合能力。桌面壳负责启停与健康检查，业务数据落在应用 `gateway_dir`。
+Model Hub 阶段 1 通过 **网关进程** 提供 LLM 聚合能力。桌面壳负责启停与健康检查，业务数据落在应用 `gateway_dir`。
+
+**v0.0.1 起**：Windows 安装包**内嵌**钉扎版 octopus，用户**无需**自行下载或放置 `octopus.exe`。首次启动时从安装资源复制到 `bin_dir`（按 SHA-256 判断是否覆盖）。
 
 ## 许可证
 
 上游项目 [bestruirui/octopus](https://github.com/bestruirui/octopus) 使用 **AGPL-3.0**。下载、修改或随本应用分发其二进制/源码时，请自行遵守 AGPL 义务（包括源码提供与许可证传递），并保留上游致谢。
+
+完整合规材料见仓库：
+
+- `third-party/octopus/LICENSE-AGPL-3.0.txt`
+- `third-party/octopus/NOTICE.md`
+- `third-party/octopus/SOURCE.md`（对应源码 archive URL + commit）
 
 ## 版本钉扎（已验证）
 
 | 项 | 值 |
 |----|-----|
 | 版本 | **v0.9.28** |
+| tag commit | `b7b053e7fd81911e2062359e93f9dcbd58114bb0` |
 | Windows x64 包 | `octopus-windows-x86_64.zip` |
 | 下载 | https://github.com/bestruirui/octopus/releases/download/v0.9.28/octopus-windows-x86_64.zip |
+| Zip SHA-256 | `17b071b66218f15b574efe08c73b4ec56d6adfd9c08aab3b216728b29ac0f92f` |
+| Exe SHA-256 | `38c4238c5c8be0d3e718eb6192c9d06b2e1dcb4222179f625627c67b1e98c0d8` |
+| 对应源码 | https://github.com/bestruirui/octopus/archive/refs/tags/v0.9.28.tar.gz |
 | 校验启动 | `octopus version` 显示 `Version: v0.9.28` |
 | 启动 | `octopus start --config data/config.json`（工作目录为 gateway 数据目录） |
 
-开发机一键下载（不提交 exe）：
+构建/开发机准备内嵌二进制（**不提交** exe）：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/fetch-octopus-windows.ps1
+powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-octopus.ps1
+# 可选开发覆盖：
 $env:MODEL_HUB_GATEWAY_BIN = "$PWD\tools\octopus\octopus.exe"
 ```
 
-## 放置路径
+兼容旧脚本名：`scripts/fetch-octopus-windows.ps1`（转发到 prepare 脚本）。
 
-- `bin_dir/octopus.exe`（应用数据目录下的程序目录）
-- 或环境变量 `MODEL_HUB_GATEWAY_BIN` 指向完整 exe 路径
+## 二进制解析优先级
+
+1. 环境变量 `MODEL_HUB_GATEWAY_BIN`（开发/高级覆盖；须指向存在的文件）
+2. 若安装资源存在 `resource_dir/sidecar/octopus.exe`：以内嵌为准，**原子部署**到 `bin_dir/octopus.exe`（目标不存在或 SHA-256 不同则覆盖；相同则跳过复制），然后使用 `bin_dir` 副本
+3. 否则（开发未内嵌）：直接使用已存在的 `bin_dir/octopus.exe`
+4. 仍缺失 → 设置页可行动错误；窗口仍可打开
+
+说明：安装态下内嵌资源是版本真源；`bin_dir` 是运行时部署目标（非独立于内嵌的更高优先项）。
 
 ## 配置约定（壳侧写入）
 
@@ -83,7 +102,7 @@ $env:MODEL_HUB_GATEWAY_BIN = "$PWD\tools\octopus\octopus.exe"
 
 ## 故障排查
 
-1. 未找到 exe → 下载脚本或放到 `bin_dir` / 设置 `MODEL_HUB_GATEWAY_BIN`
+1. 未找到 exe → 安装版应自带；开发跑 prepare 脚本，或放到 `bin_dir` / 设置 `MODEL_HUB_GATEWAY_BIN`
 2. 端口占用 → 换端口或结束占用进程（不要误杀其他 octopus）
 3. 管理 API 401 → 设置页粘贴 Token，或确认默认 admin 未改密
 4. 创建渠道 Invalid JSON → 确认使用数字 `type`（前端已按 v0.9.28 适配）

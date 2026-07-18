@@ -78,7 +78,7 @@ def http(method: str, path: str, body: dict | None = None, token: str | None = N
 def main() -> int:
     if not BIN.is_file():
         print(f"MISSING_BIN {BIN}")
-        print("Run: powershell -ExecutionPolicy Bypass -File scripts/fetch-octopus-windows.ps1")
+        print("Run: pnpm prepare:octopus  # or scripts/prepare-bundled-octopus.ps1")
         return 2
 
     free_port(PORT)

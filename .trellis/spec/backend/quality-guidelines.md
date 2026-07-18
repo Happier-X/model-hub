@@ -12,6 +12,8 @@
 4. **无管理登录**：禁止重新引入 admin 登录作为默认路径（产品 D3）。
 5. **客户端网关 Key 必填**：钉扎侧车 v0.9.28 对 `/v1/*` 强制 `sk-octopus-...`；管理 JWT 与客户端 Key 分离。不 patch 侧车做「本机免鉴权」；文档/UI 禁止写「任意占位 api_key」。
 6. **依赖**：钉版本；侧车二进制版本写入 `gateway/README.md` 或 lock 说明。
+7. **内嵌侧车**：Git **禁止**提交 `tools/octopus/*.exe`；CI/脚本下载并 SHA-256 校验；公开分发须附 `third-party/octopus/`（AGPL + NOTICE + 对应源码链接）。
+8. **进程清理**：测试/脚本只按测试端口或托管 PID 结束进程，**禁止** `Stop-Process -Name octopus` 误杀本机实例。
 
 ---
 

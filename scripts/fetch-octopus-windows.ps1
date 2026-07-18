@@ -1,34 +1,9 @@
-# 下载钉扎版本的 octopus Windows x64 二进制到 tools/octopus/
+# 兼容入口：转发到 prepare-bundled-octopus.ps1（含 SHA-256 校验）。
 # 用法: powershell -ExecutionPolicy Bypass -File scripts/fetch-octopus-windows.ps1
 
 $ErrorActionPreference = "Stop"
-
-$Version = "v0.9.28"
-$Asset = "octopus-windows-x86_64.zip"
-$Url = "https://github.com/bestruirui/octopus/releases/download/$Version/$Asset"
-
-$Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$OutDir = Join-Path $Root "tools\octopus"
-$ZipPath = Join-Path $OutDir $Asset
-
-New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
-
-Write-Host "Downloading $Url ..."
-Invoke-WebRequest -Uri $Url -OutFile $ZipPath -UseBasicParsing
-
-Write-Host "Extracting to $OutDir ..."
-Expand-Archive -Path $ZipPath -DestinationPath $OutDir -Force
-
-$Exe = Get-ChildItem -Path $OutDir -Recurse -Filter "octopus*.exe" | Select-Object -First 1
-if (-not $Exe) {
-    throw "未在压缩包中找到 octopus*.exe"
+$Here = Split-Path -Parent $MyInvocation.MyCommand.Path
+& (Join-Path $Here "prepare-bundled-octopus.ps1")
+if ($LASTEXITCODE -ne 0 -and $null -ne $LASTEXITCODE) {
+    exit $LASTEXITCODE
 }
-
-$Target = Join-Path $OutDir "octopus.exe"
-if ($Exe.FullName -ne $Target) {
-    Copy-Item -Force $Exe.FullName $Target
-}
-
-Write-Host "OK: $Target"
-Write-Host "Version pin: $Version"
-Write-Host "Set env: `$env:MODEL_HUB_GATEWAY_BIN = '$Target'"

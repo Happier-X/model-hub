@@ -24,6 +24,12 @@ pub enum AppError {
     },
     #[error("未找到网关程序“{path}”。{hint}")]
     BinaryMissing { path: String, hint: String },
+    #[error("无法部署内置网关到“{path}”：{source}")]
+    BinaryDeployFailed {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("端口 {port} 已被占用。请更换端口或结束占用进程后重试。")]
     PortInUse { port: u16 },
     #[error("启动网关失败（{path}）：{source}")]
@@ -56,6 +62,7 @@ impl AppError {
             Self::Path(_) | Self::CreateDirectory { .. } => "PATH_INITIALIZATION_FAILED",
             Self::WriteConfig { .. } | Self::SerializeConfig { .. } => "GATEWAY_CONFIG_FAILED",
             Self::BinaryMissing { .. } => "GATEWAY_BINARY_MISSING",
+            Self::BinaryDeployFailed { .. } => "GATEWAY_BINARY_DEPLOY_FAILED",
             Self::PortInUse { .. } => "GATEWAY_PORT_IN_USE",
             Self::SpawnFailed { .. } => "GATEWAY_SPAWN_FAILED",
             Self::HealthTimeout { .. } => "GATEWAY_HEALTH_TIMEOUT",

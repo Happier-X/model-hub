@@ -1,0 +1,104 @@
+# 推送 v* tag 时在 Windows 构建 NSIS 安装包并创建 GitHub Release。
+name: release-windows
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "10"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Prepare bundled octopus (download + SHA-256)
+        shell: pwsh
+        run: |
+          powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-octopus.ps1
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Tauri NSIS (bundled sidecar)
+        run: pnpm exec tauri build --bundles nsis -c src-tauri/tauri.release.conf.json
+
+      - name: Collect artifacts and SHA-256
+        shell: pwsh
+        run: |
+          $bundleRoot = "src-tauri/target/release/bundle"
+          $outDir = "release-assets"
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+
+          $nsisFiles = Get-ChildItem -Path (Join-Path $bundleRoot "nsis") -Filter "*.exe" -ErrorAction SilentlyContinue
+          if (-not $nsisFiles -or $nsisFiles.Count -eq 0) {
+            Write-Host "Listing bundle tree for debug:"
+            if (Test-Path $bundleRoot) {
+              Get-ChildItem -Path $bundleRoot -Recurse | ForEach-Object { $_.FullName }
+            }
+            throw "未找到 NSIS 安装包（*.exe）"
+          }
+
+          foreach ($f in $nsisFiles) {
+            Copy-Item -Force $f.FullName (Join-Path $outDir $f.Name)
+          }
+
+          Copy-Item -Force "third-party/octopus/LICENSE-AGPL-3.0.txt" (Join-Path $outDir "LICENSE-AGPL-3.0-octopus.txt")
+          Copy-Item -Force "third-party/octopus/NOTICE.md" (Join-Path $outDir "NOTICE-octopus.md")
+          Copy-Item -Force "third-party/octopus/SOURCE.md" (Join-Path $outDir "SOURCE-octopus.md")
+          if (Test-Path "docs/release-notes-v0.0.1.md") {
+            Copy-Item -Force "docs/release-notes-v0.0.1.md" (Join-Path $outDir "release-notes-v0.0.1.md")
+          }
+
+          $sums = Join-Path $outDir "SHA256SUMS.txt"
+          $lines = @()
+          Get-ChildItem -Path $outDir -File | Where-Object { $_.Name -ne "SHA256SUMS.txt" } | ForEach-Object {
+            $sha = [System.Security.Cryptography.SHA256]::Create()
+            try {
+              $stream = [System.IO.File]::OpenRead($_.FullName)
+              try { $bytes = $sha.ComputeHash($stream) } finally { $stream.Dispose() }
+            } finally { $sha.Dispose() }
+            $hash = ($bytes | ForEach-Object { $_.ToString("x2") }) -join ""
+            $lines += "$hash  $($_.Name)"
+          }
+          $lines | Set-Content -Path $sums -Encoding utf8
+          Get-Content $sums
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-hub-windows-nsis
+          path: release-assets/*
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          generate_release_notes: true
+          body_path: docs/release-notes-v0.0.1.md
+          files: |
+            release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

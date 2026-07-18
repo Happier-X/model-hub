@@ -5,7 +5,7 @@ use std::{
 };
 
 use super::{
-    binary::resolve_binary_path,
+    binary::{resolve_binary_path, resolve_binary_path_with_resource},
     config::{env_overrides, write_config_file, GatewayRuntimeConfig},
     health::wait_until_reachable,
     state::{GatewayPhase, GatewayStatus},
@@ -34,7 +34,13 @@ impl GatewayRuntime {
         self.status.clone()
     }
 
-    pub fn start(&mut self, gateway_dir: &Path, bin_dir: &Path) -> Result<GatewayStatus, AppError> {
+    /// 启动托管侧车；`resource_dir` 存在时优先从安装资源部署内置 octopus。
+    pub fn start_with_resource(
+        &mut self,
+        gateway_dir: &Path,
+        bin_dir: &Path,
+        resource_dir: Option<&Path>,
+    ) -> Result<GatewayStatus, AppError> {
         self.reap_if_exited();
         if matches!(
             self.status.state,
@@ -43,7 +49,10 @@ impl GatewayRuntime {
             return Ok(self.status.clone());
         }
 
-        let binary = resolve_binary_path(bin_dir)?;
+        let binary = match resource_dir {
+            Some(root) => resolve_binary_path_with_resource(bin_dir, Some(root))?,
+            None => resolve_binary_path(bin_dir)?,
+        };
         let config = GatewayRuntimeConfig {
             host: self.status.host.clone(),
             port: self.status.port,

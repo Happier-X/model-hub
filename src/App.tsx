@@ -94,9 +94,10 @@ function GatewayPanel({
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h3 className="text-lg font-semibold">网关侧车</h3>
+          <h3 className="text-lg font-semibold">内置网关 v0.9.28</h3>
           <p className="mt-1 text-sm text-slate-500">
-            默认监听 127.0.0.1。请将 octopus.exe 放到程序目录，详见 gateway/README.md。
+            默认监听 127.0.0.1。正式安装包已内嵌网关，启动时自动部署，无需手工下载
+            octopus.exe。开发环境可运行 prepare 脚本或设置 MODEL_HUB_GATEWAY_BIN。
             关闭主窗口会<strong>隐藏到系统托盘</strong>，网关继续运行；请从托盘菜单选择「退出」才会停止网关并关闭应用。
           </p>
         </div>
@@ -163,7 +164,7 @@ function GatewayPanel({
           <div className="md:col-span-2">
             <dt className="text-slate-500">二进制</dt>
             <dd className="break-all font-mono text-slate-900">
-              {gateway.binary_path ?? "未解析（请放置 octopus.exe）"}
+              {gateway.binary_path ?? "未解析（安装包应自带内置网关；开发请 prepare 或设置 MODEL_HUB_GATEWAY_BIN）"}
             </dd>
           </div>
           {gateway.last_error ? (

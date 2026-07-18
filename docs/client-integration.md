@@ -4,8 +4,8 @@
 
 ## 前提
 
-1. 按 [gateway/README.md](../gateway/README.md) 将 Windows 版 `octopus.exe` 放到应用 `bin_dir`，或设置 `MODEL_HUB_GATEWAY_BIN`。
-2. 运行 `pnpm tauri dev`（或发行版 exe），在应用内确认网关状态为 **运行中**。
+1. **安装版**无需自备 `octopus.exe`（内嵌 v0.9.28，启动时自动部署）。**开发**请见 [gateway/README.md](../gateway/README.md)：`pnpm prepare:octopus` 或设置 `MODEL_HUB_GATEWAY_BIN`。
+2. 运行发行版或 `pnpm tauri dev`，在应用内确认网关状态为 **运行中**。
 3. 在 **渠道** 页创建 OpenAI Chat 兼容上游（Base URL + 上游 API Key + 模型名）。
 4. 在 **分组** 页创建分组，**分组名** 将作为客户端的 `model`；负载默认 **轮询**。
 5. 在 **API 密钥** 页创建网关客户端 Key（前缀 `sk-octopus-`），创建成功后**完整复制一次**明文。

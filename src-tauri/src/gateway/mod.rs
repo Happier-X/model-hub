@@ -61,8 +61,11 @@ pub fn gateway_start(
     let paths = paths::resolve_paths(&app).map_err(InvokeError::from)?;
     let gateway_dir = std::path::PathBuf::from(&paths.gateway_dir);
     let bin_dir = std::path::PathBuf::from(&paths.bin_dir);
-    with_runtime(&gateway, |runtime| runtime.start(&gateway_dir, &bin_dir))
-        .map_err(InvokeError::from)
+    let resource_dir = app.path().resource_dir().ok().filter(|p| p.exists());
+    with_runtime(&gateway, |runtime| {
+        runtime.start_with_resource(&gateway_dir, &bin_dir, resource_dir.as_deref())
+    })
+    .map_err(InvokeError::from)
 }
 
 #[tauri::command]
@@ -91,7 +94,8 @@ pub fn start_managed(app: &AppHandle) {
     };
     let gateway_dir = std::path::PathBuf::from(&paths.gateway_dir);
     let bin_dir = std::path::PathBuf::from(&paths.bin_dir);
+    let resource_dir = app.path().resource_dir().ok().filter(|p| p.exists());
     let _ = with_runtime(gateway.inner(), |runtime| {
-        runtime.start(&gateway_dir, &bin_dir)
+        runtime.start_with_resource(&gateway_dir, &bin_dir, resource_dir.as_deref())
     });
 }

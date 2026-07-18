@@ -6,8 +6,8 @@
 
 | 项 | 说明 |
 |----|------|
-| Windows + 本仓库 | `pnpm tauri dev` 或发行版 |
-| `octopus.exe` | 见 [gateway/README.md](../gateway/README.md)，钉扎 **v0.9.28** |
+| Windows + Model Hub | 安装版或 `pnpm tauri dev` |
+| 内置网关 | 安装版已内嵌 octopus **v0.9.28**；开发见 [gateway/README.md](../gateway/README.md) |
 | **真实上游 API Key** | 渠道里的供应商 Key（假 Key 只能测鉴权，Chat 通常业务失败） |
 | 网关客户端 Key | 应用 **API 密钥** 页创建的 `sk-octopus-...` |
 
