@@ -62,6 +62,7 @@ Rust 侧提供 `get_paths` 命令，首次调用会确保以下目录存在：
 
 ## 文档
 
+- [Chat 上手与故障排查](./docs/chat-onboarding.md)（端到端 + 错误对照 + 仪表盘自检）
 - [客户端对接](./docs/client-integration.md)
 - [M1 验收清单](./docs/mvp-acceptance.md)
 - [网关侧车说明](./gateway/README.md)

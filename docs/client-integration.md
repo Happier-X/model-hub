@@ -1,5 +1,7 @@
 # 客户端对接（MVP）
 
+> 端到端步骤、错误对照与仪表盘自检见 **[Chat 上手与故障排查](./chat-onboarding.md)**。
+
 ## 前提
 
 1. 按 [gateway/README.md](../gateway/README.md) 将 Windows 版 `octopus.exe` 放到应用 `bin_dir`，或设置 `MODEL_HUB_GATEWAY_BIN`。

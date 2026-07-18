@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { listApiKeys } from "../api/apikey";
 import { listChannels } from "../api/channel";
+import { clientProbe, type ClientProbeResult } from "../api/gatewayHttp";
 import { listGroups } from "../api/group";
 import type { NavigationItem } from "../components/layout/Sidebar";
+
+interface SelfCheckStep {
+  name: string;
+  result: ClientProbeResult;
+  verdict: string;
+}
 
 type StepStatus = "ok" | "todo" | "blocked" | "error" | "info";
 
@@ -62,6 +69,11 @@ export function DashboardPage({
   const [loading, setLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
   const [copyHint, setCopyHint] = useState<string | null>(null);
+  const [probeKey, setProbeKey] = useState("");
+  const [probeModel, setProbeModel] = useState("");
+  const [probeBusy, setProbeBusy] = useState(false);
+  const [probeSteps, setProbeSteps] = useState<SelfCheckStep[] | null>(null);
+  const [probeError, setProbeError] = useState<string | null>(null);
 
   const canProbe = running && authOk;
   const root = baseUrl.replace(/\/$/, "");
@@ -225,6 +237,63 @@ export function DashboardPage({
     }
   };
 
+  const runClientSelfCheck = async () => {
+    setProbeError(null);
+    setProbeSteps(null);
+    if (!running) {
+      setProbeError("请先启动网关。");
+      return;
+    }
+    const key = probeKey.trim();
+    if (!key) {
+      setProbeError("请粘贴网关 API Key（sk-octopus-...），不要使用管理 JWT。");
+      return;
+    }
+    setProbeBusy(true);
+    try {
+      const steps: SelfCheckStep[] = [];
+      const models = await clientProbe("GET", "/v1/models", { bearer: key });
+      steps.push({
+        name: "GET /v1/models",
+        result: models,
+        verdict:
+          models.status === 401
+            ? "鉴权失败：Key 无效或误用了管理 JWT"
+            : models.status === 0
+              ? "无法连接网关"
+              : models.status >= 200 && models.status < 300
+                ? "鉴权通过（列表可能为空）"
+                : `非鉴权类响应（HTTP ${models.status}）`,
+      });
+
+      const model = probeModel.trim();
+      if (model) {
+        const chat = await clientProbe("POST", "/v1/chat/completions", {
+          bearer: key,
+          body: {
+            model,
+            messages: [{ role: "user", content: "ping" }],
+          },
+        });
+        steps.push({
+          name: "POST /v1/chat/completions",
+          result: chat,
+          verdict:
+            chat.status === 401
+              ? "鉴权失败"
+              : chat.status === 0
+                ? "无法连接网关"
+                : chat.status >= 200 && chat.status < 300
+                  ? "Chat 成功（真上游可用）"
+                  : `鉴权已通过，业务层错误 HTTP ${chat.status}（上游 Key/分组/model 等）`,
+        });
+      }
+      setProbeSteps(steps);
+    } finally {
+      setProbeBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -381,6 +450,82 @@ export function DashboardPage({
           <p className="mt-3 text-sm text-emerald-700" role="status">
             {copyHint}
           </p>
+        ) : null}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h3 className="text-lg font-semibold">客户端路径自检</h3>
+        <p className="mt-1 text-sm text-slate-600">
+          使用你复制的网关 API Key（
+          <code className="rounded bg-slate-100 px-1">sk-octopus-...</code>
+          ）探测 <code className="rounded bg-slate-100 px-1">/v1</code>
+          ，不会使用管理 JWT。Key 仅保存在内存，不写本地存储。
+        </p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <label className="block text-sm md:col-span-2">
+            <span className="font-medium text-slate-700">网关 API Key</span>
+            <input
+              type="password"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
+              value={probeKey}
+              onChange={(e) => setProbeKey(e.target.value)}
+              placeholder="sk-octopus-..."
+              autoComplete="off"
+            />
+          </label>
+          <label className="block text-sm md:col-span-2">
+            <span className="font-medium text-slate-700">
+              分组名（可选，填了才测 Chat）
+            </span>
+            <input
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              value={probeModel}
+              onChange={(e) => setProbeModel(e.target.value)}
+              placeholder="与「分组」页名称一致"
+            />
+          </label>
+        </div>
+        <button
+          type="button"
+          disabled={probeBusy || !running}
+          onClick={() => void runClientSelfCheck()}
+          className="mt-4 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-500 disabled:opacity-50"
+        >
+          {probeBusy ? "自检中…" : "运行自检"}
+        </button>
+        {!running ? (
+          <p className="mt-2 text-sm text-amber-700">网关未运行，无法自检。</p>
+        ) : null}
+        {probeError ? (
+          <p role="alert" className="mt-3 text-sm text-red-600">
+            {probeError}
+          </p>
+        ) : null}
+        {probeSteps ? (
+          <ul className="mt-4 space-y-2">
+            {probeSteps.map((step) => (
+              <li
+                key={step.name}
+                className={`rounded-xl border px-4 py-3 text-sm ${
+                  step.result.status === 401 || step.result.status === 0
+                    ? "border-red-200 bg-red-50 text-red-900"
+                    : step.result.ok
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                      : "border-amber-200 bg-amber-50 text-amber-950"
+                }`}
+              >
+                <p className="font-semibold">
+                  {step.name} · HTTP {step.result.status || "—"}
+                </p>
+                <p className="mt-1">{step.verdict}</p>
+                {step.result.message && step.result.message !== "成功" ? (
+                  <p className="mt-1 break-all font-mono text-xs opacity-90">
+                    {step.result.message}
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
         ) : null}
       </section>
     </div>

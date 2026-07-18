@@ -1,0 +1,7 @@
+{"path":".trellis/spec/frontend/index.md","reason":"前端约定"}
+{"path":".trellis/spec/frontend/component-guidelines.md","reason":"UI"}
+{"path":"src/api/gatewayHttp.ts","reason":"HTTP 鉴权模式"}
+{"path":"src/pages/DashboardPage.tsx","reason":"自检挂载"}
+{"path":"docs/client-integration.md","reason":"对接文档互链"}
+{"path":"README.md","reason":"入口链接"}
+{"path":"scripts/e2e-octopus-smoke.py","reason":"回归"}

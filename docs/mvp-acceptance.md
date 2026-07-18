@@ -14,6 +14,7 @@
 | AC8 | 仪表盘配置检查清单 | 代码完成 | 网关/鉴权/渠道/分组/Key 状态 + 客户端 curl 模板 |
 | AC9 | 渠道编辑与 Key 显示 | 代码完成 | 改 name/URL/model/轮换 Key；列表脱敏可显示；删除确认 |
 | AC10 | 分组绑定可读与编辑 | 代码完成 | 列表展示渠道+model_name；改名/换绑；删除确认 |
+| AC11 | Chat 上手文档与客户端自检 | 代码完成 | `docs/chat-onboarding.md`；仪表盘用 sk-octopus 测 /v1 |
 
 ## 手工验收步骤
 
@@ -26,10 +27,11 @@
 7. 分组 → 创建分组并绑定渠道
 8. **API 密钥** → 创建密钥 → 复制完整 `sk-octopus-...`
 9. 返回仪表盘确认步骤 1–5 为已完成；复制 curl 模板
-10. 使用 [client-integration.md](./client-integration.md)，以该 Key 调用 `GET /v1/models`（期望非 401）
-11. （可选）有真实上游时发起 Chat；无上游时业务错误可接受
-12. 日志页查看是否出现记录
-13. 退出应用，确认侧车进程结束（任务管理器）
+10. 使用 [client-integration.md](./client-integration.md) 或 [chat-onboarding.md](./chat-onboarding.md)，以该 Key 调用 `GET /v1/models`（期望非 401）
+11. 仪表盘「客户端路径自检」粘贴 Key；可选填分组名测 chat
+12. （可选）有真实上游时发起 Chat；无上游时业务错误可接受
+13. 日志页查看是否出现记录
+14. 退出应用，确认侧车进程结束（任务管理器）
 
 ## 自动化验证
 
