@@ -1,0 +1,5 @@
+{"path":".trellis/spec/frontend/index.md","reason":"前端约定"}
+{"path":".trellis/spec/frontend/component-guidelines.md","reason":"UI"}
+{"path":"src/api/log.ts","reason":"日志 API"}
+{"path":"src/pages/LogsPage.tsx","reason":"日志页"}
+{"path":"src/pages/ChannelsPage.tsx","reason":"交互参考"}
