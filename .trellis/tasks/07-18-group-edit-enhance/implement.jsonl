@@ -1,0 +1,6 @@
+{"path":".trellis/spec/frontend/index.md","reason":"前端约定"}
+{"path":".trellis/spec/frontend/component-guidelines.md","reason":"页面风格"}
+{"path":"src/api/group.ts","reason":"分组 API"}
+{"path":"src/pages/GroupsPage.tsx","reason":"分组 UI"}
+{"path":"src/pages/ChannelsPage.tsx","reason":"编辑交互参考"}
+{"path":"scripts/e2e-octopus-smoke.py","reason":"回归"}
