@@ -1,0 +1,4 @@
+{"path":".trellis/spec/backend/quality-guidelines.md","reason":"质量门"}
+{"path":"docs/mvp-acceptance.md","reason":"验收"}
+{"path":"README.md","reason":"用户零依赖文案"}
+{"path":".gitignore","reason":"大文件策略"}
