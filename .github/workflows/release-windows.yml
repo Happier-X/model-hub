@@ -68,8 +68,8 @@ jobs:
           Copy-Item -Force "third-party/octopus/LICENSE-AGPL-3.0.txt" (Join-Path $outDir "LICENSE-AGPL-3.0-octopus.txt")
           Copy-Item -Force "third-party/octopus/NOTICE.md" (Join-Path $outDir "NOTICE-octopus.md")
           Copy-Item -Force "third-party/octopus/SOURCE.md" (Join-Path $outDir "SOURCE-octopus.md")
-          if (Test-Path "docs/release-notes-v0.0.1.md") {
-            Copy-Item -Force "docs/release-notes-v0.0.1.md" (Join-Path $outDir "release-notes-v0.0.1.md")
+          if (Test-Path "docs/release-notes-v0.0.2.md") {
+            Copy-Item -Force "docs/release-notes-v0.0.2.md" (Join-Path $outDir "release-notes-v0.0.2.md")
           }
 
           $sums = Join-Path $outDir "SHA256SUMS.txt"
@@ -97,7 +97,7 @@ jobs:
         with:
           draft: false
           generate_release_notes: true
-          body_path: docs/release-notes-v0.0.1.md
+          body_path: docs/release-notes-v0.0.2.md
           files: |
             release-assets/*
         env:
