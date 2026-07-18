@@ -25,6 +25,7 @@ src/
 │       ├── Sidebar.tsx
 │       └── StatusBar.tsx
 └── pages/
+    ├── DashboardPage.tsx       # 配置检查清单 + 客户端示例
     ├── ChannelsPage.tsx
     ├── GroupsPage.tsx
     ├── ApiKeysPage.tsx
@@ -41,7 +42,7 @@ src/
 
 1. **业务请求走 `api/`**，不在组件内散落裸 `fetch` URL 字符串（可集中 baseURL）。
 2. **Tauri 专用**放 `lib/tauri.ts` 或 `api/tauri.ts`，浏览器纯 dev 时可 mock。
-3. **路由**：MVP 扁平：渠道、分组、API 密钥、日志、设置；（可选）仪表盘占位。
+3. **路由**：MVP 扁平：仪表盘（配置检查清单）、渠道、分组、API 密钥、日志、设置。
 4. **无** `login` / `auth` 页面与会话存储（产品 D3）。
 
 ---

@@ -11,20 +11,23 @@
 | AC5 | SQLite；目录可发现 | 代码完成 | `get_paths` + 设置页路径；DB 在 gateway_dir |
 | AC6 | 启停/健康检查；端口占用可提示 | 代码完成 | 缺 exe / 端口占用有错误文案 |
 | AC7 | 网关 API Key 管理与客户端鉴权 | 代码完成 | UI 创建/列表/删除；`GET /v1/models` 非 401 |
+| AC8 | 仪表盘配置检查清单 | 代码完成 | 网关/鉴权/渠道/分组/Key 状态 + 客户端 curl 模板 |
 
 ## 手工验收步骤
 
 1. `pnpm install`
 2. 放置 `octopus.exe` → `bin_dir` 或 `MODEL_HUB_GATEWAY_BIN`
 3. `pnpm tauri dev`
-4. 设置 → 启动网关 → 状态「运行中」
-5. 渠道 → 创建 OpenAI Chat 渠道
-6. 分组 → 创建分组并绑定渠道
-7. **API 密钥** → 创建密钥 → 复制完整 `sk-octopus-...`
-8. 使用 [client-integration.md](./client-integration.md)，以该 Key 调用 `GET /v1/models`（期望非 401）
-9. （可选）有真实上游时发起 Chat；无上游时业务错误可接受
-10. 日志页查看是否出现记录
-11. 退出应用，确认侧车进程结束（任务管理器）
+4. 仪表盘 → 查看配置检查清单（网关未启动时 3–5 应为「等待前置」）
+5. 设置 → 启动网关 → 状态「运行中」
+6. 渠道 → 创建 OpenAI Chat 渠道
+7. 分组 → 创建分组并绑定渠道
+8. **API 密钥** → 创建密钥 → 复制完整 `sk-octopus-...`
+9. 返回仪表盘确认步骤 1–5 为已完成；复制 curl 模板
+10. 使用 [client-integration.md](./client-integration.md)，以该 Key 调用 `GET /v1/models`（期望非 401）
+11. （可选）有真实上游时发起 Chat；无上游时业务错误可接受
+12. 日志页查看是否出现记录
+13. 退出应用，确认侧车进程结束（任务管理器）
 
 ## 自动化验证
 

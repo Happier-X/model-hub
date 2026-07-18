@@ -1,0 +1,3 @@
+{"path":".trellis/spec/frontend/quality-guidelines.md","reason":"前端质量"}
+{"path":"docs/mvp-acceptance.md","reason":"验收一致性"}
+{"path":"src/components/layout/Sidebar.tsx","reason":"导航项名称"}

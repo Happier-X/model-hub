@@ -16,6 +16,7 @@ import {
 import { StatusBar } from "./components/layout/StatusBar";
 import { ApiKeysPage } from "./pages/ApiKeysPage";
 import { ChannelsPage } from "./pages/ChannelsPage";
+import { DashboardPage } from "./pages/DashboardPage";
 import { GroupsPage } from "./pages/GroupsPage";
 import { LogsPage } from "./pages/LogsPage";
 
@@ -283,32 +284,6 @@ function ClientHintPanel({
   );
 }
 
-function DashboardPage() {
-  return (
-    <div className="space-y-4">
-      <h2 className="text-2xl font-bold">仪表盘</h2>
-      <p className="text-sm text-slate-600">
-        MVP 仪表盘为占位。请使用「渠道」「分组」「API 密钥」「日志」「设置」完成配置闭环。
-      </p>
-      <section className="grid gap-4 md:grid-cols-3">
-        {[
-          ["渠道管理", "添加 OpenAI Chat 兼容上游。"],
-          ["分组路由", "对外 model 名与轮询负载。"],
-          ["运行日志", "查看转发请求摘要。"],
-        ].map(([title, description]) => (
-          <article
-            key={title}
-            className="rounded-xl border border-dashed border-slate-300 bg-white/70 p-5"
-          >
-            <h3 className="font-semibold">{title}</h3>
-            <p className="mt-2 text-sm text-slate-500">{description}</p>
-          </article>
-        ))}
-      </section>
-    </div>
-  );
-}
-
 export function App() {
   const [activeItem, setActiveItem] = useState<NavigationItem>("仪表盘");
   const [paths, setPaths] = useState<AppPaths | null>(null);
@@ -427,7 +402,15 @@ export function App() {
         <StatusBar gateway={gateway} />
         <main className="flex-1 overflow-auto p-8">
           <div className="mx-auto max-w-5xl">
-            {activeItem === "仪表盘" ? <DashboardPage /> : null}
+            {activeItem === "仪表盘" ? (
+              <DashboardPage
+                running={!!running}
+                authOk={authOk}
+                authMessage={authMessage}
+                baseUrl={baseUrl}
+                onNavigate={setActiveItem}
+              />
+            ) : null}
             {activeItem === "渠道" ? (
               <ChannelsPage
                 running={!!running}

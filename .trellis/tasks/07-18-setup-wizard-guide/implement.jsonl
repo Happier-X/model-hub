@@ -1,0 +1,9 @@
+{"path":".trellis/spec/frontend/index.md","reason":"前端层约定"}
+{"path":".trellis/spec/frontend/directory-structure.md","reason":"pages 目录"}
+{"path":".trellis/spec/frontend/component-guidelines.md","reason":"组件风格"}
+{"path":"src/App.tsx","reason":"导航与状态源"}
+{"path":"src/pages/ApiKeysPage.tsx","reason":"页面风格参考"}
+{"path":"src/api/channel.ts","reason":"listChannels"}
+{"path":"src/api/group.ts","reason":"listGroups"}
+{"path":"src/api/apikey.ts","reason":"listApiKeys"}
+{"path":"docs/client-integration.md","reason":"curl 示例对齐"}
