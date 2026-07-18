@@ -153,18 +153,21 @@ mod tests {
     }
 
     #[test]
-    fn writes_config_json_under_data_dir() {
+    fn non_default_port_propagates_to_config_and_environment() {
         let dir =
             std::env::temp_dir().join(format!("model-hub-gateway-config-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let config = GatewayRuntimeConfig::default_local(&dir);
+        let mut config = GatewayRuntimeConfig::default_local(&dir);
+        config.port = 18080;
         write_config_file(&dir, &config).unwrap();
         let text = std::fs::read_to_string(dir.join("data/config.json")).unwrap();
         assert!(text.contains("127.0.0.1"));
-        assert!(text.contains("8080"));
+        assert!(text.contains("18080"));
         assert!(text.contains("sqlite"));
         assert!(text.contains("data/data.db"));
-        let _ = std::fs::remove_dir_all(&dir);
+        assert!(env_overrides(&config)
+            .contains(&("OCTOPUS_SERVER_PORT".to_string(), "18080".to_string())));
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

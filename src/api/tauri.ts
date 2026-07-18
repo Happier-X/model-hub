@@ -103,6 +103,18 @@ export async function gatewayStop(): Promise<GatewayStatus> {
   }
 }
 
+export async function gatewaySetPort(port: number): Promise<GatewayStatus> {
+  if (!isTauriRuntime()) {
+    throw new Error("浏览器预览模式无法保存网关端口，请使用桌面应用。");
+  }
+
+  try {
+    return await invoke<GatewayStatus>("gateway_set_port", { port });
+  } catch (error) {
+    throw new Error(formatInvokeError(error));
+  }
+}
+
 export function gatewayStateLabel(state: GatewayPhase): string {
   switch (state) {
     case "idle":

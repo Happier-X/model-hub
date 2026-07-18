@@ -132,8 +132,9 @@ const { gateway_dir: gateway } = await getPaths();
 - `gateway_start(app) -> Result<GatewayStatus, InvokeError>`
 - `gateway_stop() -> Result<GatewayStatus, InvokeError>`
 - `gateway_status(app) -> Result<GatewayStatus, InvokeError>`
+- `gateway_set_port(app, port: u32) -> Result<GatewayStatus, InvokeError>`
 
-TypeScript：`gatewayStart` / `gatewayStop` / `gatewayStatus`（`src/api/tauri.ts`）。
+TypeScript：`gatewayStart` / `gatewayStop` / `gatewayStatus` / `gatewaySetPort`（`src/api/tauri.ts`）。
 
 ### 3. Contracts
 
@@ -152,6 +153,10 @@ TypeScript：`gatewayStart` / `gatewayStop` / `gatewayStatus`（`src/api/tauri.t
 
 启动前写入 **`{gateway_dir}/data/config.json`**，并以 `octopus start --config data/config.json` 启动；注入 `OCTOPUS_SERVER_HOST/PORT` 等环境变量。工作目录为 `gateway_dir`。数据库默认相对路径 `data/data.db`。
 
+用户端口设置以 **`{config_dir}/shell.json`** 的 `gateway_port` 为唯一持久化真源，缺失或损坏时安全回退 `8080`。仅 `idle` / `error` 状态允许保存 `1..=65535`；运行、启动或停止中必须提示先停止。保存后不自动重启，下次手动启动时同步用于状态、Base URL、侧车配置、环境变量和健康检查。不得自动选择端口或结束占用进程。
+
+Windows 保存 `shell.json` 时必须使用同目录临时文件与备份恢复策略：旧配置移至 `.bak`，新文件替换失败时恢复旧配置；读取主文件失败或缺失时允许从 `.bak` 恢复。禁止直接删除旧配置后裸 `rename`，否则替换失败会丢失用户端口。写盘失败必须恢复完整 `GatewayStatus`，不能只回滚端口而丢失原错误状态。
+
 ### 4. Validation & Error Matrix
 
 | 条件 | code / 行为 |
@@ -159,6 +164,8 @@ TypeScript：`gatewayStart` / `gatewayStop` / `gatewayStatus`（`src/api/tauri.t
 | 缺少 exe | `GATEWAY_BINARY_MISSING`，提示内置网关/prepare/`MODEL_HUB_GATEWAY_BIN` |
 | 内嵌部署失败 | `GATEWAY_BINARY_DEPLOY_FAILED`，提示目标路径占用或权限 |
 | 端口占用 | `GATEWAY_PORT_IN_USE` |
+| 非法端口 | `GATEWAY_INVALID_PORT` |
+| 运行中修改端口 | `GATEWAY_PORT_CHANGE_BLOCKED`，提示先停止 |
 | 健康检查超时 | `GATEWAY_HEALTH_TIMEOUT`，清理残留子进程 |
 | 配置写入失败 | `GATEWAY_CONFIG_FAILED` |
 | 应用退出 | `RunEvent::Exit` 时 `stop_managed` |
@@ -172,6 +179,8 @@ TypeScript：`gatewayStart` / `gatewayStop` / `gatewayStatus`（`src/api/tauri.t
 ### 6. Tests Required
 
 - config 默认 host/port/sqlite 与 env key 单测
+- 端口 `18080` 同步到配置文件、环境变量、状态与 Base URL
+- shell 配置缺失/损坏回退、端口 0 拒绝、备份恢复与替换失败旧值保留
 - 二进制缺失错误单测
 - 健康探测/端口可达单测
 - 状态机字段单测

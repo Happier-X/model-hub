@@ -17,7 +17,16 @@ pub fn run() {
                 Box::<dyn std::error::Error>::from(message)
             })?;
 
-            app.manage(GatewayHandle::new(app_paths.gateway_dir.clone()));
+            let gateway_port =
+                gateway::load_configured_port(std::path::Path::new(&app_paths.config_dir))
+                    .map_err(|error| {
+                        let message = error.to_string();
+                        Box::<dyn std::error::Error>::from(message)
+                    })?;
+            app.manage(GatewayHandle::new(
+                app_paths.gateway_dir.clone(),
+                gateway_port,
+            ));
             app.manage(AppExitState::new());
 
             tray::setup_tray(app)?;
@@ -48,6 +57,7 @@ pub fn run() {
             gateway::gateway_start,
             gateway::gateway_stop,
             gateway::gateway_status,
+            gateway::gateway_set_port,
         ])
         .build(tauri::generate_context!())
         .expect("构建 Model Hub 桌面应用失败")

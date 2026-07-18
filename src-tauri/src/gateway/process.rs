@@ -61,11 +61,9 @@ impl GatewayRuntime {
 
         if is_port_busy(&config.host, config.port) {
             self.status.state = GatewayPhase::Error;
-            self.status.last_error = Some(format!(
-                "端口 {} 已被占用。请在设置中更换端口，或结束占用该端口的进程后重试。",
-                config.port
-            ));
-            return Err(AppError::PortInUse { port: config.port });
+            let error = AppError::PortInUse { port: config.port };
+            self.status.last_error = Some(error.to_string());
+            return Err(error);
         }
 
         self.status.state = GatewayPhase::Starting;
@@ -144,6 +142,20 @@ impl GatewayRuntime {
                 Err(AppError::ProcessStatus { source })
             }
         }
+    }
+
+    pub fn restore_status(&mut self, status: GatewayStatus) {
+        self.status = status;
+    }
+
+    pub fn set_port(&mut self, port: u16) -> Result<GatewayStatus, AppError> {
+        if !matches!(self.status.state, GatewayPhase::Idle | GatewayPhase::Error) {
+            return Err(AppError::PortChangeWhileActive);
+        }
+        self.status.port = port;
+        self.status.base_url = format!("http://{}:{}", self.status.host, port);
+        self.status.last_error = None;
+        Ok(self.status.clone())
     }
 
     pub fn stop(&mut self) -> Result<GatewayStatus, AppError> {
@@ -227,4 +239,45 @@ impl GatewayRuntime {
 
 fn is_port_busy(host: &str, port: u16) -> bool {
     super::health::is_reachable(host, port, Duration::from_millis(150))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::GatewayRuntime;
+    use crate::{error::AppError, gateway::state::GatewayPhase};
+
+    #[test]
+    fn set_port_updates_status_and_base_url_when_stopped() {
+        let mut runtime = GatewayRuntime::new("127.0.0.1".into(), 8080, "gateway".into());
+        let status = runtime.set_port(18080).unwrap();
+        assert_eq!(status.port, 18080);
+        assert_eq!(status.base_url, "http://127.0.0.1:18080");
+    }
+
+    #[test]
+    fn set_port_allows_recovery_from_error_and_clears_old_error() {
+        let mut runtime = GatewayRuntime::new("127.0.0.1".into(), 8080, "gateway".into());
+        runtime.status.state = GatewayPhase::Error;
+        runtime.status.last_error = Some("端口被占用".into());
+        let status = runtime.set_port(18080).unwrap();
+        assert_eq!(status.state, GatewayPhase::Error);
+        assert_eq!(status.last_error, None);
+    }
+
+    #[test]
+    fn set_port_is_blocked_while_gateway_is_active() {
+        for phase in [
+            GatewayPhase::Starting,
+            GatewayPhase::Running,
+            GatewayPhase::Stopping,
+        ] {
+            let mut runtime = GatewayRuntime::new("127.0.0.1".into(), 8080, "gateway".into());
+            runtime.status.state = phase;
+            assert!(matches!(
+                runtime.set_port(18080),
+                Err(AppError::PortChangeWhileActive)
+            ));
+            assert_eq!(runtime.status.port, 8080);
+        }
+    }
 }

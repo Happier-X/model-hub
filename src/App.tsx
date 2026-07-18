@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { applyManualAdminToken, ensureAdminSession } from "./api/auth";
 import { setBaseUrlProvider } from "./api/gatewayHttp";
 import {
+  gatewaySetPort,
   gatewayStart,
   gatewayStatus,
   gatewayStop,
@@ -177,6 +178,70 @@ function GatewayPanel({
       ) : (
         <p className="mt-5 text-sm text-slate-500">正在读取网关状态…</p>
       )}
+    </section>
+  );
+}
+
+function GatewayPortPanel({
+  gateway,
+  busy,
+  onSaved,
+}: {
+  gateway: GatewayStatus | null;
+  busy: boolean;
+  onSaved: (status: GatewayStatus) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const [dirty, setDirty] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const port = gateway?.port ?? 8080;
+
+  useEffect(() => {
+    if (!dirty && gateway) setDraft(String(gateway.port));
+  }, [dirty, gateway]);
+
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!/^\d+$/.test(draft)) {
+      setError("请输入 1 到 65535 之间的整数端口，例如 18080。");
+      return;
+    }
+    const value = Number(draft);
+    if (!Number.isSafeInteger(value) || value < 1 || value > 65535) {
+      setError("端口范围必须是 1 到 65535，请输入有效整数。");
+      return;
+    }
+    setError(null);
+    setMessage(null);
+    try {
+      const status = await gatewaySetPort(value);
+      onSaved(status);
+      setDraft(String(value));
+      setDirty(false);
+      setMessage(`已保存，下次启动使用端口 ${value}。`);
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  const active = gateway?.state === "running" || gateway?.state === "starting" || gateway?.state === "stopping";
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h3 className="text-lg font-semibold">网关监听端口</h3>
+      <p className="mt-1 text-sm text-slate-500">默认绑定 127.0.0.1。请先停止网关，再保存端口；保存后下次手动启动生效。</p>
+      <form onSubmit={(event) => void save(event)} className="mt-4 flex max-w-md items-end gap-3">
+        <label className="flex-1 text-sm">
+          <span className="font-medium text-slate-700">端口（当前 {port}）</span>
+          <input type="number" min="1" max="65535" step="1" inputMode="numeric" required
+            value={draft} onChange={(event) => { setDraft(event.target.value); setDirty(true); setError(null); setMessage(null); }}
+            disabled={busy || active} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono" />
+        </label>
+        <button type="submit" disabled={busy || active} className="rounded-lg bg-cyan-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">保存端口</button>
+      </form>
+      {active ? <p className="mt-3 text-sm text-amber-700">网关运行中，请先点击“停止网关”后修改端口。</p> : null}
+      {error ? <p role="alert" className="mt-3 text-sm text-red-700">{error}</p> : null}
+      {message ? <p className="mt-3 text-sm text-emerald-700" aria-live="polite">{message}</p> : null}
     </section>
   );
 }
@@ -456,6 +521,11 @@ export function App() {
                   onStart={() => void handleStart()}
                   onStop={() => void handleStop()}
                   onRefresh={() => void refreshGateway()}
+                />
+                <GatewayPortPanel
+                  gateway={gateway}
+                  busy={gatewayBusy}
+                  onSaved={setGateway}
                 />
                 <AuthPanel
                   authOk={authOk}

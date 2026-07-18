@@ -10,12 +10,32 @@ pub enum AppError {
         #[source]
         source: std::io::Error,
     },
+    #[error("无法读取壳配置“{path}”：{source}")]
+    ReadShellConfig {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("无法写入壳配置“{path}”：{source}")]
+    WriteShellConfig {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("无法序列化壳配置“{path}”：{source}")]
+    SerializeShellConfig {
+        path: String,
+        #[source]
+        source: serde_json::Error,
+    },
     #[error("无法写入网关配置“{path}”：{source}")]
     WriteConfig {
         path: String,
         #[source]
         source: std::io::Error,
     },
+    #[error("网关正在运行或切换状态，请先停止网关后再修改监听端口")]
+    PortChangeWhileActive,
     #[error("无法序列化网关配置“{path}”：{source}")]
     SerializeConfig {
         path: String,
@@ -30,8 +50,11 @@ pub enum AppError {
         #[source]
         source: std::io::Error,
     },
-    #[error("端口 {port} 已被占用。请更换端口或结束占用进程后重试。")]
+    #[error("端口 {port} 已被占用。请到设置页修改“网关监听端口”，停止网关后重试；应用不会自动结束占用端口的进程。")]
     PortInUse { port: u16 },
+    #[error("端口必须是 1 到 65535 之间的整数")]
+    InvalidPort,
+
     #[error("启动网关失败（{path}）：{source}")]
     SpawnFailed {
         path: String,
@@ -60,10 +83,16 @@ impl AppError {
     fn code(&self) -> &'static str {
         match self {
             Self::Path(_) | Self::CreateDirectory { .. } => "PATH_INITIALIZATION_FAILED",
+            Self::ReadShellConfig { .. } => "SHELL_CONFIG_READ_FAILED",
+            Self::WriteShellConfig { .. } | Self::SerializeShellConfig { .. } => {
+                "SHELL_CONFIG_FAILED"
+            }
             Self::WriteConfig { .. } | Self::SerializeConfig { .. } => "GATEWAY_CONFIG_FAILED",
+            Self::PortInUse { .. } => "GATEWAY_PORT_IN_USE",
+            Self::InvalidPort => "GATEWAY_INVALID_PORT",
+            Self::PortChangeWhileActive => "GATEWAY_PORT_CHANGE_BLOCKED",
             Self::BinaryMissing { .. } => "GATEWAY_BINARY_MISSING",
             Self::BinaryDeployFailed { .. } => "GATEWAY_BINARY_DEPLOY_FAILED",
-            Self::PortInUse { .. } => "GATEWAY_PORT_IN_USE",
             Self::SpawnFailed { .. } => "GATEWAY_SPAWN_FAILED",
             Self::HealthTimeout { .. } => "GATEWAY_HEALTH_TIMEOUT",
             Self::ProcessStatus { .. } => "GATEWAY_PROCESS_ERROR",
