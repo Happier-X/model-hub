@@ -1,0 +1,7 @@
+{"path":".trellis/spec/frontend/index.md","reason":"前端约定"}
+{"path":".trellis/spec/frontend/directory-structure.md","reason":"api/pages"}
+{"path":".trellis/spec/frontend/component-guidelines.md","reason":"页面风格"}
+{"path":"src/api/channel.ts","reason":"渠道 API"}
+{"path":"src/pages/ChannelsPage.tsx","reason":"渠道 UI"}
+{"path":"src/pages/ApiKeysPage.tsx","reason":"编辑/复制交互参考"}
+{"path":"scripts/e2e-octopus-smoke.py","reason":"回归冒烟"}

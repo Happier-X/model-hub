@@ -48,6 +48,17 @@ export interface CreateChannelInput {
   model: string;
 }
 
+export interface UpdateChannelInput {
+  id: number;
+  name: string;
+  baseUrl: string;
+  model: string;
+  /** 非空时轮换首条 Key；空字符串/未填则不改 Key */
+  apiKey?: string;
+  /** 首条 Key 的 id；有新 Key 时用于 keys_to_update */
+  primaryKeyId?: number;
+}
+
 export async function listChannels(): Promise<Channel[]> {
   const data = await gatewayHttp.get<Channel[] | null>("/api/v1/channel/list");
   return (data ?? []).map((item) => ({
@@ -73,6 +84,37 @@ export async function createOpenAiChatChannel(
     auto_group: 0,
     custom_header: [],
   });
+}
+
+/**
+ * v0.9.28 真机支持部分更新：`{id, name, base_urls, model}`；
+ * Key 轮换用 `keys_to_update: [{id, channel_key}]`（有 key id 时）或 `keys_to_add`。
+ */
+export async function updateOpenAiChatChannel(
+  input: UpdateChannelInput,
+): Promise<unknown> {
+  const payload: Record<string, unknown> = {
+    id: input.id,
+    name: input.name,
+    type: CHANNEL_TYPE_OPENAI_CHAT,
+    base_urls: [{ url: input.baseUrl.replace(/\/$/, ""), delay: 0 }],
+    model: input.model,
+  };
+
+  const nextKey = input.apiKey?.trim();
+  if (nextKey) {
+    if (input.primaryKeyId != null && input.primaryKeyId > 0) {
+      payload.keys_to_update = [
+        { id: input.primaryKeyId, channel_key: nextKey },
+      ];
+    } else {
+      payload.keys_to_add = [
+        { enabled: true, channel_key: nextKey, remark: "" },
+      ];
+    }
+  }
+
+  return gatewayHttp.post("/api/v1/channel/update", payload);
 }
 
 export async function deleteChannel(id: number): Promise<unknown> {
@@ -101,4 +143,8 @@ export function channelTypeLabel(type: number | string): string {
     return CHANNEL_TYPE_LABELS[type] ?? `类型 ${type}`;
   }
   return type;
+}
+
+export function primaryChannelKey(channel: Channel): ChannelKey | undefined {
+  return channel.keys?.[0];
 }
