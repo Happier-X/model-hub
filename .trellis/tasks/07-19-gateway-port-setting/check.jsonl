@@ -1,0 +1,5 @@
+{"path":".trellis/spec/backend/quality-guidelines.md","reason":"进程与默认绑定审查"}
+{"path":".trellis/spec/frontend/quality-guidelines.md","reason":"表单与可访问性审查"}
+{"path":".trellis/spec/frontend/type-safety.md","reason":"跨层字段审查"}
+{"path":"src-tauri/src/gateway/config.rs","reason":"端口配置传播验证"}
+{"path":"src/api/tauri.ts","reason":"invoke 契约验证"}

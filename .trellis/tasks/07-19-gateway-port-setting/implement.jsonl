@@ -1,0 +1,12 @@
+{"path":".trellis/spec/backend/index.md","reason":"Rust 壳开发规范"}
+{"path":".trellis/spec/backend/directory-structure.md","reason":"壳配置目录与跨层契约"}
+{"path":".trellis/spec/backend/error-handling.md","reason":"配置与状态错误"}
+{"path":".trellis/spec/backend/quality-guidelines.md","reason":"默认绑定与进程安全"}
+{"path":".trellis/spec/frontend/index.md","reason":"前端开发规范"}
+{"path":".trellis/spec/frontend/component-guidelines.md","reason":"设置表单组件"}
+{"path":".trellis/spec/frontend/type-safety.md","reason":"invoke 类型契约"}
+{"path":"src-tauri/src/gateway/process.rs","reason":"运行时端口状态"}
+{"path":"src-tauri/src/gateway/config.rs","reason":"侧车启动配置"}
+{"path":"src-tauri/src/gateway/mod.rs","reason":"Tauri 命令"}
+{"path":"src/App.tsx","reason":"设置页入口"}
+{"path":"src/api/tauri.ts","reason":"前端 invoke 封装"}
