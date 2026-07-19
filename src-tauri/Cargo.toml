@@ -1,6 +1,6 @@
 [package]
 name = "model-hub"
-version = "0.0.2"
+version = "0.0.3"
 description = "Model Hub 桌面管理应用"
 authors = ["Model Hub Contributors"]
 edition = "2021"
@@ -11,11 +11,13 @@ name = "model_hub_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.4.1", features = [] }
+tauri-build = { version = "=2.6.3", features = [] }
 
 [dependencies]
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 sha2 = "0.10.9"
 thiserror = "2.0.16"
-tauri = { version = "2.8.5", features = ["tray-icon"] }
+tauri = { version = "=2.11.5", features = ["tray-icon"] }
+tauri-plugin-updater = "=2.10.1"
+tauri-plugin-process = "=2.3.1"

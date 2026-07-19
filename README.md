@@ -67,7 +67,11 @@ pnpm release:windows
 tauri build --bundles nsis -c src-tauri/tauri.release.conf.json
 ```
 
-推送 tag `v0.0.1`（或 `v*.*.*`）将触发 GitHub Actions：`.github/workflows/release-windows.yml`，产出 NSIS、SHA-256 与合规附件并创建 Release。
+推送 `v*.*.*` tag 将触发 GitHub Actions：`.github/workflows/release-windows.yml`，产出 NSIS、Updater `.sig`、`latest.json`、SHA-256 与合规附件并创建 Release。发布前必须配置 `TAURI_SIGNING_PRIVATE_KEY` Secret。
+
+## 应用内更新
+
+从首个集成 Tauri Updater 的版本开始，设置页提供“检查更新”：仅在用户点击时访问正式 GitHub Release，更新包必须通过签名校验，用户确认后才下载、安装和重启。v0.0.1/v0.0.2 需先手动安装该基线版本。密钥、CI Secret、发布和轮换见 [应用内更新说明](./docs/in-app-updater.md)。
 
 ## 数据目录契约
 
@@ -95,6 +99,8 @@ Rust 侧提供 `get_paths` 命令，首次调用会确保以下目录存在：
 
 ## 文档
 
+- [应用内更新说明](./docs/in-app-updater.md)
+- [v0.0.2 发布说明](./docs/release-notes-v0.0.2.md)
 - [v0.0.1 发布说明](./docs/release-notes-v0.0.1.md)
 - [Chat 上手与故障排查](./docs/chat-onboarding.md)（端到端 + 错误对照 + 仪表盘自检）
 - [客户端对接](./docs/client-integration.md)

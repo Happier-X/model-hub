@@ -1,12 +1,24 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "createUpdaterArtifacts": "v1Compatible",
     "resources": {
       "../tools/octopus/octopus.exe": "sidecar/octopus.exe",
       "../third-party/octopus/": "third-party/octopus/"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgxNjNDMzA4NzE4MjAwMEIKUldRTEFJSnhDTU5qZ2JXdDZmSGd2Q1MxQkdlZDl3NG9kOEVqQUJKcUZRU1ZGMXdkQmFlcmtTUG0K",
+      "endpoints": [
+        "https://github.com/Happier-X/model-hub/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "basicUi"
+      }
     }
   }
 }

@@ -1,4 +1,4 @@
-# 推送 v* tag 时在 Windows 构建 NSIS 安装包并创建 GitHub Release。
+# 推送 v* tag 时在 Windows 构建 NSIS、Updater 签名资产并创建 GitHub Release。
 name: release-windows
 
 on:
@@ -8,6 +8,10 @@ on:
 
 permissions:
   contents: write
+
+env:
+  TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
 jobs:
   release-windows:
@@ -34,71 +38,98 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Prepare bundled octopus (download + SHA-256)
-        shell: pwsh
-        run: |
-          powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-octopus.ps1
-
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build Tauri NSIS (bundled sidecar)
-        run: pnpm exec tauri build --bundles nsis -c src-tauri/tauri.release.conf.json
+      - name: Require updater signing key
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
+            throw "缺少 GitHub Secret TAURI_SIGNING_PRIVATE_KEY，拒绝发布未签名更新包。"
+          }
 
-      - name: Collect artifacts and SHA-256
+      - name: Prepare bundled octopus (download + SHA-256)
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-octopus.ps1
+
+      - name: Build and release Tauri updater assets
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Model Hub ${{ github.ref_name }}
+          releaseBody: |
+            请先阅读随 Release 附件提供的中文发布说明、SHA256SUMS.txt 与 AGPL/NOTICE/SOURCE 材料。
+            本版本首次支持设置页手动检查更新；更新包必须通过 Tauri 签名校验。
+          releaseDraft: false
+          prerelease: false
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
+          tauriScript: pnpm exec tauri
+          args: --bundles nsis -c src-tauri/tauri.release.conf.json
+
+      - name: Verify published updater manifest and signatures
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $repo = $env:GITHUB_REPOSITORY
+          $tag = $env:GITHUB_REF_NAME
+          $release = gh api "repos/$repo/releases/tags/$tag" | ConvertFrom-Json
+          $names = @($release.assets | ForEach-Object { $_.name })
+          if ($names -notcontains "latest.json") { throw "Release 缺少 latest.json" }
+          if (-not ($names | Where-Object { $_ -like "*.sig" })) { throw "Release 缺少 updater .sig 签名" }
+          $latestAsset = $release.assets | Where-Object { $_.name -eq "latest.json" } | Select-Object -First 1
+          gh api -H "Accept: application/octet-stream" $latestAsset.url > latest.json
+          $manifest = Get-Content latest.json -Raw | ConvertFrom-Json
+          $expected = $tag.TrimStart("v")
+          if ($manifest.version -ne $expected) { throw "latest.json 版本 $($manifest.version) 与 tag $tag 不一致" }
+          $windows = $manifest.platforms.'windows-x86_64'
+          if (-not $windows.url -or -not $windows.signature) { throw "latest.json 缺少 windows-x86_64 URL 或签名" }
+          $assetName = [System.IO.Path]::GetFileName(([Uri]$windows.url).AbsolutePath)
+          if ($names -notcontains $assetName) { throw "latest.json 引用的资产 $assetName 不在 Release 中" }
+
+      - name: Collect compliance assets and SHA-256
         shell: pwsh
         run: |
           $bundleRoot = "src-tauri/target/release/bundle"
           $outDir = "release-assets"
           New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-
-          $nsisFiles = Get-ChildItem -Path (Join-Path $bundleRoot "nsis") -Filter "*.exe" -ErrorAction SilentlyContinue
-          if (-not $nsisFiles -or $nsisFiles.Count -eq 0) {
-            Write-Host "Listing bundle tree for debug:"
-            if (Test-Path $bundleRoot) {
-              Get-ChildItem -Path $bundleRoot -Recurse | ForEach-Object { $_.FullName }
-            }
-            throw "未找到 NSIS 安装包（*.exe）"
-          }
-
-          foreach ($f in $nsisFiles) {
-            Copy-Item -Force $f.FullName (Join-Path $outDir $f.Name)
-          }
-
+          $nsis = Get-ChildItem -Path (Join-Path $bundleRoot "nsis") -Filter "*.exe" | Select-Object -First 1
+          if (-not $nsis) { throw "未找到 NSIS 安装包" }
+          Copy-Item -Force $nsis.FullName (Join-Path $outDir $nsis.Name)
           Copy-Item -Force "third-party/octopus/LICENSE-AGPL-3.0.txt" (Join-Path $outDir "LICENSE-AGPL-3.0-octopus.txt")
           Copy-Item -Force "third-party/octopus/NOTICE.md" (Join-Path $outDir "NOTICE-octopus.md")
           Copy-Item -Force "third-party/octopus/SOURCE.md" (Join-Path $outDir "SOURCE-octopus.md")
-          if (Test-Path "docs/release-notes-v0.0.2.md") {
-            Copy-Item -Force "docs/release-notes-v0.0.2.md" (Join-Path $outDir "release-notes-v0.0.2.md")
+          $notes = "docs/release-notes-v$($env:GITHUB_REF_NAME.TrimStart('v')).md"
+          if (Test-Path $notes) { Copy-Item -Force $notes (Join-Path $outDir (Split-Path $notes -Leaf)) }
+          $lines = Get-ChildItem $outDir -File | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($_.Name)"
           }
+          $lines | Set-Content (Join-Path $outDir "SHA256SUMS.txt") -Encoding utf8
 
-          $sums = Join-Path $outDir "SHA256SUMS.txt"
-          $lines = @()
-          Get-ChildItem -Path $outDir -File | Where-Object { $_.Name -ne "SHA256SUMS.txt" } | ForEach-Object {
-            $sha = [System.Security.Cryptography.SHA256]::Create()
-            try {
-              $stream = [System.IO.File]::OpenRead($_.FullName)
-              try { $bytes = $sha.ComputeHash($stream) } finally { $stream.Dispose() }
-            } finally { $sha.Dispose() }
-            $hash = ($bytes | ForEach-Object { $_.ToString("x2") }) -join ""
-            $lines += "$hash  $($_.Name)"
-          }
-          $lines | Set-Content -Path $sums -Encoding utf8
-          Get-Content $sums
-
-      - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: model-hub-windows-nsis
-          path: release-assets/*
-
-      - name: Create GitHub Release
+      - name: Upload compliance assets to existing Release
         uses: softprops/action-gh-release@v2
         with:
-          draft: false
-          generate_release_notes: true
-          body_path: docs/release-notes-v0.0.2.md
-          files: |
-            release-assets/*
+          tag_name: ${{ github.ref_name }}
+          files: release-assets/*
+          append_body: true
+          body: |
+
+            合规材料与 SHA-256 已作为附件上传。Updater 使用 Tauri 签名校验。
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-hub-windows-updater
+          path: |
+            src-tauri/target/release/bundle/nsis/*
+            src-tauri/target/release/bundle/latest.json
+            src-tauri/target/release/bundle/nsis/*.sig
+            release-assets/*

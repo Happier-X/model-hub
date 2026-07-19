@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Model Hub",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "identifier": "com.modelhub.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -26,6 +26,18 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": ["icons/icon.ico"]
+    "icon": ["icons/icon.ico"],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgxNjNDMzA4NzE4MjAwMEIKUldRTEFJSnhDTU5qZ2JXdDZmSGd2Q1MxQkdlZDl3NG9kOEVqQUJKcUZRU1ZGMXdkQmFlcmtTUG0K",
+      "endpoints": [
+        "https://github.com/Happier-X/model-hub/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "basicUi"
+      }
+    }
   }
 }

@@ -11,6 +11,8 @@ use crate::tray::AppExitState;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let app_paths = paths::resolve_paths(app.handle()).map_err(|error| {
                 let message = error.to_string();

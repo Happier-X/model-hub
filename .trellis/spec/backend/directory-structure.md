@@ -198,6 +198,59 @@ const { state, base_url } = await gatewayStatus();
 
 ---
 
+
+## 应用内更新跨层契约
+
+### 1. Scope / Trigger
+
+新增或修改 Tauri Updater、GitHub Release 资产、签名密钥、更新 UI 或重启流程时必须同步本契约。
+
+### 2. Signatures
+
+- 前端：`checkForUpdate() -> Promise<UpdateInfo | null>`
+- 前端：`downloadAndInstallUpdate(update, onProgress) -> Promise<void>`
+- 前端：`relaunchAfterUpdate() -> Promise<void>`
+- Rust 插件：`tauri-plugin-updater` + `tauri-plugin-process`
+
+### 3. Contracts
+
+- endpoint 固定为 `https://github.com/Happier-X/model-hub/releases/latest/download/latest.json`。
+- 仅设置页手动检查正式 Release；启动时不联网。
+- 公钥可提交，`TAURI_SIGNING_PRIVATE_KEY` 仅存 GitHub Actions Secret。
+- Release 必须同时提供 NSIS、`.sig`、`latest.json`、SHA256 和合规材料。
+- 更新重启沿用 `RunEvent::Exit -> stop_managed`，不得遗留托管侧车。
+- app data（`shell.json`、SQLite、日志）不得随安装更新删除。
+
+### 4. Validation & Error Matrix
+
+| 条件 | 行为 |
+|---|---|
+| 无新版本 | 显示“当前已是最新版本” |
+| 网络/manifest 失败 | 显示可行动错误，当前版本继续运行 |
+| 签名不匹配 | Updater 拒绝安装，不允许绕过插件下载 exe |
+| 用户取消 | 不下载、不安装或不重启 |
+| CI 缺私钥 | workflow 构建前失败，不发布未签名 updater |
+
+### 5. Good / Base / Bad Cases
+
+- Good：用户点击检查、确认安装、签名通过、重启后数据保留。
+- Base：当前最新版，无后台请求和弹窗。
+- Bad：把私钥写进仓库，或前端 fetch exe 后直接执行。
+
+### 6. Tests Required
+
+- `pnpm lint/build`、`cargo fmt/test/check`。
+- 发布基线版后，用下一 patch 验证 `latest.json`、`.sig` 和真实应用内升级。
+- 错误签名测试必须确认拒绝安装。
+
+### 7. Wrong vs Correct
+
+```text
+错误：Release 只有 setup.exe，客户端无法验证更新。
+正确：tauri-action 生成并上传 setup.exe、.sig 和 latest.json，私钥来自 Secret。
+```
+
+---
 ## Anti-Patterns
 
 - 在前端硬编码绝对路径到侧车 exe。

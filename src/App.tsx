@@ -20,6 +20,13 @@ import { ChannelsPage } from "./pages/ChannelsPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { GroupsPage } from "./pages/GroupsPage";
 import { LogsPage } from "./pages/LogsPage";
+import {
+  checkForUpdate,
+  downloadAndInstallUpdate,
+  getCurrentVersion,
+  relaunchAfterUpdate,
+  type UpdateInfo,
+} from "./api/updater";
 
 const pathLabels: Array<[keyof AppPaths, string]> = [
   ["app_data_dir", "应用数据根目录"],
@@ -242,6 +249,117 @@ function GatewayPortPanel({
       {active ? <p className="mt-3 text-sm text-amber-700">网关运行中，请先点击“停止网关”后修改端口。</p> : null}
       {error ? <p role="alert" className="mt-3 text-sm text-red-700">{error}</p> : null}
       {message ? <p className="mt-3 text-sm text-emerald-700" aria-live="polite">{message}</p> : null}
+    </section>
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function UpdaterPanel({ gatewayRunning }: { gatewayRunning: boolean }) {
+  const [currentVersion, setCurrentVersion] = useState("读取中…");
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const [downloaded, setDownloaded] = useState(0);
+  const [total, setTotal] = useState<number | undefined>();
+  const [message, setMessage] = useState("仅在点击检查时访问 GitHub，不会在启动时自动联网。");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void getCurrentVersion().then(setCurrentVersion);
+  }, []);
+
+  const checkUpdate = async () => {
+    setChecking(true);
+    setError(null);
+    if (update) {
+      await update.update.close().catch(() => undefined);
+    }
+    setUpdate(null);
+    setMessage("正在检查 GitHub 正式版本…");
+    try {
+      const result = await checkForUpdate();
+      setUpdate(result);
+      setMessage(result ? `发现新版本 ${result.version}` : "当前已是最新版本。");
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      setMessage("检查更新失败，当前版本不受影响。");
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const installUpdate = async () => {
+    if (!update) return;
+    const gatewayHint = gatewayRunning
+      ? "安装后重启应用会停止当前托管网关。"
+      : "安装完成后可重启应用。";
+    if (!window.confirm(`确认下载并安装 Model Hub ${update.version}？\n${gatewayHint}`)) return;
+
+    setInstalling(true);
+    setDownloaded(0);
+    setTotal(undefined);
+    setError(null);
+    setMessage("正在下载并校验签名…");
+    try {
+      await downloadAndInstallUpdate(update.update, (progress) => {
+        setDownloaded(progress.downloadedBytes);
+        setTotal(progress.totalBytes);
+        setMessage(progress.finished ? "更新已安装，等待重启。" : "正在下载并校验更新…");
+      });
+      await update.update.close().catch(() => undefined);
+      setUpdate(null);
+      if (window.confirm("更新已安装。是否立即重启 Model Hub？重启会安全停止托管网关。")) {
+        await relaunchAfterUpdate();
+      } else {
+        setMessage("更新已安装。请稍后退出并重新打开 Model Hub 以完成升级。");
+      }
+    } catch (cause: unknown) {
+      await update.update.close().catch(() => undefined);
+      setUpdate(null);
+      setError(cause instanceof Error ? cause.message : String(cause));
+      setMessage("更新未完成，当前版本仍可继续使用。");
+    } finally {
+      setInstalling(false);
+    }
+  };
+
+  const percent = total && total > 0 ? Math.min(100, Math.round((downloaded / total) * 100)) : null;
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-semibold">应用更新</h3>
+          <p className="mt-1 text-sm text-slate-500">当前版本：v{currentVersion}。仅检查正式 GitHub Release，更新包必须通过 Tauri 签名校验。</p>
+        </div>
+        <button type="button" onClick={() => void checkUpdate()} disabled={checking || installing}
+          className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
+          {checking ? "检查中…" : "检查更新"}
+        </button>
+      </div>
+      <p className="mt-4 text-sm text-slate-600" aria-live="polite">{message}</p>
+      {update ? (
+        <div className="mt-4 rounded-xl border border-cyan-200 bg-cyan-50 p-4 text-sm">
+          <p className="font-semibold text-cyan-900">v{update.currentVersion} → v{update.version}</p>
+          {update.date ? <p className="mt-1 text-cyan-800">发布时间：{update.date}</p> : null}
+          {update.body ? <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap font-sans text-cyan-950">{update.body}</pre> : null}
+          <button type="button" onClick={() => void installUpdate()} disabled={installing}
+            className="mt-4 rounded-lg bg-cyan-600 px-3 py-2 font-medium text-white disabled:opacity-50">
+            {installing ? "正在安装…" : "下载并安装"}
+          </button>
+        </div>
+      ) : null}
+      {installing ? (
+        <div className="mt-4">
+          <div className="h-2 overflow-hidden rounded bg-slate-200"><div className="h-full bg-cyan-500 transition-all" style={{ width: percent === null ? "20%" : `${percent}%` }} /></div>
+          <p className="mt-2 text-xs text-slate-500">已下载 {formatBytes(downloaded)}{total ? ` / ${formatBytes(total)}（${percent}%）` : ""}</p>
+        </div>
+      ) : null}
+      {error ? <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
     </section>
   );
 }
@@ -527,6 +645,7 @@ export function App() {
                   busy={gatewayBusy}
                   onSaved={setGateway}
                 />
+                <UpdaterPanel gatewayRunning={!!running} />
                 <AuthPanel
                   authOk={authOk}
                   authMessage={authMessage}
