@@ -1,6 +1,0 @@
-{"path":".trellis/spec/backend/quality-guidelines.md","reason":"私钥与签名发布安全审查"}
-{"path":".trellis/spec/backend/error-handling.md","reason":"失败不破坏当前版本"}
-{"path":".trellis/spec/frontend/quality-guidelines.md","reason":"状态/进度/确认可用性"}
-{"path":".trellis/spec/frontend/type-safety.md","reason":"Updater 事件类型"}
-{"path":".github/workflows/release-windows.yml","reason":"latest.json/.sig/Secret 门禁"}
-{"path":"src-tauri/src/lib.rs","reason":"重启时侧车清理"}
