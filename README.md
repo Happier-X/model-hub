@@ -55,6 +55,17 @@ cd src-tauri
 cargo check
 ```
 
+## 实验性 Rust 网关骨架
+
+仓库新增独立 crate [`gateway-rust/`](./gateway-rust/)，用于冻结 Rust 原生网关的配置、健康检查、JSON 404 与优雅退出契约。它目前**不包含**鉴权、SQLite、渠道、分组或 Chat 转发，**不能替代**当前发布版内嵌的 octopus，也未接入 Tauri 默认启停链路。
+
+```powershell
+cargo run --manifest-path gateway-rust/Cargo.toml -- --config gateway-rust/testdata/config.json
+cargo test --manifest-path gateway-rust/Cargo.toml
+```
+
+详见 [Rust 网关实验骨架](./gateway-rust/README.md)。
+
 ## Windows 发布构建（NSIS + 内嵌侧车）
 
 ```powershell
@@ -106,6 +117,7 @@ Rust 侧提供 `get_paths` 命令，首次调用会确保以下目录存在：
 - [客户端对接](./docs/client-integration.md)
 - [M1 验收清单](./docs/mvp-acceptance.md)
 - [网关侧车说明](./gateway/README.md)
+- [Rust 网关实验骨架](./gateway-rust/README.md)
 - [第三方 octopus NOTICE / 源码](./third-party/octopus/)
 
 ## 致谢与许可证提示

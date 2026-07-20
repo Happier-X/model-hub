@@ -1,0 +1,5 @@
+{"path":".trellis/spec/backend/quality-guidelines.md","reason":"安全绑定、进程和测试审查"}
+{"path":".trellis/spec/backend/error-handling.md","reason":"稳定 JSON 错误审查"}
+{"path":".trellis/spec/backend/logging-guidelines.md","reason":"日志无敏感信息"}
+{"path":"gateway/README.md","reason":"不破坏 octopus 当前契约"}
+{"path":"src-tauri/src/gateway/process.rs","reason":"确认未修改现有启停链路"}

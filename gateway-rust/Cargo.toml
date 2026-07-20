@@ -1,0 +1,20 @@
+[package]
+name = "model-hub-gateway"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77.2"
+description = "Model Hub Rust 原生网关实验骨架"
+
+[dependencies]
+axum = "=0.8.4"
+clap = { version = "=4.5.45", features = ["derive"] }
+serde = { version = "=1.0.219", features = ["derive"] }
+serde_json = "=1.0.140"
+thiserror = "=2.0.16"
+tokio = { version = "=1.47.1", features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tracing = "=0.1.41"
+tracing-subscriber = { version = "=0.3.19", features = ["env-filter"] }
+
+[dev-dependencies]
+http-body-util = "=0.1.3"
+tower = { version = "=0.5.2", features = ["util"] }

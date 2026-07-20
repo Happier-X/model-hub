@@ -1,0 +1,9 @@
+{"path":".trellis/spec/backend/index.md","reason":"Rust 网关层规范索引"}
+{"path":".trellis/spec/backend/directory-structure.md","reason":"独立 crate 与壳/网关边界"}
+{"path":".trellis/spec/backend/error-handling.md","reason":"HTTP/配置错误格式"}
+{"path":".trellis/spec/backend/logging-guidelines.md","reason":"结构化日志与敏感信息"}
+{"path":".trellis/spec/backend/quality-guidelines.md","reason":"loopback、进程安全与测试门"}
+{"path":"gateway/README.md","reason":"现有 octopus 契约和兼容矩阵"}
+{"path":"src-tauri/src/gateway/config.rs","reason":"复用现有配置外层结构"}
+{"path":"scripts/e2e-octopus-smoke.py","reason":"随机测试端口与禁止按名杀进程"}
+{"path":".trellis/tasks/07-18-rust-native-gateway/prd.md","reason":"父任务边界与后续切片"}

@@ -32,6 +32,7 @@ Thumbs.db
 
 # Rust / Tauri
 src-tauri/target/
+gateway-rust/target/
 src-tauri/gen/schemas/
 src-tauri/WixTools/
 src-tauri/*.log
