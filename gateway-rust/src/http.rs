@@ -1,12 +1,57 @@
+use std::sync::Arc;
+
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::routing::get;
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::Serialize;
 
-/// 应用共享状态（后续鉴权/DB/渠道模块可扩展）。
-#[derive(Debug, Clone, Default)]
-pub struct AppState {}
+use crate::apikey::{ApiKeyStore, MemoryApiKeyStore};
+use crate::auth::AuthService;
+use crate::config::GatewayConfig;
+use crate::routes;
+
+/// 应用共享状态。
+#[derive(Clone)]
+pub struct AppState {
+    pub config: Arc<GatewayConfig>,
+    pub auth: Arc<AuthService>,
+    pub api_keys: Arc<dyn ApiKeyStore>,
+}
+
+impl AppState {
+    pub fn from_config(config: GatewayConfig) -> Self {
+        let auth = AuthService::from_config(&config.auth);
+        Self {
+            config: Arc::new(config),
+            auth: Arc::new(auth),
+            api_keys: Arc::new(MemoryApiKeyStore::new()),
+        }
+    }
+
+    /// 测试/注入用：固定 secret 与内存 store。
+    pub fn for_tests() -> Self {
+        let mut config = GatewayConfig::default();
+        config.auth.jwt_secret = Some("test-jwt-secret-do-not-use-prod".into());
+        Self::from_config(config)
+    }
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self::for_tests()
+    }
+}
+
+impl std::fmt::Debug for AppState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AppState")
+            .field("config", &self.config)
+            .field("auth", &"<redacted>")
+            .field("api_keys", &"<store>")
+            .finish()
+    }
+}
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct HealthResponse {
@@ -27,8 +72,25 @@ pub struct ErrorDetail {
 }
 
 pub fn build_router(state: AppState) -> Router {
-    Router::new()
+    let public = Router::new()
         .route("/health", get(health_handler))
+        .route("/api/v1/user/login", post(routes::login_handler));
+
+    let admin = Router::new()
+        .route("/api/v1/user/status", get(routes::status_handler))
+        .route("/api/v1/apikey/list", get(routes::list_apikey_handler))
+        .route("/api/v1/apikey/create", post(routes::create_apikey_handler))
+        .route("/api/v1/apikey/update", post(routes::update_apikey_handler))
+        .route(
+            "/api/v1/apikey/delete/{id}",
+            delete(routes::delete_apikey_handler),
+        );
+
+    let client = Router::new().route("/v1/models", get(routes::models_handler));
+
+    public
+        .merge(admin)
+        .merge(client)
         .fallback(not_found_handler)
         .with_state(state)
 }
@@ -104,5 +166,73 @@ mod tests {
         let json = body_json(response).await;
         assert_eq!(json["error"]["code"], "NOT_FOUND");
         assert_eq!(json["error"]["message"], "未找到请求的接口");
+    }
+
+    #[tokio::test]
+    async fn login_and_status_matrix() {
+        let app = build_router(AppState::default());
+
+        let bad = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/user/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"username":"admin","password":"wrong"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(bad.status(), StatusCode::UNAUTHORIZED);
+        let bad_json = body_json(bad).await;
+        assert_eq!(bad_json["message"], "用户名或密码错误");
+        assert_eq!(bad_json["error"]["code"], "UNAUTHORIZED");
+
+        let ok = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/user/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"username":"admin","password":"admin","expire":3600}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(ok.status(), StatusCode::OK);
+        let ok_json = body_json(ok).await;
+        let token = ok_json["data"]["token"].as_str().unwrap().to_string();
+        assert!(!token.is_empty());
+        assert!(ok_json["data"]["expire_at"].is_string());
+
+        let no_token = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/user/status")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(no_token.status(), StatusCode::UNAUTHORIZED);
+
+        let with_token = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/user/status")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(with_token.status(), StatusCode::OK);
+        let status_json = body_json(with_token).await;
+        assert_eq!(status_json["data"], "ok");
     }
 }

@@ -1,0 +1,10 @@
+{"path":".trellis/spec/backend/directory-structure.md","reason":"gateway-rust 边界与模块约定"}
+{"path":".trellis/spec/backend/error-handling.md","reason":"HTTP 错误与敏感信息"}
+{"path":".trellis/spec/backend/quality-guidelines.md","reason":"JWT/Key 分离与安全绑定"}
+{"path":"gateway/README.md","reason":"现网两套凭证与 sk-octopus 契约"}
+{"path":"src/api/gatewayHttp.ts","reason":"成功信封 data 解包与错误 message"}
+{"path":"src/api/auth.ts","reason":"login/status 字段"}
+{"path":"src/api/apikey.ts","reason":"ApiKey CRUD 字段"}
+{"path":"gateway-rust/src/http.rs","reason":"扩展 router/state"}
+{"path":"scripts/e2e-octopus-smoke.py","reason":"鉴权矩阵对照"}
+{"path":".trellis/tasks/07-18-rust-native-gateway/prd.md","reason":"父任务切片顺序"}

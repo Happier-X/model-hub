@@ -19,7 +19,8 @@
   "pr_url": null,
   "subtasks": [],
   "children": [
-    "07-20-rust-gateway-http-skeleton"
+    "07-20-rust-gateway-http-skeleton",
+    "07-21-rust-gateway-auth-apikey"
   ],
   "parent": null,
   "relatedFiles": [],

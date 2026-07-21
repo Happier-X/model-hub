@@ -25,7 +25,8 @@ pub async fn run_with_shutdown(
     config: GatewayConfig,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> Result<(), GatewayError> {
-    run_with_state(config, AppState::default(), shutdown).await
+    let state = AppState::from_config(config.clone());
+    run_with_state(config, state, shutdown).await
 }
 
 /// 按配置和共享状态绑定并运行，供后续业务模块注入依赖。

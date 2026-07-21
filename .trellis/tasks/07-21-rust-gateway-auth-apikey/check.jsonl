@@ -1,0 +1,5 @@
+{"path":".trellis/spec/backend/quality-guidelines.md","reason":"Key 分离与日志安全"}
+{"path":".trellis/spec/backend/error-handling.md","reason":"401/信封审查"}
+{"path":"gateway/README.md","reason":"不破坏现网契约语义"}
+{"path":"src/api/gatewayHttp.ts","reason":"UI 解包兼容"}
+{"path":"gateway-rust/src/http.rs","reason":"路由与状态组装"}

@@ -2,6 +2,7 @@ use std::fs;
 use std::net::IpAddr;
 use std::path::Path;
 
+use rand::RngCore;
 use serde::Deserialize;
 
 use crate::error::GatewayError;
@@ -9,8 +10,11 @@ use crate::error::GatewayError;
 pub const DEFAULT_HOST: &str = "127.0.0.1";
 pub const DEFAULT_PORT: u16 = 8080;
 pub const DEFAULT_CONFIG_PATH: &str = "data/config.json";
+pub const DEFAULT_ADMIN_USERNAME: &str = "admin";
+pub const DEFAULT_ADMIN_PASSWORD: &str = "admin";
+pub const DEFAULT_JWT_EXPIRE_SECONDS: u64 = 86400;
 
-/// 网关进程配置（当前骨架仅消费 server）。
+/// 网关进程配置。
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct GatewayConfig {
     pub server: ServerConfig,
@@ -18,6 +22,8 @@ pub struct GatewayConfig {
     pub database: DatabaseConfig,
     #[serde(default)]
     pub log: LogConfig,
+    #[serde(default)]
+    pub auth: AuthConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -40,6 +46,20 @@ pub struct LogConfig {
     pub level: String,
 }
 
+/// 管理鉴权配置；缺省使用 admin/admin 与随机 JWT secret。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct AuthConfig {
+    #[serde(default = "default_admin_username")]
+    pub admin_username: String,
+    #[serde(default = "default_admin_password")]
+    pub admin_password: String,
+    /// 可选；缺失时进程启动生成随机密钥。
+    #[serde(default)]
+    pub jwt_secret: Option<String>,
+    #[serde(default = "default_jwt_expire")]
+    pub jwt_default_expire_seconds: u64,
+}
+
 fn default_database_type() -> String {
     "sqlite".to_string()
 }
@@ -50,6 +70,18 @@ fn default_database_path() -> String {
 
 fn default_log_level() -> String {
     "info".to_string()
+}
+
+fn default_admin_username() -> String {
+    DEFAULT_ADMIN_USERNAME.to_string()
+}
+
+fn default_admin_password() -> String {
+    DEFAULT_ADMIN_PASSWORD.to_string()
+}
+
+fn default_jwt_expire() -> u64 {
+    DEFAULT_JWT_EXPIRE_SECONDS
 }
 
 impl Default for DatabaseConfig {
@@ -69,6 +101,34 @@ impl Default for LogConfig {
     }
 }
 
+impl Default for AuthConfig {
+    fn default() -> Self {
+        Self {
+            admin_username: default_admin_username(),
+            admin_password: default_admin_password(),
+            jwt_secret: None,
+            jwt_default_expire_seconds: default_jwt_expire(),
+        }
+    }
+}
+
+impl AuthConfig {
+    /// 返回配置的 secret，或生成 32 字节随机 hex（不落盘）。
+    pub fn resolved_jwt_secret(&self) -> String {
+        if let Some(secret) = self
+            .jwt_secret
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+        {
+            return secret.to_string();
+        }
+        let mut bytes = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut bytes);
+        hex::encode(bytes)
+    }
+}
+
 impl Default for GatewayConfig {
     fn default() -> Self {
         Self {
@@ -78,6 +138,7 @@ impl Default for GatewayConfig {
             },
             database: DatabaseConfig::default(),
             log: LogConfig::default(),
+            auth: AuthConfig::default(),
         }
     }
 }
@@ -132,6 +193,20 @@ impl GatewayConfig {
                 host = %host,
                 "server.host 为全接口绑定（0.0.0.0/::），存在公网暴露风险；默认配置应使用 127.0.0.1"
             );
+        }
+
+        if self.auth.admin_username.trim().is_empty() {
+            return Err(GatewayError::invalid_config("auth.admin_username 不能为空"));
+        }
+
+        if self.auth.admin_password.is_empty() {
+            return Err(GatewayError::invalid_config("auth.admin_password 不能为空"));
+        }
+
+        if self.auth.jwt_default_expire_seconds == 0 {
+            return Err(GatewayError::invalid_config(
+                "auth.jwt_default_expire_seconds 必须大于 0",
+            ));
         }
 
         Ok(())
@@ -190,6 +265,9 @@ mod tests {
         assert_eq!(config.database.db_type, "sqlite");
         assert_eq!(config.database.path, "data/data.db");
         assert_eq!(config.log.level, "info");
+        assert_eq!(config.auth.admin_username, "admin");
+        assert_eq!(config.auth.admin_password, "admin");
+        assert!(config.auth.jwt_secret.is_none());
         config.validate().unwrap();
     }
 
@@ -205,6 +283,27 @@ mod tests {
         assert_eq!(config.server.host, "127.0.0.1");
         assert_eq!(config.server.port, 19080);
         assert_eq!(config.database.db_type, "sqlite");
+        assert_eq!(config.auth.admin_username, "admin");
+    }
+
+    #[test]
+    fn load_auth_section() {
+        let body = r#"{
+            "server": { "host": "127.0.0.1", "port": 19080 },
+            "auth": {
+                "admin_username": "ops",
+                "admin_password": "secret",
+                "jwt_secret": "fixed-dev-secret",
+                "jwt_default_expire_seconds": 3600
+            }
+        }"#;
+        let (_guard, path) = write_temp_config(body);
+        let config = GatewayConfig::load_from_path(&path).unwrap();
+        assert_eq!(config.auth.admin_username, "ops");
+        assert_eq!(config.auth.admin_password, "secret");
+        assert_eq!(config.auth.jwt_secret.as_deref(), Some("fixed-dev-secret"));
+        assert_eq!(config.auth.jwt_default_expire_seconds, 3600);
+        assert_eq!(config.auth.resolved_jwt_secret(), "fixed-dev-secret");
     }
 
     #[test]
@@ -275,5 +374,14 @@ mod tests {
         };
         // 不静默改写；显式配置可校验通过
         config.validate().unwrap();
+    }
+
+    #[test]
+    fn resolved_secret_random_when_missing() {
+        let auth = AuthConfig::default();
+        let a = auth.resolved_jwt_secret();
+        let b = auth.resolved_jwt_secret();
+        assert_eq!(a.len(), 64);
+        assert_ne!(a, b);
     }
 }
