@@ -1,131 +1,56 @@
 # Model Hub
 
-Model Hub 是一个 Windows 优先的 Tauri 2 桌面应用，用于承载本地网关（**gateway-rust / model-hub-gateway**）与管理 UI：渠道、分组、日志与设置。
+本机 **Vue 3 + Tauri 2** 管理台与 **进程内 Rust 代理**：统一 Base URL + 客户端 API Key，按分组故障转移队列转发 OpenAI 兼容 Chat。
 
-**当前版本：0.0.8** — Windows 安装包内嵌 `model-hub-gateway`。本地默认无鉴权。详见 [v0.0.8 发布说明](./docs/release-notes-v0.0.8.md)。
+## 能力（MVP）
 
-## Windows 开发前置
+- 多供应商（Provider）配置
+- 分组 = 客户端 `model`，组内有序故障转移队列
+- 默认熔断（连续失败阈值 / 恢复等待 / 半开）
+- 强制客户端 API Key（`Authorization: Bearer sk-modelhub-...`）
+- `POST /v1/chat/completions`（非流式 + SSE）、`GET /v1/models`
 
-- Windows 10/11，建议已安装 Microsoft Edge WebView2 Runtime（多数 Windows 环境已内置）。
-- Node.js 20+（当前工程使用 pnpm）。
-- pnpm 10+。
-- Rust stable 与 Cargo。
-- Tauri 2 的 Windows 构建依赖：Microsoft C++ Build Tools / Visual Studio Build Tools（含 Windows SDK）。
+## 开发
 
-## 安装依赖
-
-```bash
+```powershell
 pnpm install
-```
-
-## 前端开发与构建
-
-```bash
-pnpm dev
-pnpm build
-pnpm lint
-```
-
-## 准备内嵌网关（开发 / 发布）
-
-二进制**不进 Git**：
-
-```powershell
-pnpm prepare:gateway-rust
-# 或
-powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-gateway-rust.ps1
-```
-
-开发覆盖（可选）：
-
-```powershell
-$env:MODEL_HUB_GATEWAY_BIN = "$PWD\tools\gateway-rust\model-hub-gateway.exe"
-# 或
-$env:MODEL_HUB_GATEWAY_RUST_BIN = "$PWD\tools\gateway-rust\model-hub-gateway.exe"
-```
-
-## Tauri 桌面开发
-
-```bash
 pnpm tauri dev
 ```
 
-Rust 壳单独检查：
+仅前端：
 
-```bash
+```powershell
+pnpm dev
+```
+
+校验：
+
+```powershell
+pnpm lint
+pnpm typecheck
 cd src-tauri
+cargo test
 cargo check
 ```
 
-## 默认 Rust 网关
+## 客户端用法
 
-```powershell
-cargo run --manifest-path gateway-rust/Cargo.toml -- --config gateway-rust/testdata/config.json
-cargo test --manifest-path gateway-rust/Cargo.toml
+1. 在应用内创建客户端 API Key（明文仅展示一次）
+2. 配置供应商与分组队列
+3. 客户端 Base URL 使用概览页展示的地址，例如 `http://127.0.0.1:8080`
+4. `model` 填分组名
+
+```bash
+curl http://127.0.0.1:8080/v1/chat/completions \
+  -H "Authorization: Bearer sk-modelhub-..." \
+  -H "Content-Type: application/json" \
+  -d '{"model":"你的分组名","messages":[{"role":"user","content":"hi"}]}'
 ```
 
-详见 [Rust 网关说明](./gateway-rust/README.md) 与 [网关文档](./gateway/README.md)。
+## 架构
 
-## Windows 发布构建（NSIS + 内嵌 gateway-rust）
+- 管理面：Tauri commands（IPC）
+- 客户端面：本机 HTTP `/v1/*`
+- 数据：应用数据目录下 SQLite（新 schema，不兼容旧版）
 
-```powershell
-pnpm release:windows
-```
-
-等价于 prepare **gateway-rust** 后执行：
-
-```text
-tauri build --bundles nsis -c src-tauri/tauri.release.conf.json
-```
-
-推送 `v*.*.*` tag 将触发 GitHub Actions：`.github/workflows/release-windows.yml`，产出 NSIS、Updater `.sig`、`latest.json`、SHA-256 与发布说明并创建 Release。发布前必须配置 `TAURI_SIGNING_PRIVATE_KEY` Secret。
-
-## 应用内更新
-
-设置页提供“检查更新”：仅在用户点击时访问正式 GitHub Release，更新包必须通过签名校验，用户确认后才下载、安装和重启。v0.0.1/v0.0.2 需先手动安装更新基线版本。详见 [应用内更新说明](./docs/in-app-updater.md)。
-
-## 数据目录契约
-
-Rust 侧提供 `get_paths` 命令，首次调用会确保以下目录存在：
-
-- `app_data_dir`：应用数据根目录
-- `config_dir`：配置目录
-- `gateway_dir`：网关数据目录（配置、SQLite）
-- `bin_dir`：网关二进制目录（运行时从内嵌资源部署 `model-hub-gateway.exe`）
-
-前端设置区会展示这些路径，用于验证桌面壳与 UI 的基础通信。
-
-## 网关
-
-桌面壳已集成启停（`gateway_start` / `gateway_stop` / `gateway_status`）：
-
-1. **安装版**：无需手工放置 exe；自动部署内置 `model-hub-gateway`。
-2. **开发版**：运行 `pnpm prepare:gateway-rust`，或设置 `MODEL_HUB_GATEWAY_BIN` / `MODEL_HUB_GATEWAY_RUST_BIN`。
-3. 运行 `pnpm tauri dev`，在应用内查看状态条或设置页启动/停止。
-4. 默认监听 `http://127.0.0.1:8080`（本机绑定）；**打开应用默认启动网关**。可在设置页修改监听端口，保存后写入 `shell.json` 并**自动重启**网关。
-5. 在 **渠道 / 分组 / 日志** 完成配置（本地开放，无需管理登录或 API Key）。
-6. 客户端调用 `/v1/*` **无需** Token（默认仅 `127.0.0.1`）。详见 [客户端对接](./docs/client-integration.md)。
-
-解析优先级：`MODEL_HUB_GATEWAY_BIN` → `MODEL_HUB_GATEWAY_RUST_BIN` → 安装资源内嵌按哈希部署到 `bin_dir` → 已有 `bin_dir` 副本。
-
-## 文档
-
-- [应用内更新说明](./docs/in-app-updater.md)
-- [v0.0.8 发布说明](./docs/release-notes-v0.0.8.md)
-- [v0.0.7 发布说明](./docs/release-notes-v0.0.7.md)
-- [v0.0.6 发布说明](./docs/release-notes-v0.0.6.md)
-- [v0.0.5 发布说明](./docs/release-notes-v0.0.5.md)
-- [v0.0.4 发布说明](./docs/release-notes-v0.0.4.md)
-- [v0.0.3 发布说明](./docs/release-notes-v0.0.3.md)
-- [v0.0.2 发布说明](./docs/release-notes-v0.0.2.md)
-- [v0.0.1 发布说明](./docs/release-notes-v0.0.1.md)
-- [Chat 上手与故障排查](./docs/chat-onboarding.md)
-- [客户端对接](./docs/client-integration.md)
-- [M1 验收清单](./docs/mvp-acceptance.md)
-- [网关说明](./gateway/README.md)
-- [Rust 网关说明](./gateway-rust/README.md)
-
-## 许可证
-
-- **默认网关**为仓库内 `gateway-rust`。
-- Model Hub 桌面壳与管理 UI 源码以本仓库为准。
+旧 `gateway-rust` 侧车与 React UI 已废弃，不再作为运行时依赖。

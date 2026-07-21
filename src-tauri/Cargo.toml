@@ -1,7 +1,7 @@
 [package]
 name = "model-hub"
-version = "0.0.8"
-description = "Model Hub 桌面管理应用"
+version = "0.1.0"
+description = "Model Hub 桌面管理应用（Vue3 + 内嵌代理）"
 authors = ["Model Hub Contributors"]
 edition = "2021"
 rust-version = "1.77.2"
@@ -14,6 +14,14 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "=2.6.3", features = [] }
 
 [dependencies]
+axum = { version = "=0.8.4", features = ["json"] }
+bytes = "=1.10.1"
+chrono = { version = "=0.4.41", default-features = false, features = ["clock", "std"] }
+futures-util = { version = "=0.3.31", default-features = false, features = ["std"] }
+hex = "=0.4.3"
+rand = "=0.8.5"
+reqwest = { version = "=0.12.23", default-features = false, features = ["json", "rustls-tls", "stream"] }
+rusqlite = { version = "=0.32.1", features = ["bundled"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 sha2 = "0.10.9"
@@ -21,4 +29,12 @@ thiserror = "2.0.16"
 tauri = { version = "=2.11.5", features = ["tray-icon"] }
 tauri-plugin-updater = "=2.10.1"
 tauri-plugin-process = "=2.3.1"
-tauri-plugin-http = { version = "=2.5.7", features = ["unsafe-headers"] }
+tokio = { version = "=1.47.1", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+tower-http = { version = "0.6.8", features = ["cors"] }
+tracing = "=0.1.41"
+tracing-subscriber = { version = "=0.3.19", features = ["env-filter"] }
+
+[dev-dependencies]
+tempfile = "3.20"
+tower = { version = "=0.5.2", features = ["util"] }
+wiremock = "=0.6.5"

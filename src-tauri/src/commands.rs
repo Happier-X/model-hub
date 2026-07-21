@@ -1,0 +1,171 @@
+//! Tauri IPC 命令：代理启停 + 领域 CRUD。
+
+use serde::Serialize;
+use tauri::{AppHandle, State};
+
+use crate::domain::apikey::{CreateApiKeyPayload, UpdateApiKeyPayload};
+use crate::domain::group::{CreateGroupPayload, Group, UpdateGroupPayload};
+use crate::domain::provider::{CreateProviderPayload, Provider, UpdateProviderPayload};
+use crate::error::InvokeError;
+use crate::paths;
+use crate::proxy::{ProxyHandle, ProxyStatus};
+
+fn stores(proxy: &ProxyHandle) -> Result<crate::domain::Stores, InvokeError> {
+    proxy.ensure_stores().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn proxy_status(proxy: State<'_, ProxyHandle>) -> Result<ProxyStatus, InvokeError> {
+    proxy.status_snapshot().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn proxy_start(proxy: State<'_, ProxyHandle>) -> Result<ProxyStatus, InvokeError> {
+    proxy.start().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn proxy_stop(proxy: State<'_, ProxyHandle>) -> Result<ProxyStatus, InvokeError> {
+    proxy.stop().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn proxy_set_port(
+    app: AppHandle,
+    proxy: State<'_, ProxyHandle>,
+    port: u32,
+) -> Result<ProxyStatus, InvokeError> {
+    let port = u16::try_from(port).map_err(|_| crate::error::AppError::InvalidPort)?;
+    let paths = paths::resolve_paths(&app).map_err(InvokeError::from)?;
+    proxy
+        .set_port(std::path::Path::new(&paths.config_dir), port)
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn list_providers(proxy: State<'_, ProxyHandle>) -> Result<Vec<Provider>, InvokeError> {
+    stores(&proxy)?.list_providers().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn create_provider(
+    proxy: State<'_, ProxyHandle>,
+    payload: CreateProviderPayload,
+) -> Result<Provider, InvokeError> {
+    stores(&proxy)?.create_provider(payload).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn update_provider(
+    proxy: State<'_, ProxyHandle>,
+    payload: UpdateProviderPayload,
+) -> Result<Provider, InvokeError> {
+    stores(&proxy)?.update_provider(payload).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn delete_provider(proxy: State<'_, ProxyHandle>, id: i64) -> Result<(), InvokeError> {
+    stores(&proxy)?.delete_provider(id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn list_groups(proxy: State<'_, ProxyHandle>) -> Result<Vec<Group>, InvokeError> {
+    stores(&proxy)?.list_groups().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn create_group(
+    proxy: State<'_, ProxyHandle>,
+    payload: CreateGroupPayload,
+) -> Result<Group, InvokeError> {
+    stores(&proxy)?.create_group(payload).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn update_group(
+    proxy: State<'_, ProxyHandle>,
+    payload: UpdateGroupPayload,
+) -> Result<Group, InvokeError> {
+    stores(&proxy)?.update_group(payload).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn delete_group(proxy: State<'_, ProxyHandle>, id: i64) -> Result<(), InvokeError> {
+    stores(&proxy)?.delete_group(id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn list_api_keys(
+    proxy: State<'_, ProxyHandle>,
+) -> Result<Vec<crate::domain::apikey::ApiKeyPublic>, InvokeError> {
+    stores(&proxy)?.list_api_keys().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn create_api_key(
+    proxy: State<'_, ProxyHandle>,
+    payload: CreateApiKeyPayload,
+) -> Result<crate::domain::apikey::ApiKeyCreated, InvokeError> {
+    stores(&proxy)?.create_api_key(payload).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn update_api_key(
+    proxy: State<'_, ProxyHandle>,
+    payload: UpdateApiKeyPayload,
+) -> Result<crate::domain::apikey::ApiKeyPublic, InvokeError> {
+    stores(&proxy)?.update_api_key(payload).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn delete_api_key(proxy: State<'_, ProxyHandle>, id: i64) -> Result<(), InvokeError> {
+    stores(&proxy)?.delete_api_key(id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn list_logs(
+    proxy: State<'_, ProxyHandle>,
+    page: Option<i64>,
+    page_size: Option<i64>,
+) -> Result<Vec<crate::domain::log::RequestLog>, InvokeError> {
+    stores(&proxy)?
+        .list_logs(page.unwrap_or(1), page_size.unwrap_or(50))
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn clear_logs(proxy: State<'_, ProxyHandle>) -> Result<(), InvokeError> {
+    stores(&proxy)?.clear_logs().map_err(Into::into)
+}
+
+#[derive(Debug, Serialize)]
+pub struct HealthSnapshot {
+    pub provider_id: i64,
+    pub provider_name: String,
+    pub state: String,
+    pub consecutive_failures: u32,
+}
+
+#[tauri::command]
+pub fn list_health(proxy: State<'_, ProxyHandle>) -> Result<Vec<HealthSnapshot>, InvokeError> {
+    let stores = stores(&proxy)?;
+    let circuits = proxy.circuits().map_err(InvokeError::from)?;
+    let providers = stores.list_providers().map_err(InvokeError::from)?;
+    let mut out = Vec::new();
+    for p in providers {
+        let label = circuits.health_label(p.id);
+        let state = match label {
+            crate::proxy::circuit::HealthLabel::Healthy => "healthy",
+            crate::proxy::circuit::HealthLabel::Warning => "warning",
+            crate::proxy::circuit::HealthLabel::Open => "open",
+            crate::proxy::circuit::HealthLabel::HalfOpen => "half_open",
+        };
+        out.push(HealthSnapshot {
+            provider_id: p.id,
+            provider_name: p.name,
+            state: state.into(),
+            consecutive_failures: circuits.consecutive_failures(p.id),
+        });
+    }
+    Ok(out)
+}

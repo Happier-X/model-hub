@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
+export type ProxyState = "idle" | "starting" | "running" | "stopping" | "error";
+
 export interface AppPaths {
   app_data_dir: string;
   config_dir: string;
@@ -7,129 +9,131 @@ export interface AppPaths {
   bin_dir: string;
 }
 
-export type GatewayPhase =
-  | "idle"
-  | "starting"
-  | "running"
-  | "stopping"
-  | "error";
-
-export interface GatewayStatus {
-  state: GatewayPhase;
+export interface ProxyStatus {
+  state: ProxyState;
   host: string;
   port: number;
-  pid: number | null;
   last_error: string | null;
   base_url: string;
   data_dir: string;
-  binary_path: string | null;
-  /** 网关实现名；当前固定 `rust`，字段可选以兼容旧壳 */
-  impl_name?: string;
 }
 
-const browserPreviewPaths: Readonly<AppPaths> = {
-  app_data_dir: "浏览器预览模式：请在桌面应用中查看实际路径",
-  config_dir: "—",
-  gateway_dir: "—",
-  bin_dir: "—",
-};
-
-const browserPreviewGateway: Readonly<GatewayStatus> = {
-  state: "idle",
-  host: "127.0.0.1",
-  port: 8080,
-  pid: null,
-  last_error: "浏览器预览模式：网关启停仅在桌面应用中可用",
-  base_url: "http://127.0.0.1:8080",
-  data_dir: "—",
-  binary_path: null,
-};
-
-function isTauriRuntime(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+export interface Provider {
+  id: number;
+  name: string;
+  base_url: string;
+  api_key: string;
+  enabled: boolean;
+  created_at: string;
 }
 
-function formatInvokeError(error: unknown): string {
-  if (typeof error === "string") {
-    return error;
-  }
+export interface GroupItem {
+  id: number;
+  provider_id: number;
+  provider_name?: string;
+  upstream_model: string;
+  sort_order: number;
+}
+
+export interface Group {
+  id: number;
+  name: string;
+  auto_failover: boolean;
+  items: GroupItem[];
+  created_at: string;
+}
+
+export interface ApiKeyPublic {
+  id: number;
+  name: string;
+  masked: string;
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface ApiKeyCreated extends ApiKeyPublic {
+  raw_key: string;
+}
+
+export interface RequestLog {
+  id: number;
+  time: number;
+  group_name: string;
+  provider_name: string;
+  upstream_model: string;
+  status_code: number;
+  use_time_ms: number;
+  error: string;
+  failover_from: string;
+  failover_to: string;
+  failover_reason: string;
+}
+
+export interface HealthSnapshot {
+  provider_id: number;
+  provider_name: string;
+  state: "healthy" | "warning" | "open" | "half_open";
+  consecutive_failures: number;
+}
+
+export interface InvokeErrorShape {
+  code?: string;
+  message?: string;
+}
+
+export function extractInvokeError(error: unknown): string {
+  if (typeof error === "string") return error;
   if (error && typeof error === "object") {
-    const record = error as { message?: unknown; code?: unknown };
-    if (typeof record.message === "string") {
-      return record.message;
-    }
+    const e = error as InvokeErrorShape;
+    if (e.message) return e.message;
   }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return String(error);
+  return "未知错误";
 }
 
-export async function getPaths(): Promise<AppPaths> {
-  if (!isTauriRuntime()) {
-    return { ...browserPreviewPaths };
-  }
+export const getPaths = () => invoke<AppPaths>("get_paths");
+export const proxyStart = () => invoke<ProxyStatus>("proxy_start");
+export const proxyStop = () => invoke<ProxyStatus>("proxy_stop");
+export const proxyStatus = () => invoke<ProxyStatus>("proxy_status");
+export const proxySetPort = (port: number) => invoke<ProxyStatus>("proxy_set_port", { port });
 
-  return invoke<AppPaths>("get_paths");
-}
+export const listProviders = () => invoke<Provider[]>("list_providers");
+export const createProvider = (payload: {
+  name: string;
+  base_url: string;
+  api_key: string;
+  enabled: boolean;
+}) => invoke<Provider>("create_provider", { payload });
+export const updateProvider = (payload: {
+  id: number;
+  name: string;
+  base_url: string;
+  api_key: string;
+  enabled: boolean;
+}) => invoke<Provider>("update_provider", { payload });
+export const deleteProvider = (id: number) => invoke<void>("delete_provider", { id });
 
-export async function gatewayStatus(): Promise<GatewayStatus> {
-  if (!isTauriRuntime()) {
-    return { ...browserPreviewGateway };
-  }
+export const listGroups = () => invoke<Group[]>("list_groups");
+export const createGroup = (payload: {
+  name: string;
+  auto_failover: boolean;
+  items: { provider_id: number; upstream_model: string }[];
+}) => invoke<Group>("create_group", { payload });
+export const updateGroup = (payload: {
+  id: number;
+  name: string;
+  auto_failover: boolean;
+  items: { provider_id: number; upstream_model: string }[];
+}) => invoke<Group>("update_group", { payload });
+export const deleteGroup = (id: number) => invoke<void>("delete_group", { id });
 
-  return invoke<GatewayStatus>("gateway_status");
-}
+export const listApiKeys = () => invoke<ApiKeyPublic[]>("list_api_keys");
+export const createApiKey = (payload: { name: string; enabled: boolean }) =>
+  invoke<ApiKeyCreated>("create_api_key", { payload });
+export const updateApiKey = (payload: { id: number; name: string; enabled: boolean }) =>
+  invoke<ApiKeyPublic>("update_api_key", { payload });
+export const deleteApiKey = (id: number) => invoke<void>("delete_api_key", { id });
 
-export async function gatewayStart(): Promise<GatewayStatus> {
-  if (!isTauriRuntime()) {
-    throw new Error("浏览器预览模式无法启动网关，请使用 pnpm tauri dev。");
-  }
-
-  try {
-    return await invoke<GatewayStatus>("gateway_start");
-  } catch (error) {
-    throw new Error(formatInvokeError(error));
-  }
-}
-
-export async function gatewayStop(): Promise<GatewayStatus> {
-  if (!isTauriRuntime()) {
-    throw new Error("浏览器预览模式无法停止网关，请使用 pnpm tauri dev。");
-  }
-
-  try {
-    return await invoke<GatewayStatus>("gateway_stop");
-  } catch (error) {
-    throw new Error(formatInvokeError(error));
-  }
-}
-
-export async function gatewaySetPort(port: number): Promise<GatewayStatus> {
-  if (!isTauriRuntime()) {
-    throw new Error("浏览器预览模式无法保存网关端口，请使用桌面应用。");
-  }
-
-  try {
-    return await invoke<GatewayStatus>("gateway_set_port", { port });
-  } catch (error) {
-    throw new Error(formatInvokeError(error));
-  }
-}
-
-export function gatewayStateLabel(state: GatewayPhase): string {
-  switch (state) {
-    case "idle":
-      return "未运行";
-    case "starting":
-      return "启动中";
-    case "running":
-      return "运行中";
-    case "stopping":
-      return "停止中";
-    case "error":
-      return "错误";
-    default:
-      return state;
-  }
-}
+export const listLogs = (page = 1, pageSize = 50) =>
+  invoke<RequestLog[]>("list_logs", { page, page_size: pageSize });
+export const clearLogs = () => invoke<void>("clear_logs");
+export const listHealth = () => invoke<HealthSnapshot[]>("list_health");

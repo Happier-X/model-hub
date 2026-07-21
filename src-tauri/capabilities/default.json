@@ -1,19 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "默认桌面窗口能力：核心窗口、签名更新检查、应用重启与本机网关 HTTP。",
+  "description": "默认桌面窗口能力：核心窗口、签名更新检查与应用重启。",
   "windows": ["main"],
   "permissions": [
     "core:default",
     "updater:default",
-    "process:allow-restart",
-    "http:default",
-    {
-      "identifier": "http:allow-fetch",
-      "allow": [
-        { "url": "http://127.0.0.1:*" },
-        { "url": "http://localhost:*" }
-      ]
-    }
+    "process:allow-restart"
   ]
 }

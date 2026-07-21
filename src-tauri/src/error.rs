@@ -28,48 +28,20 @@ pub enum AppError {
         #[source]
         source: serde_json::Error,
     },
-    #[error("无法写入网关配置“{path}”：{source}")]
-    WriteConfig {
-        path: String,
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("网关正在切换状态，请稍候再修改监听端口")]
-    PortChangeWhileActive,
-    #[error("无法序列化网关配置“{path}”：{source}")]
-    SerializeConfig {
-        path: String,
-        #[source]
-        source: serde_json::Error,
-    },
-    #[error("未找到网关程序“{path}”。{hint}")]
-    BinaryMissing { path: String, hint: String },
-    #[error("无法部署内置网关到“{path}”：{source}")]
-    BinaryDeployFailed {
-        path: String,
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("端口 {port} 已被占用。请到设置页修改“网关监听端口”后保存（将自动重启）；应用不会自动结束占用端口的进程。")]
-    PortInUse { port: u16 },
     #[error("端口必须是 1 到 65535 之间的整数")]
     InvalidPort,
-
-    #[error("启动网关失败（{path}）：{source}")]
-    SpawnFailed {
-        path: String,
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("网关未在超时内监听 {host}:{port}")]
-    HealthTimeout { host: String, port: u16 },
-    #[error("无法读取网关进程状态：{source}")]
-    ProcessStatus {
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("网关状态锁已损坏，请重启应用")]
-    GatewayLockPoisoned,
+    #[error("代理正在切换状态，请稍候再修改监听端口")]
+    PortChangeWhileActive,
+    #[error("端口 {port} 已被占用。请修改监听端口后保存；应用不会自动结束占用端口的进程。")]
+    PortInUse { port: u16 },
+    #[error("代理启动失败：{0}")]
+    ProxyStart(String),
+    #[error("数据库错误：{0}")]
+    Database(String),
+    #[error("业务错误：{0}")]
+    Business(String),
+    #[error("代理状态锁已损坏，请重启应用")]
+    LockPoisoned,
 }
 
 #[derive(Debug, Serialize)]
@@ -87,16 +59,13 @@ impl AppError {
             Self::WriteShellConfig { .. } | Self::SerializeShellConfig { .. } => {
                 "SHELL_CONFIG_FAILED"
             }
-            Self::WriteConfig { .. } | Self::SerializeConfig { .. } => "GATEWAY_CONFIG_FAILED",
-            Self::PortInUse { .. } => "GATEWAY_PORT_IN_USE",
-            Self::InvalidPort => "GATEWAY_INVALID_PORT",
-            Self::PortChangeWhileActive => "GATEWAY_PORT_CHANGE_BLOCKED",
-            Self::BinaryMissing { .. } => "GATEWAY_BINARY_MISSING",
-            Self::BinaryDeployFailed { .. } => "GATEWAY_BINARY_DEPLOY_FAILED",
-            Self::SpawnFailed { .. } => "GATEWAY_SPAWN_FAILED",
-            Self::HealthTimeout { .. } => "GATEWAY_HEALTH_TIMEOUT",
-            Self::ProcessStatus { .. } => "GATEWAY_PROCESS_ERROR",
-            Self::GatewayLockPoisoned => "GATEWAY_LOCK_POISONED",
+            Self::InvalidPort => "PROXY_INVALID_PORT",
+            Self::PortChangeWhileActive => "PROXY_PORT_CHANGE_BLOCKED",
+            Self::PortInUse { .. } => "PROXY_PORT_IN_USE",
+            Self::ProxyStart(_) => "PROXY_START_FAILED",
+            Self::Database(_) => "DATABASE_ERROR",
+            Self::Business(_) => "BUSINESS_ERROR",
+            Self::LockPoisoned => "PROXY_LOCK_POISONED",
         }
     }
 }
