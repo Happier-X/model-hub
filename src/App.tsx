@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { applyManualAdminToken, ensureAdminSession } from "./api/auth";
 import { setBaseUrlProvider } from "./api/gatewayHttp";
 import {
   gatewaySetPort,
@@ -15,7 +14,6 @@ import {
   type NavigationItem,
 } from "./components/layout/Sidebar";
 import { StatusBar } from "./components/layout/StatusBar";
-import { ApiKeysPage } from "./pages/ApiKeysPage";
 import { ChannelsPage } from "./pages/ChannelsPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { GroupsPage } from "./pages/GroupsPage";
@@ -375,74 +373,7 @@ function UpdaterPanel({ gatewayRunning }: { gatewayRunning: boolean }) {
   );
 }
 
-function AuthPanel({
-  authOk,
-  authMessage,
-  onRetry,
-}: {
-  authOk: boolean;
-  authMessage: string;
-  onRetry: () => void;
-}) {
-  const [tokenDraft, setTokenDraft] = useState("");
-
-  const onSaveToken = (event: FormEvent) => {
-    event.preventDefault();
-    applyManualAdminToken(tokenDraft);
-    onRetry();
-  };
-
-  return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h3 className="text-lg font-semibold">管理 API 鉴权（无登录页）</h3>
-      <p className="mt-1 text-sm text-slate-500">
-        网关运行后会静默使用侧车默认 admin 账号换取 Bearer Token。失败时可粘贴 Token 兜底。
-      </p>
-      <p
-        className={`mt-4 rounded-lg p-3 text-sm ${
-          authOk ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"
-        }`}
-      >
-        {authMessage || (authOk ? "管理 API 已就绪" : "尚未鉴权")}
-      </p>
-      <form onSubmit={onSaveToken} className="mt-4 space-y-3">
-        <label className="block text-sm">
-          <span className="font-medium text-slate-700">管理 Token（可选兜底）</span>
-          <input
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
-            value={tokenDraft}
-            onChange={(e) => setTokenDraft(e.target.value)}
-            placeholder="粘贴 JWT / 管理令牌"
-            autoComplete="off"
-          />
-        </label>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="submit"
-            className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white"
-          >
-            保存 Token 并重试
-          </button>
-          <button
-            type="button"
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-            onClick={onRetry}
-          >
-            重新静默鉴权
-          </button>
-        </div>
-      </form>
-    </section>
-  );
-}
-
-function ClientHintPanel({
-  baseUrl,
-  onOpenApiKeys,
-}: {
-  baseUrl: string;
-  onOpenApiKeys: () => void;
-}) {
+function ClientHintPanel({ baseUrl }: { baseUrl: string }) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <h3 className="text-lg font-semibold">客户端对接提示</h3>
@@ -463,17 +394,8 @@ function ClientHintPanel({
           <code className="rounded bg-slate-100 px-1">model</code> 填分组名（不是上游模型名）
         </li>
         <li>
-          客户端必须使用网关 API Key（前缀{" "}
-          <code className="rounded bg-slate-100 px-1">sk-modelhub-</code>
-          ），与上方管理 JWT 不是同一套。请到{" "}
-          <button
-            type="button"
-            className="font-medium text-cyan-700 underline"
-            onClick={onOpenApiKeys}
-          >
-            API 密钥
-          </button>{" "}
-          页创建并复制完整 Key。
+          本地开放模式：调用 <code className="rounded bg-slate-100 px-1">/v1/*</code> 无需
+          API Key / 管理 Token（默认仅监听 127.0.0.1）。
         </li>
       </ul>
     </section>
@@ -487,8 +409,6 @@ export function App() {
   const [gateway, setGateway] = useState<GatewayStatus | null>(null);
   const [gatewayBusy, setGatewayBusy] = useState(false);
   const [gatewayActionError, setGatewayActionError] = useState<string | null>(null);
-  const [authOk, setAuthOk] = useState(false);
-  const [authMessage, setAuthMessage] = useState("等待网关运行后鉴权…");
 
   useEffect(() => {
     setBaseUrlProvider(() => {
@@ -522,17 +442,6 @@ export function App() {
     }
   }, []);
 
-  const refreshAuth = useCallback(async () => {
-    if (gateway?.state !== "running") {
-      setAuthOk(false);
-      setAuthMessage("网关未运行，跳过管理 API 鉴权");
-      return;
-    }
-    const result = await ensureAdminSession();
-    setAuthOk(result.ok);
-    setAuthMessage(result.message);
-  }, [gateway?.state]);
-
   useEffect(() => {
     getPaths()
       .then(setPaths)
@@ -549,10 +458,6 @@ export function App() {
     }, 2000);
     return () => window.clearInterval(timer);
   }, [refreshGateway]);
-
-  useEffect(() => {
-    void refreshAuth();
-  }, [refreshAuth]);
 
   const handleStart = async () => {
     setGatewayBusy(true);
@@ -601,46 +506,19 @@ export function App() {
             {activeItem === "仪表盘" ? (
               <DashboardPage
                 running={!!running}
-                authOk={authOk}
-                authMessage={authMessage}
                 baseUrl={baseUrl}
                 onNavigate={setActiveItem}
               />
             ) : null}
-            {activeItem === "渠道" ? (
-              <ChannelsPage
-                running={!!running}
-                authOk={authOk}
-                authMessage={authMessage}
-              />
-            ) : null}
-            {activeItem === "分组" ? (
-              <GroupsPage
-                running={!!running}
-                authOk={authOk}
-                authMessage={authMessage}
-              />
-            ) : null}
-            {activeItem === "API 密钥" ? (
-              <ApiKeysPage
-                running={!!running}
-                authOk={authOk}
-                authMessage={authMessage}
-              />
-            ) : null}
-            {activeItem === "日志" ? (
-              <LogsPage
-                running={!!running}
-                authOk={authOk}
-                authMessage={authMessage}
-              />
-            ) : null}
+            {activeItem === "渠道" ? <ChannelsPage running={!!running} /> : null}
+            {activeItem === "分组" ? <GroupsPage running={!!running} /> : null}
+            {activeItem === "日志" ? <LogsPage running={!!running} /> : null}
             {activeItem === "设置" ? (
               <div className="space-y-6">
                 <div>
                   <h2 className="text-2xl font-bold">设置</h2>
                   <p className="mt-1 text-sm text-slate-600">
-                    网关生命周期、路径契约与管理 API 鉴权适配。
+                    网关生命周期、监听端口、应用更新与数据路径。本地模式无需管理登录。
                   </p>
                 </div>
                 <GatewayPanel
@@ -657,15 +535,7 @@ export function App() {
                   onSaved={setGateway}
                 />
                 <UpdaterPanel gatewayRunning={!!running} />
-                <AuthPanel
-                  authOk={authOk}
-                  authMessage={authMessage}
-                  onRetry={() => void refreshAuth()}
-                />
-                <ClientHintPanel
-                  baseUrl={baseUrl}
-                  onOpenApiKeys={() => setActiveItem("API 密钥")}
-                />
+                <ClientHintPanel baseUrl={baseUrl} />
                 <PathsPanel paths={paths} pathError={pathError} />
               </div>
             ) : null}

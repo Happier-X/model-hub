@@ -11,11 +11,9 @@ import { GatewayGate } from "../components/GatewayGate";
 
 interface LogsPageProps {
   running: boolean;
-  authOk: boolean;
-  authMessage: string;
 }
 
-export function LogsPage({ running, authOk, authMessage }: LogsPageProps) {
+export function LogsPage({ running }: LogsPageProps) {
   const [logs, setLogs] = useState<RelayLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +26,7 @@ export function LogsPage({ running, authOk, authMessage }: LogsPageProps) {
   const [copyHint, setCopyHint] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!running || !authOk) {
+    if (!running) {
       return;
     }
     setLoading(true);
@@ -40,21 +38,21 @@ export function LogsPage({ running, authOk, authMessage }: LogsPageProps) {
     } finally {
       setLoading(false);
     }
-  }, [running, authOk, page, pageSize]);
+  }, [running, page, pageSize]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   useEffect(() => {
-    if (!running || !authOk || !autoRefresh) {
+    if (!running || !autoRefresh) {
       return;
     }
     const timer = window.setInterval(() => {
       void refresh();
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [refresh, running, authOk, autoRefresh]);
+  }, [refresh, running, autoRefresh]);
 
   const visibleLogs = useMemo(
     () => logs.filter((log) => logMatchesFilter(log, keyword, onlyErrors)),
@@ -125,7 +123,7 @@ export function LogsPage({ running, authOk, authMessage }: LogsPageProps) {
         </div>
       </div>
 
-      <GatewayGate running={running} authOk={authOk} authMessage={authMessage}>
+      <GatewayGate running={running}>
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-end gap-3">
             <label className="block min-w-[12rem] flex-1 text-sm">

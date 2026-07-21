@@ -318,7 +318,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(no_token.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(no_token.status(), StatusCode::OK); // 本地开放
 
         let with_token = app
             .oneshot(
@@ -336,7 +336,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn channel_requires_jwt() {
+    async fn channel_list_open_without_jwt() {
         let app = build_router(AppState::default());
         let response = app
             .oneshot(
@@ -347,11 +347,11 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[tokio::test]
-    async fn log_list_requires_jwt() {
+    async fn log_list_open_without_jwt() {
         let app = build_router(AppState::default());
         let response = app
             .oneshot(
@@ -362,6 +362,6 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }

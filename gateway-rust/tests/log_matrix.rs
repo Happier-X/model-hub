@@ -190,10 +190,10 @@ async fn log_list_requires_jwt() {
         None,
     )
     .await;
-    assert_eq!(no_token.status, 401);
+    assert_eq!(no_token.status, 200); // 本地开放
 
     let clear_no_token = http_json("DELETE", &base, "/api/v1/log/clear", None, None).await;
-    assert_eq!(clear_no_token.status, 401);
+    assert_eq!(clear_no_token.status, 200); // 本地开放
 
     shutdown_tx.send(()).unwrap();
     handle.await.unwrap();
@@ -304,9 +304,9 @@ async fn chat_writes_log_list_clear_and_page_size_cap() {
         .expect("error log");
     assert!(failed["error"].as_str().unwrap().contains("未知分组"));
 
-    // 401 不增加日志
+    // 本地开放：无 Authorization 的 chat 也会成功并记日志（不再 401）
     let before = logs.len();
-    let _ = http_json(
+    let open_chat = http_json(
         "POST",
         &base,
         "/v1/chat/completions",
@@ -314,7 +314,8 @@ async fn chat_writes_log_list_clear_and_page_size_cap() {
         None,
     )
     .await;
-    let after_401 = http_json(
+    assert_ne!(open_chat.status, 401);
+    let after_open = http_json(
         "GET",
         &base,
         "/api/v1/log/list?page=1&page_size=20",
@@ -322,7 +323,7 @@ async fn chat_writes_log_list_clear_and_page_size_cap() {
         Some(&token),
     )
     .await;
-    assert_eq!(after_401.body["data"].as_array().unwrap().len(), before);
+    assert!(after_open.body["data"].as_array().unwrap().len() >= before);
 
     // page_size 上限 100：请求 999 仍最多 100（当前仅 2 条）
     let capped = http_json(

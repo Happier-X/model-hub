@@ -1,7 +1,7 @@
 import type { GatewayStatus } from "../../api/tauri";
 import { gatewayStateLabel } from "../../api/tauri";
 
-const navigationItems = ["仪表盘", "渠道", "分组", "API 密钥", "日志", "设置"] as const;
+const navigationItems = ["仪表盘", "渠道", "分组", "日志", "设置"] as const;
 
 export type NavigationItem = (typeof navigationItems)[number];
 

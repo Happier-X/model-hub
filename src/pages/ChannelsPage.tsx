@@ -14,8 +14,6 @@ import { GatewayGate } from "../components/GatewayGate";
 
 interface ChannelsPageProps {
   running: boolean;
-  authOk: boolean;
-  authMessage: string;
 }
 
 interface EditDraft {
@@ -25,7 +23,7 @@ interface EditDraft {
   apiKey: string;
 }
 
-export function ChannelsPage({ running, authOk, authMessage }: ChannelsPageProps) {
+export function ChannelsPage({ running }: ChannelsPageProps) {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +40,7 @@ export function ChannelsPage({ running, authOk, authMessage }: ChannelsPageProps
   const [copyHint, setCopyHint] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!running || !authOk) {
+    if (!running) {
       return;
     }
     setLoading(true);
@@ -54,7 +52,7 @@ export function ChannelsPage({ running, authOk, authMessage }: ChannelsPageProps
     } finally {
       setLoading(false);
     }
-  }, [running, authOk]);
+  }, [running]);
 
   useEffect(() => {
     void refresh();
@@ -177,7 +175,7 @@ export function ChannelsPage({ running, authOk, authMessage }: ChannelsPageProps
         </p>
       </div>
 
-      <GatewayGate running={running} authOk={authOk} authMessage={authMessage}>
+      <GatewayGate running={running}>
         <form
           onSubmit={(event) => void onCreate(event)}
           className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"

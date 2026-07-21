@@ -105,10 +105,9 @@ async fn channel_group_apikey_full_flow() {
     let (addr, shutdown_tx, handle, _dir) = start_test_server().await;
     let base = format!("http://{addr}");
 
-    // 无 JWT 访问渠道 401
+    // 本地开放：无 JWT 也可访问渠道
     let no_auth = http_json("GET", &base, "/api/v1/channel/list", None, None).await;
-    assert_eq!(no_auth.status, 401);
-    assert!(!no_auth.body["message"].as_str().unwrap().is_empty());
+    assert_eq!(no_auth.status, 200);
 
     // 登录
     let login = http_json(

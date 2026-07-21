@@ -13,8 +13,6 @@ import { GatewayGate } from "../components/GatewayGate";
 
 interface GroupsPageProps {
   running: boolean;
-  authOk: boolean;
-  authMessage: string;
 }
 
 interface EditDraft {
@@ -27,7 +25,7 @@ function primaryItem(group: Group): GroupItem | undefined {
   return group.items?.[0];
 }
 
-export function GroupsPage({ running, authOk, authMessage }: GroupsPageProps) {
+export function GroupsPage({ running }: GroupsPageProps) {
   const [groups, setGroups] = useState<Group[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(false);
@@ -64,7 +62,7 @@ export function GroupsPage({ running, authOk, authMessage }: GroupsPageProps) {
   };
 
   const refresh = useCallback(async () => {
-    if (!running || !authOk) {
+    if (!running) {
       return;
     }
     setLoading(true);
@@ -88,7 +86,7 @@ export function GroupsPage({ running, authOk, authMessage }: GroupsPageProps) {
     } finally {
       setLoading(false);
     }
-  }, [running, authOk]);
+  }, [running]);
 
   useEffect(() => {
     void refresh();
@@ -196,7 +194,7 @@ export function GroupsPage({ running, authOk, authMessage }: GroupsPageProps) {
         </p>
       </div>
 
-      <GatewayGate running={running} authOk={authOk} authMessage={authMessage}>
+      <GatewayGate running={running}>
         <form
           onSubmit={(event) => void onCreate(event)}
           className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"

@@ -268,7 +268,7 @@ async fn chat_forward_to_mock_upstream() {
         None,
     )
     .await;
-    assert_eq!(no_key.status, 401);
+    assert_ne!(no_key.status, 401); // 本地开放
 
     let admin_as_client = http_json(
         "POST",
@@ -278,7 +278,7 @@ async fn chat_forward_to_mock_upstream() {
         Some(&token),
     )
     .await;
-    assert_eq!(admin_as_client.status, 401);
+    assert_ne!(admin_as_client.status, 401); // 本地开放
 
     // 正常转发
     let chat = http_json(
@@ -413,7 +413,7 @@ async fn chat_sse_stream_proxy() {
         None,
     )
     .await;
-    assert_eq!(no_key.status, 401);
+    assert_ne!(no_key.status, 401); // 本地开放
 
     // 管理 JWT → 401
     let admin_as_client = http_raw(
@@ -424,7 +424,7 @@ async fn chat_sse_stream_proxy() {
         Some(&token),
     )
     .await;
-    assert_eq!(admin_as_client.status, 401);
+    assert_ne!(admin_as_client.status, 401); // 本地开放
 
     // 未知分组 → 非 401
     let unknown = http_raw(

@@ -1,37 +1,51 @@
-//! 管理 JWT / 客户端 API Key 提取中间件。
+//! 请求提取器（本地桌面场景：**不校验**管理 JWT / 客户端 API Key）。
 
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use axum::response::Response;
 
-use crate::apikey::{ApiKeyStore, API_KEY_PREFIX};
 use crate::http::AppState;
-use crate::response::unauthorized;
 
 use super::jwt::AdminClaims;
-use super::AuthService;
 
-/// 已通过校验的管理 JWT。
+/// 兼容旧路由签名的管理调用者占位（恒为本地信任）。
 #[derive(Debug, Clone)]
 pub struct AdminAuth {
     pub claims: AdminClaims,
 }
 
-/// 已通过校验的客户端 API Key（内部记录 id）。
+/// 兼容旧路由签名的客户端调用者占位（恒为本地信任）。
 #[derive(Debug, Clone)]
 pub struct ClientAuth {
     pub key_id: i64,
     pub name: String,
 }
 
+fn local_admin() -> AdminAuth {
+    AdminAuth {
+        claims: AdminClaims {
+            sub: "local".into(),
+            exp: i64::MAX / 2,
+            iat: 0,
+        },
+    }
+}
+
+fn local_client() -> ClientAuth {
+    ClientAuth {
+        key_id: 0,
+        name: "local".into(),
+    }
+}
+
 impl FromRequestParts<AppState> for AdminAuth {
     type Rejection = Response;
 
     async fn from_request_parts(
-        parts: &mut Parts,
-        state: &AppState,
+        _parts: &mut Parts,
+        _state: &AppState,
     ) -> Result<Self, Self::Rejection> {
-        require_admin_jwt(&state.auth, parts)
+        Ok(local_admin())
     }
 }
 
@@ -39,67 +53,27 @@ impl FromRequestParts<AppState> for ClientAuth {
     type Rejection = Response;
 
     async fn from_request_parts(
-        parts: &mut Parts,
-        state: &AppState,
+        _parts: &mut Parts,
+        _state: &AppState,
     ) -> Result<Self, Self::Rejection> {
-        require_client_api_key(state.api_keys.as_ref(), parts)
+        Ok(local_client())
     }
 }
 
+/// 保留符号供旧调用；恒成功。
 #[allow(clippy::result_large_err)]
-pub fn require_admin_jwt(auth: &AuthService, parts: &Parts) -> Result<AdminAuth, Response> {
-    let token = extract_bearer(parts).ok_or_else(|| unauthorized("缺少管理 Token"))?;
-    match auth.verify_token(token) {
-        Ok(claims) => Ok(AdminAuth { claims }),
-        Err(_) => Err(unauthorized("无效或过期的管理 Token")),
-    }
+pub fn require_admin_jwt(
+    _auth: &super::AuthService,
+    _parts: &Parts,
+) -> Result<AdminAuth, Response> {
+    Ok(local_admin())
 }
 
+/// 保留符号供旧调用；恒成功。
 #[allow(clippy::result_large_err)]
 pub fn require_client_api_key(
-    store: &dyn ApiKeyStore,
-    parts: &Parts,
+    _store: &dyn crate::apikey::ApiKeyStore,
+    _parts: &Parts,
 ) -> Result<ClientAuth, Response> {
-    let raw = extract_client_key(parts).ok_or_else(|| unauthorized("缺少客户端 API Key"))?;
-
-    // 客户端路径只接受 sk-modelhub- 前缀；管理 JWT 即使合法也拒绝。
-    if !raw.starts_with(API_KEY_PREFIX) {
-        return Err(unauthorized("无效的客户端 API Key"));
-    }
-
-    match store.find_by_raw_key(raw) {
-        Some(record) if record.enabled => Ok(ClientAuth {
-            key_id: record.id,
-            name: record.name,
-        }),
-        Some(_) => Err(unauthorized("API Key 已禁用")),
-        None => Err(unauthorized("无效的客户端 API Key")),
-    }
-}
-
-fn extract_bearer(parts: &Parts) -> Option<&str> {
-    let value = parts.headers.get(axum::http::header::AUTHORIZATION)?;
-    let value = value.to_str().ok()?;
-    let token = value
-        .strip_prefix("Bearer ")
-        .or_else(|| value.strip_prefix("bearer "))?;
-    let token = token.trim();
-    if token.is_empty() {
-        None
-    } else {
-        Some(token)
-    }
-}
-
-fn extract_client_key(parts: &Parts) -> Option<&str> {
-    if let Some(token) = extract_bearer(parts) {
-        return Some(token);
-    }
-    let value = parts.headers.get("x-api-key")?;
-    let key = value.to_str().ok()?.trim();
-    if key.is_empty() {
-        None
-    } else {
-        Some(key)
-    }
+    Ok(local_client())
 }

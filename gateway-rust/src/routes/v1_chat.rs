@@ -364,7 +364,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn missing_key_returns_401() {
+    async fn missing_key_still_reaches_business_layer() {
+        // 本地开放：无 API Key 也应进入路由（未知分组 → 404，而非 401）
         let app = build_router(AppState::for_tests());
         let response = app
             .oneshot(
@@ -379,7 +380,8 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_ne!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]

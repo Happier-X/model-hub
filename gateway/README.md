@@ -54,15 +54,15 @@ model-hub-gateway --config data/config.json
 |----|------|
 | 监听地址 | 默认 **`127.0.0.1`** |
 | 端口 | 默认 **8080**（设置页保存后自动重启生效） |
-| 管理 UI | **无登录页**；静默 `POST /api/v1/user/login`（默认 admin/admin） |
-| 客户端网关 Key | 前缀 **`sk-modelhub-...`**；与管理 JWT 分离 |
+| 管理 UI | **无登录**；管理 API 本地开放 |
+| 客户端鉴权 | **无需** API Key（本地开放） |
 
 ## 两套凭证
 
 | 路径 | 鉴权 |
 |------|------|
-| `/api/v1/*` | Bearer **管理 JWT** |
-| `/v1/*` | Bearer **`sk-modelhub-...`** 或 `x-api-key` |
+| `/api/v1/*` | 无需鉴权 |
+| `/v1/*` | 无需鉴权 |
 
 ## 启停
 
@@ -76,4 +76,4 @@ model-hub-gateway --config data/config.json
 1. 未找到 exe → 安装版应自带；开发跑 `pnpm prepare:gateway-rust` 或设置 env
 2. 端口占用 → 设置页换端口或结束占用进程
 3. 管理 API 401 → 设置页粘贴 Token，或确认默认 admin 未改密
-4. 客户端 `/v1/*` 401 → **API 密钥** 页创建完整 `sk-modelhub-...`
+4. 客户端连不上 → 确认网关 running 与端口

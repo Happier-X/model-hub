@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { listApiKeys } from "../api/apikey";
 import { listChannels } from "../api/channel";
 import { clientProbe, type ClientProbeResult } from "../api/gatewayHttp";
 import { listGroups } from "../api/group";
@@ -15,8 +14,6 @@ type StepStatus = "ok" | "todo" | "blocked" | "error" | "info";
 
 interface DashboardPageProps {
   running: boolean;
-  authOk: boolean;
-  authMessage: string;
   baseUrl: string;
   onNavigate: (item: NavigationItem) => void;
 }
@@ -24,7 +21,6 @@ interface DashboardPageProps {
 interface Counts {
   channels: number;
   groups: number;
-  apiKeys: number;
 }
 
 function statusStyles(status: StepStatus): string {
@@ -60,8 +56,6 @@ function statusLabel(status: StepStatus): string {
 
 export function DashboardPage({
   running,
-  authOk,
-  authMessage,
   baseUrl,
   onNavigate,
 }: DashboardPageProps) {
@@ -69,18 +63,16 @@ export function DashboardPage({
   const [loading, setLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
   const [copyHint, setCopyHint] = useState<string | null>(null);
-  const [probeKey, setProbeKey] = useState("");
   const [probeModel, setProbeModel] = useState("");
   const [probeBusy, setProbeBusy] = useState(false);
   const [probeSteps, setProbeSteps] = useState<SelfCheckStep[] | null>(null);
   const [probeError, setProbeError] = useState<string | null>(null);
 
-  const canProbe = running && authOk;
   const root = baseUrl.replace(/\/$/, "");
   const v1Root = `${root}/v1`;
 
   const refresh = useCallback(async () => {
-    if (!canProbe) {
+    if (!running) {
       setCounts(null);
       setListError(null);
       return;
@@ -88,15 +80,10 @@ export function DashboardPage({
     setLoading(true);
     setListError(null);
     try {
-      const [channels, groups, keys] = await Promise.all([
-        listChannels(),
-        listGroups(),
-        listApiKeys(),
-      ]);
+      const [channels, groups] = await Promise.all([listChannels(), listGroups()]);
       setCounts({
         channels: channels.length,
         groups: groups.length,
-        apiKeys: keys.length,
       });
     } catch (err: unknown) {
       setCounts(null);
@@ -104,7 +91,7 @@ export function DashboardPage({
     } finally {
       setLoading(false);
     }
-  }, [canProbe]);
+  }, [running]);
 
   useEffect(() => {
     void refresh();
@@ -112,20 +99,17 @@ export function DashboardPage({
 
   const steps = useMemo(() => {
     const step1: StepStatus = running ? "ok" : "todo";
-    const step2: StepStatus = !running ? "blocked" : authOk ? "ok" : "todo";
 
+    let step2: StepStatus = "blocked";
     let step3: StepStatus = "blocked";
-    let step4: StepStatus = "blocked";
-    let step5: StepStatus = "blocked";
-    if (canProbe) {
+    if (running) {
       if (listError) {
-        step3 = step4 = step5 = "error";
+        step2 = step3 = "error";
       } else if (counts) {
-        step3 = counts.channels > 0 ? "ok" : "todo";
-        step4 = counts.groups > 0 ? "ok" : "todo";
-        step5 = counts.apiKeys > 0 ? "ok" : "todo";
+        step2 = counts.channels > 0 ? "ok" : "todo";
+        step3 = counts.groups > 0 ? "ok" : "todo";
       } else if (loading) {
-        step3 = step4 = step5 = "blocked";
+        step2 = step3 = "blocked";
       }
     }
 
@@ -134,7 +118,7 @@ export function DashboardPage({
         id: 1,
         title: "启动网关",
         detail: running
-          ? "侧车进程运行中"
+          ? "网关进程运行中（打开应用默认自动启动）"
           : "请到设置启动网关（默认 127.0.0.1:8080）",
         status: step1,
         actionLabel: "去设置",
@@ -142,21 +126,9 @@ export function DashboardPage({
       },
       {
         id: 2,
-        title: "管理 API 鉴权",
-        detail: !running
-          ? "等待网关运行"
-          : authOk
-            ? authMessage || "管理 JWT 已就绪"
-            : authMessage || "静默鉴权失败，可到设置粘贴管理 Token",
-        status: step2,
-        actionLabel: "去设置",
-        target: "设置" as NavigationItem,
-      },
-      {
-        id: 3,
         title: "配置渠道",
-        detail: !canProbe
-          ? "需先完成步骤 1–2"
+        detail: !running
+          ? "需先启动网关"
           : listError
             ? listError
             : counts
@@ -166,15 +138,15 @@ export function DashboardPage({
               : loading
                 ? "检测中…"
                 : "尚未检测",
-        status: step3,
+        status: step2,
         actionLabel: "去渠道",
         target: "渠道" as NavigationItem,
       },
       {
-        id: 4,
+        id: 3,
         title: "配置分组",
-        detail: !canProbe
-          ? "需先完成步骤 1–2"
+        detail: !running
+          ? "需先启动网关"
           : listError
             ? listError
             : counts
@@ -184,49 +156,18 @@ export function DashboardPage({
               : loading
                 ? "检测中…"
                 : "尚未检测",
-        status: step4,
+        status: step3,
         actionLabel: "去分组",
         target: "分组" as NavigationItem,
       },
-      {
-        id: 5,
-        title: "创建网关 API Key",
-        detail: !canProbe
-          ? "需先完成步骤 1–2"
-          : listError
-            ? listError
-            : counts
-              ? counts.apiKeys > 0
-                ? `已有 ${counts.apiKeys} 条密钥（客户端用 sk-modelhub-...，非管理 JWT）`
-                : "到 API 密钥页创建并复制完整 Key"
-              : loading
-                ? "检测中…"
-                : "尚未检测",
-        status: step5,
-        actionLabel: "去 API 密钥",
-        target: "API 密钥" as NavigationItem,
-      },
     ];
-  }, [
-    running,
-    authOk,
-    authMessage,
-    canProbe,
-    counts,
-    listError,
-    loading,
-  ]);
+  }, [running, counts, listError, loading]);
 
   const allReady =
-    canProbe &&
-    !!counts &&
-    !listError &&
-    counts.channels > 0 &&
-    counts.groups > 0 &&
-    counts.apiKeys > 0;
+    running && !!counts && !listError && counts.channels > 0 && counts.groups > 0;
 
-  const modelsCurl = `curl -sS "${v1Root}/models" \\\n  -H "Authorization: Bearer sk-modelhub-YOUR_KEY"`;
-  const chatCurl = `curl -sS "${v1Root}/chat/completions" \\\n  -H "Authorization: Bearer sk-modelhub-YOUR_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d "{\\"model\\":\\"your-group-name\\",\\"messages\\":[{\\"role\\":\\"user\\",\\"content\\":\\"hi\\"}]}"`;
+  const modelsCurl = `curl -sS "${v1Root}/models"`;
+  const chatCurl = `curl -sS "${v1Root}/chat/completions" \\\n  -H "Content-Type: application/json" \\\n  -d "{\\"model\\":\\"your-group-name\\",\\"messages\\":[{\\"role\\":\\"user\\",\\"content\\":\\"hi\\"}]}"`;
 
   const onCopy = async (text: string, label: string) => {
     try {
@@ -244,51 +185,42 @@ export function DashboardPage({
       setProbeError("请先启动网关。");
       return;
     }
-    const key = probeKey.trim();
-    if (!key) {
-      setProbeError("请粘贴网关 API Key（sk-modelhub-...），不要使用管理 JWT。");
-      return;
-    }
     setProbeBusy(true);
     try {
-      const steps: SelfCheckStep[] = [];
-      const models = await clientProbe("GET", "/v1/models", { bearer: key });
-      steps.push({
+      const stepsOut: SelfCheckStep[] = [];
+      const models = await clientProbe("/v1/models");
+      stepsOut.push({
         name: "GET /v1/models",
         result: models,
         verdict:
-          models.status === 401
-            ? "鉴权失败：Key 无效或误用了管理 JWT"
-            : models.status === 0
-              ? "无法连接网关"
-              : models.status >= 200 && models.status < 300
-                ? "鉴权通过（列表可能为空）"
-                : `非鉴权类响应（HTTP ${models.status}）`,
+          models.status === 0
+            ? "无法连接网关"
+            : models.status >= 200 && models.status < 300
+              ? "成功（列表可能为空）"
+              : `HTTP ${models.status}：${models.message}`,
       });
 
       const model = probeModel.trim();
       if (model) {
-        const chat = await clientProbe("POST", "/v1/chat/completions", {
-          bearer: key,
+        const chat = await clientProbe("/v1/chat/completions", undefined, {
+          method: "POST",
           body: {
             model,
             messages: [{ role: "user", content: "ping" }],
           },
         });
-        steps.push({
+        stepsOut.push({
           name: "POST /v1/chat/completions",
           result: chat,
           verdict:
-            chat.status === 401
-              ? "鉴权失败"
-              : chat.status === 0
-                ? "无法连接网关"
-                : chat.status >= 200 && chat.status < 300
-                  ? "Chat 成功（真上游可用）"
-                  : `鉴权已通过，业务层错误 HTTP ${chat.status}（上游 Key/分组/model 等）`,
+            chat.status === 0
+              ? "无法连接网关"
+              : chat.status >= 200 && chat.status < 300
+                ? "Chat 成功（真上游可用）"
+                : `业务层错误 HTTP ${chat.status}（上游 Key/分组/model 等）`,
         });
       }
-      setProbeSteps(steps);
+      setProbeSteps(stepsOut);
     } finally {
       setProbeBusy(false);
     }
@@ -300,9 +232,8 @@ export function DashboardPage({
         <div>
           <h2 className="text-2xl font-bold">仪表盘</h2>
           <p className="mt-1 text-sm text-slate-600">
-            按顺序完成配置闭环。管理 JWT 与客户端{" "}
-            <code className="rounded bg-slate-100 px-1">sk-modelhub-</code> Key
-            不是同一套凭证。
+            本地开放模式：网关运行后即可配置渠道/分组；客户端调用{" "}
+            <code className="rounded bg-slate-100 px-1">/v1</code> 无需 API Key。
           </p>
         </div>
         <button
@@ -324,7 +255,7 @@ export function DashboardPage({
           <p className="mt-1">
             可用下方 curl 模板调用{" "}
             <code className="rounded bg-white/80 px-1">/v1</code>
-            。请将 Key 占位符换成 API 密钥页复制的完整明文；
+            。
             <code className="rounded bg-white/80 px-1">model</code> 填分组名。
           </p>
         </div>
@@ -369,17 +300,8 @@ export function DashboardPage({
           <div>
             <h3 className="text-lg font-semibold">客户端快速对接</h3>
             <p className="mt-1 text-sm text-slate-600">
-              模板中的{" "}
-              <code className="rounded bg-slate-100 px-1">sk-modelhub-YOUR_KEY</code>{" "}
-              仅为占位；请到{" "}
-              <button
-                type="button"
-                className="font-medium text-cyan-700 underline"
-                onClick={() => onNavigate("API 密钥")}
-              >
-                API 密钥
-              </button>{" "}
-              页复制完整 Key。
+              本地默认无鉴权；请保持网关绑定{" "}
+              <code className="rounded bg-slate-100 px-1">127.0.0.1</code>。
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -456,24 +378,10 @@ export function DashboardPage({
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h3 className="text-lg font-semibold">客户端路径自检</h3>
         <p className="mt-1 text-sm text-slate-600">
-          使用你复制的网关 API Key（
-          <code className="rounded bg-slate-100 px-1">sk-modelhub-...</code>
-          ）探测 <code className="rounded bg-slate-100 px-1">/v1</code>
-          ，不会使用管理 JWT。Key 仅保存在内存，不写本地存储。
+          无需 API Key。可选填写分组名以探测 Chat。
         </p>
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <label className="block text-sm md:col-span-2">
-            <span className="font-medium text-slate-700">网关 API Key</span>
-            <input
-              type="password"
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
-              value={probeKey}
-              onChange={(e) => setProbeKey(e.target.value)}
-              placeholder="sk-modelhub-..."
-              autoComplete="off"
-            />
-          </label>
-          <label className="block text-sm md:col-span-2">
+        <div className="mt-4 grid gap-3">
+          <label className="block text-sm">
             <span className="font-medium text-slate-700">
               分组名（可选，填了才测 Chat）
             </span>
@@ -497,32 +405,21 @@ export function DashboardPage({
           <p className="mt-2 text-sm text-amber-700">网关未运行，无法自检。</p>
         ) : null}
         {probeError ? (
-          <p role="alert" className="mt-3 text-sm text-red-600">
+          <p role="alert" className="mt-3 text-sm text-red-700">
             {probeError}
           </p>
         ) : null}
         {probeSteps ? (
-          <ul className="mt-4 space-y-2">
+          <ul className="mt-4 space-y-3">
             {probeSteps.map((step) => (
               <li
                 key={step.name}
-                className={`rounded-xl border px-4 py-3 text-sm ${
-                  step.result.status === 401 || step.result.status === 0
-                    ? "border-red-200 bg-red-50 text-red-900"
-                    : step.result.ok
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-                      : "border-amber-200 bg-amber-50 text-amber-950"
-                }`}
+                className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm"
               >
-                <p className="font-semibold">
-                  {step.name} · HTTP {step.result.status || "—"}
+                <p className="font-medium text-slate-900">{step.name}</p>
+                <p className="mt-1 text-slate-700">
+                  HTTP {step.result.status || "—"} · {step.verdict}
                 </p>
-                <p className="mt-1">{step.verdict}</p>
-                {step.result.message && step.result.message !== "成功" ? (
-                  <p className="mt-1 break-all font-mono text-xs opacity-90">
-                    {step.result.message}
-                  </p>
-                ) : null}
               </li>
             ))}
           </ul>

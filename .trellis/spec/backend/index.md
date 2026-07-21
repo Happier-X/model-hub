@@ -15,7 +15,7 @@
 | 网关侧车 | HTTP 管理 API + OpenAI 兼容转发 + SQLite | gateway-rust；接口以 HTTP 契约为准 |
 | 持久化（MVP） | 渠道/分组/日志等 | **仅 SQLite** |
 
-管理 UI **无登录**；默认监听 **`127.0.0.1`**；管理 API 用 JWT，客户端 `/v1/*` 须使用网关签发的 API Key（`sk-modelhub-...`）。默认网关实现为 `gateway-rust`。
+管理 UI **无登录**；默认监听 **`127.0.0.1`**；本地开放模式：管理 API 与客户端 `/v1/*` **均无需** Token。默认网关实现为 `gateway-rust`。
 
 ---
 

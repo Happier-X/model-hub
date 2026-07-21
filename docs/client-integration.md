@@ -14,10 +14,10 @@
 
 | 用途 | 凭证 | 获取方式 |
 |------|------|----------|
-| 管理 API（`/api/v1/*`） | 管理 JWT | 应用静默 `admin` 登录；设置页可粘贴 Token 兜底 |
-| 客户端 OpenAI 兼容（`/v1/*`） | 网关 API Key（`sk-modelhub-...`） | 应用 **API 密钥** 页创建；Header `Authorization: Bearer ...` 或 `x-api-key` |
+| 管理 API（`/api/v1/*`） | （已移除） | 应用静默 `admin` 登录；设置页可粘贴 Token 兜底 |
+| 客户端 OpenAI 兼容（`/v1/*`） | （本地开放无需 Key）（`（本地开放，无需 Key）`） | 应用 **API 密钥** 页创建；Header `Authorization: Bearer ...` 或 `x-api-key` |
 
-**不要**把管理 JWT 当作客户端 `api_key`；**不要**使用任意占位字符串——错误 Key 会返回 **401**。
+**不要**把（已移除） 当作客户端 `api_key`；**不要**使用任意占位字符串——错误 Key 会返回 **401**。
 
 ## 默认地址
 
@@ -38,17 +38,17 @@
 
 ## curl 示例
 
-将 `sk-modelhub-YOUR_KEY` 换成你在 **API 密钥** 页复制的完整 Key；将 `your-group-name` 换成分组名。
+将 `` 换成你在 **API 密钥** 页复制的完整 Key；将 `your-group-name` 换成分组名。
 
 ```bash
 # 探测鉴权（期望非 401；空模型列表可接受）
 curl http://127.0.0.1:8080/v1/models \
- -H "Authorization: Bearer sk-modelhub-YOUR_KEY"
+ -H "Authorization: Bearer "
 
 # Chat 转发（需已配置渠道 + 分组 + 真实上游 Key）
 curl http://127.0.0.1:8080/v1/chat/completions \
  -H "Content-Type: application/json" \
- -H "Authorization: Bearer sk-modelhub-YOUR_KEY" \
+ -H "Authorization: Bearer " \
  -d "{
   \"model\": \"your-group-name\",
   \"messages\": [{\"role\": \"user\", \"content\": \"你好\"}]
@@ -62,7 +62,7 @@ from openai import OpenAI
 
 client = OpenAI(
   base_url="http://127.0.0.1:8080/v1",
-  api_key="sk-modelhub-YOUR_KEY", # 网关 API Key，非管理 JWT
+  api_key="", # （本地开放无需 Key），非（已移除）
 )
 
 completion = client.chat.completions.create(
@@ -82,7 +82,7 @@ print(completion.choices[0].message.content)
 
 创建网关客户端 Key：
 
-`POST /api/v1/apikey/create`，body 最小示例：`{"name":"local-client","enabled":true}`（需管理 JWT）。响应中的 `api_key` 仅完整展示一次。
+`POST /api/v1/apikey/create`，body 最小示例：`{"name":"local-client","enabled":true}`（需（已移除））。响应中的 `api_key` 仅完整展示一次。
 
 ## 说明
 

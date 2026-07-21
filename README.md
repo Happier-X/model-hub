@@ -1,8 +1,8 @@
 # Model Hub
 
-Model Hub 是一个 Windows 优先的 Tauri 2 桌面应用，用于承载本地网关（**gateway-rust / model-hub-gateway**）与管理 UI：渠道、分组、**API 密钥**、日志与设置。
+Model Hub 是一个 Windows 优先的 Tauri 2 桌面应用，用于承载本地网关（**gateway-rust / model-hub-gateway**）与管理 UI：渠道、分组、日志与设置。
 
-**当前版本：0.0.6** — Windows 安装包内嵌 `model-hub-gateway`。客户端 Key 前缀为 `sk-modelhub-...`。详见 [v0.0.6 发布说明](./docs/release-notes-v0.0.6.md)。
+**当前版本：0.0.6** — Windows 安装包内嵌 `model-hub-gateway`。本地默认无鉴权。详见 [v0.0.6 发布说明](./docs/release-notes-v0.0.6.md)。
 
 ## Windows 开发前置
 
@@ -103,8 +103,8 @@ Rust 侧提供 `get_paths` 命令，首次调用会确保以下目录存在：
 2. **开发版**：运行 `pnpm prepare:gateway-rust`，或设置 `MODEL_HUB_GATEWAY_BIN` / `MODEL_HUB_GATEWAY_RUST_BIN`。
 3. 运行 `pnpm tauri dev`，在应用内查看状态条或设置页启动/停止。
 4. 默认监听 `http://127.0.0.1:8080`（本机绑定）；**打开应用默认启动网关**。可在设置页修改监听端口，保存后写入 `shell.json` 并**自动重启**网关。
-5. 在 **渠道 / 分组 / API 密钥 / 日志** 完成配置（无登录页；静默管理鉴权）。
-6. 客户端调用 `/v1/*` 时须使用 **网关 API Key**（`sk-modelhub-...`），与管理 JWT 不同。详见 [客户端对接](./docs/client-integration.md)。
+5. 在 **渠道 / 分组 / 日志** 完成配置（本地开放，无需管理登录或 API Key）。
+6. 客户端调用 `/v1/*` **无需** Token（默认仅 `127.0.0.1`）。详见 [客户端对接](./docs/client-integration.md)。
 
 解析优先级：`MODEL_HUB_GATEWAY_BIN` → `MODEL_HUB_GATEWAY_RUST_BIN` → 安装资源内嵌按哈希部署到 `bin_dir` → 已有 `bin_dir` 副本。
 
