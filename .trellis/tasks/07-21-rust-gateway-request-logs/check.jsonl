@@ -1,0 +1,4 @@
+{"path":"src/api/log.ts","reason":"字段与分页契约"}
+{"path":"gateway-rust/src/db/migrate.rs","reason":"v2 schema"}
+{"path":"gateway-rust/src/routes/v1_chat.rs","reason":"写日志时机"}
+{"path":".trellis/spec/backend/quality-guidelines.md","reason":"敏感信息"}

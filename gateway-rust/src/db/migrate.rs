@@ -67,15 +67,27 @@ CREATE TABLE IF NOT EXISTS group_items (
 );
 "#;
 
-/// 执行到最新 schema；幂等。
-pub fn migrate(conn: &Connection) -> Result<(), GatewayError> {
-    conn.execute_batch(MIGRATION_V1)
-        .map_err(|e| GatewayError::database(format!("执行 schema 失败: {e}")))?;
+const MIGRATION_V2: &str = r#"
+CREATE TABLE IF NOT EXISTS request_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  time INTEGER NOT NULL,
+  request_model_name TEXT NOT NULL,
+  channel_name TEXT NOT NULL DEFAULT '',
+  actual_model_name TEXT NOT NULL DEFAULT '',
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  use_time INTEGER NOT NULL DEFAULT 0,
+  cost REAL NOT NULL DEFAULT 0,
+  error TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_request_logs_time ON request_logs(time DESC);
+"#;
 
+fn apply_version(conn: &Connection, version: i64) -> Result<(), GatewayError> {
     let applied: bool = conn
         .query_row(
-            "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = 1)",
-            [],
+            "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = ?1)",
+            [version],
             |row| row.get(0),
         )
         .map_err(|e| GatewayError::database(format!("查询迁移版本失败: {e}")))?;
@@ -83,12 +95,24 @@ pub fn migrate(conn: &Connection) -> Result<(), GatewayError> {
     if !applied {
         let now = chrono::Utc::now().to_rfc3339();
         conn.execute(
-            "INSERT INTO schema_migrations (version, applied_at) VALUES (1, ?1)",
-            [&now],
+            "INSERT INTO schema_migrations (version, applied_at) VALUES (?1, ?2)",
+            rusqlite::params![version, now],
         )
         .map_err(|e| GatewayError::database(format!("记录迁移版本失败: {e}")))?;
-        tracing::info!(version = 1, "已应用数据库迁移");
+        tracing::info!(version, "已应用数据库迁移");
     }
+    Ok(())
+}
+
+/// 执行到最新 schema；幂等。
+pub fn migrate(conn: &Connection) -> Result<(), GatewayError> {
+    conn.execute_batch(MIGRATION_V1)
+        .map_err(|e| GatewayError::database(format!("执行 schema v1 失败: {e}")))?;
+    apply_version(conn, 1)?;
+
+    conn.execute_batch(MIGRATION_V2)
+        .map_err(|e| GatewayError::database(format!("执行 schema v2 失败: {e}")))?;
+    apply_version(conn, 2)?;
 
     Ok(())
 }
@@ -105,14 +129,16 @@ mod tests {
         migrate(&conn).unwrap();
         migrate(&conn).unwrap();
 
-        let version: i64 = conn
-            .query_row(
-                "SELECT version FROM schema_migrations WHERE version = 1",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(version, 1);
+        for version in [1i64, 2] {
+            let found: i64 = conn
+                .query_row(
+                    "SELECT version FROM schema_migrations WHERE version = ?1",
+                    [version],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(found, version);
+        }
 
         // 表存在
         for table in [
@@ -122,6 +148,7 @@ mod tests {
             "channel_base_urls",
             "groups",
             "group_items",
+            "request_logs",
         ] {
             let n: i64 = conn
                 .query_row(

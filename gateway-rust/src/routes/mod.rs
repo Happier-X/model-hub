@@ -4,6 +4,7 @@ mod admin_user;
 mod apikey;
 mod channel;
 mod group;
+mod log;
 mod v1_chat;
 mod v1_models;
 
@@ -18,5 +19,6 @@ pub use channel::{
 pub use group::{
     create_group_handler, delete_group_handler, list_group_handler, update_group_handler,
 };
+pub use log::{clear_log_handler, list_log_handler};
 pub use v1_chat::chat_completions_handler;
 pub use v1_models::models_handler;

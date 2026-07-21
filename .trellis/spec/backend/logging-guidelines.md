@@ -36,6 +36,18 @@
 - 完整聊天内容（除非用户显式开启 debug 且文档说明）
 - 上游响应体全文（默认）
 
+## gateway-rust 请求日志（业务表 `request_logs`）
+
+与 tracing 诊断日志分离：管理 UI 的「日志」页读的是 SQLite `request_logs`（migrate v2）。
+
+| 项 | 约定 |
+|----|------|
+| 字段 | 对齐 UI `RelayLog`：`id, time(Unix 秒), request_model_name, channel_name, actual_model_name, input_tokens, output_tokens, use_time, cost, error` |
+| 写入 | 非流式 chat 结束后；流式尽力（tokens 可 0）；路由失败 error 非空；**401 不写** |
+| 禁止 | 完整 messages、客户端 Key、上游 channel_key |
+| API | `GET /api/v1/log/list`（page_size≤100）、`DELETE /api/v1/log/clear`；管理 JWT；`{ data }` |
+| cost | MVP 可固定 0；tokens 从非流式 JSON `usage` 尽力解析 |
+
 ---
 
 ## Anti-Patterns

@@ -13,6 +13,7 @@ use crate::config::GatewayConfig;
 use crate::db::{open_from_config, open_path, DbConn};
 use crate::error::GatewayError;
 use crate::group::{GroupService, GroupStore};
+use crate::log::{LogService, LogStore};
 use crate::router::RouterService;
 use crate::routes;
 use crate::upstream::UpstreamClient;
@@ -25,6 +26,7 @@ pub struct AppState {
     pub api_keys: Arc<dyn ApiKeyStore>,
     pub channels: Arc<ChannelService>,
     pub groups: Arc<GroupService>,
+    pub logs: Arc<LogService>,
     pub router: Arc<RouterService>,
     pub upstream: Arc<UpstreamClient>,
 }
@@ -40,7 +42,8 @@ impl AppState {
         let auth = AuthService::from_config(&config.auth);
         let api_keys: Arc<dyn ApiKeyStore> = Arc::new(SqliteApiKeyStore::new(db.clone()));
         let channels = Arc::new(ChannelService::new(ChannelStore::new(db.clone())));
-        let groups = Arc::new(GroupService::new(GroupStore::new(db)));
+        let groups = Arc::new(GroupService::new(GroupStore::new(db.clone())));
+        let logs = Arc::new(LogService::new(LogStore::new(db)));
         let router = Arc::new(RouterService::new(groups.clone(), channels.clone()));
         let upstream = Arc::new(UpstreamClient::with_default_timeout());
         Self {
@@ -49,6 +52,7 @@ impl AppState {
             api_keys,
             channels,
             groups,
+            logs,
             router,
             upstream,
         }
@@ -79,7 +83,8 @@ impl AppState {
         let db = open_path(":memory:").expect("open memory db");
         let auth = AuthService::from_config(&config.auth);
         let channels = Arc::new(ChannelService::new(ChannelStore::new(db.clone())));
-        let groups = Arc::new(GroupService::new(GroupStore::new(db)));
+        let groups = Arc::new(GroupService::new(GroupStore::new(db.clone())));
+        let logs = Arc::new(LogService::new(LogStore::new(db)));
         let router = Arc::new(RouterService::new(groups.clone(), channels.clone()));
         let upstream = Arc::new(UpstreamClient::with_default_timeout());
         Self {
@@ -88,6 +93,7 @@ impl AppState {
             api_keys: Arc::new(MemoryApiKeyStore::new()),
             channels,
             groups,
+            logs,
             router,
             upstream,
         }
@@ -108,6 +114,7 @@ impl std::fmt::Debug for AppState {
             .field("api_keys", &"<store>")
             .field("channels", &"<service>")
             .field("groups", &"<service>")
+            .field("logs", &"<service>")
             .field("router", &"<service>")
             .field("upstream", &"<client>")
             .finish()
@@ -169,7 +176,9 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/v1/group/delete/{id}",
             delete(routes::delete_group_handler),
-        );
+        )
+        .route("/api/v1/log/list", get(routes::list_log_handler))
+        .route("/api/v1/log/clear", delete(routes::clear_log_handler));
 
     let client = Router::new()
         .route("/v1/models", get(routes::models_handler))
@@ -333,6 +342,21 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/api/v1/channel/list")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn log_list_requires_jwt() {
+        let app = build_router(AppState::default());
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/log/list?page=1&page_size=20")
                     .body(Body::empty())
                     .unwrap(),
             )

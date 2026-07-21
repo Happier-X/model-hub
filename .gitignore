@@ -49,3 +49,6 @@ temp/
 tools/octopus/
 *.exe
 !src-tauri/icons/**
+
+# Windows reserved name artifact (do not commit)
+nul

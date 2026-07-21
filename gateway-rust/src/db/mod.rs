@@ -99,14 +99,24 @@ mod tests {
         let conn = open_path(path.to_str().unwrap()).unwrap();
         {
             let guard = conn.lock().unwrap();
-            let n: i64 = guard
+            for version in [1i64, 2] {
+                let n: i64 = guard
+                    .query_row(
+                        "SELECT COUNT(*) FROM schema_migrations WHERE version = ?1",
+                        [version],
+                        |row| row.get(0),
+                    )
+                    .unwrap();
+                assert_eq!(n, 1, "missing migration version {version}");
+            }
+            let tables: i64 = guard
                 .query_row(
-                    "SELECT COUNT(*) FROM schema_migrations WHERE version = 1",
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='request_logs'",
                     [],
                     |row| row.get(0),
                 )
                 .unwrap();
-            assert_eq!(n, 1);
+            assert_eq!(tables, 1);
         }
         // 再次打开幂等
         let _conn2 = open_path(path.to_str().unwrap()).unwrap();

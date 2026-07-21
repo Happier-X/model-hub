@@ -1,6 +1,6 @@
 # model-hub-gateway（实验）
 
-> **状态：实验性。** 本 crate 是 Rust 原生网关，当前实现 **HTTP 骨架 + SQLite 持久化 + 渠道/分组 CRUD + 管理 JWT / 客户端 API Key 鉴权 + 非流式/SSE 流式 Chat 转发**，供后续发布接入切片开发。  
+> **状态：实验性。** 本 crate 是 Rust 原生网关，当前实现 **HTTP 骨架 + SQLite 持久化 + 渠道/分组 CRUD + 请求日志 list/clear + 管理 JWT / 客户端 API Key 鉴权 + 非流式/SSE 流式 Chat 转发**，供后续发布接入切片开发。  
 > **不能**替代当前 Model Hub 发布版内嵌的 **octopus v0.9.28** 侧车，也 **不会** 被 Tauri 壳默认拉起。
 
 ## 目标
@@ -16,6 +16,7 @@
 - 渠道上游 Key 可明文存于本机 SQLite；日志禁止打印完整 Key
 - **客户端 `model` = 分组名**；上游 `model` = group item 的 `model_name`
 - `POST /v1/chat/completions`：非流式整包 JSON；`stream=true` 透明代理上游 `text/event-stream`
+- 请求日志：chat 转发后写入 `request_logs`；管理端 list/clear；不落盘完整 messages / 密钥
 - Ctrl-C 优雅退出；测试使用随机端口 + 临时库，不按进程名清理 octopus
 
 ## 运行
@@ -53,7 +54,7 @@ cargo run --manifest-path gateway-rust/Cargo.toml -- --config gateway-rust/testd
 ```
 
 - `database.type` **必须**为 `sqlite`；其它类型启动失败。
-- `database.path` 相对路径相对进程 cwd；启动时创建父目录并 migrate v1。
+- `database.path` 相对路径相对进程 cwd；启动时创建父目录并 migrate v1+v2。
 - `auth` 缺省：用户名/密码 `admin`/`admin`；`jwt_secret` 未配置时进程启动生成随机密钥并 warning（重启后 Token 失效）。
 - 校验：`host` 合法 IP、`port != 0`；默认绑定 `127.0.0.1:8080`。
 - 上游 HTTP：非流式整包超时默认 **60s**；流式连接超时 **10s**、整响应兜底 **300s**（`reqwest` + rustls + stream）。
@@ -122,6 +123,23 @@ Key 前缀固定 **`sk-octopus-`**。SQLite 只存 SHA-256 哈希，不落明文
 | POST | `/api/v1/group/create` | name, mode, match_regex, items[] |
 | POST | `/api/v1/group/update` | 支持 `items_to_delete` / `items_to_add` |
 | DELETE | `/api/v1/group/delete/:id` | 删除（级联 items） |
+
+### 请求日志（均需管理 JWT）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/log/list?page=&page_size=` | 返回 `RelayLog[]`；`page` 从 1；`page_size` clamp 1..=100；按 id 倒序 |
+| DELETE | `/api/v1/log/clear` | 清空全部；`{ "data": null }` |
+
+字段对齐 UI：`id, time`（Unix 秒）, `request_model_name, channel_name, actual_model_name, input_tokens, output_tokens, use_time, cost, error`。
+
+写入时机：
+
+- 非流式 chat 结束后写一条（解析 `usage.prompt_tokens` / `completion_tokens`；`cost` 固定 0）
+- 流式 chat 尽力记路由结果 + `use_time`（tokens 可为 0）
+- 路由失败（未知分组等）`error` 非空
+- 鉴权失败 401 **不**记业务日志
+- **不**落盘完整 messages / 客户端 Key / 上游 Key
 
 成功响应一律 `{ "data": ... }`。
 
@@ -216,6 +234,7 @@ curl.exe -s -N -X POST http://127.0.0.1:18081/v1/chat/completions `
 | `/api/v1/apikey/*` | 401 | 按业务 | 401 | 401 |
 | `/api/v1/channel/*` | 401 | 按业务 | 401 | 401 |
 | `/api/v1/group/*` | 401 | 按业务 | 401 | 401 |
+| `/api/v1/log/*` | 401 | 按业务 | 401 | 401 |
 | `/v1/models` | 401 | 401 | 200 | 401 |
 | `/v1/chat/completions` | 401 | 401 | 按业务 | 401 |
 
@@ -243,6 +262,7 @@ cargo clippy --manifest-path gateway-rust/Cargo.toml --all-targets -- -D warning
 - 登录 → 渠道 CRUD（keys_to_*）→ 分组 CRUD（items_to_*）→ apikey → models（分组名列表）
 - API Key 跨进程实例持久化
 - wiremock 上游 200 转发、SSE 多帧 + `[DONE]`、未知分组、轮询切换 model_name
+- mock chat 后 log list 字段 / clear / page_size 上限 100 / 无 JWT 401
 
 ## 目录
 
@@ -259,17 +279,19 @@ gateway-rust/
 │   ├── http.rs
 │   ├── response.rs
 │   ├── server.rs
-│   ├── db/            # open / migrate v1
+│   ├── db/            # open / migrate v1+v2
 │   ├── auth/          # JWT / admin / middleware
 │   ├── apikey/        # model / memory + sqlite store / hash
 │   ├── channel/       # model / store / service
 │   ├── group/         # model / store / service
+│   ├── log/           # request_logs store / service
 │   ├── router/        # 分组 → 渠道 + model_name；轮询
 │   ├── upstream/      # reqwest 非流式 + SSE 流式转发
-│   └── routes/        # login / apikey / channel / group / v1 models / chat
+│   └── routes/        # login / apikey / channel / group / log / v1 models / chat
 └── tests/
     ├── http_server.rs
     ├── auth_matrix.rs
     ├── channel_group_matrix.rs
-    └── chat_forward.rs
+    ├── chat_forward.rs
+    └── log_matrix.rs
 ```

@@ -1,0 +1,7 @@
+{"path":"src/api/log.ts","reason":"RelayLog 与 list/clear 契约"}
+{"path":"src/pages/LogsPage.tsx","reason":"分页与字段展示"}
+{"path":"gateway-rust/src/db/migrate.rs","reason":"迁移扩展"}
+{"path":"gateway-rust/src/routes/v1_chat.rs","reason":"写入点"}
+{"path":"gateway-rust/src/router/mod.rs","reason":"channel 元数据"}
+{"path":"gateway-rust/src/http.rs","reason":"AppState 与路由"}
+{"path":"scripts/e2e-octopus-smoke.py","reason":"log/list 对照"}
