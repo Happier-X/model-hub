@@ -81,7 +81,7 @@ impl ApiKeyStore for MemoryApiKeyStore {
             supported_models: req.supported_models.clone(),
         };
         // 断言：存储字段不含完整 raw
-        debug_assert!(!record.key_hash.starts_with("sk-octopus-"));
+        debug_assert!(!record.key_hash.starts_with("sk-modelhub-"));
         debug_assert_ne!(record.api_key_masked, raw);
 
         guard.records.push(record);
@@ -165,7 +165,7 @@ mod tests {
                 supported_models: None,
             })
             .unwrap();
-        assert!(created.api_key.starts_with("sk-octopus-"));
+        assert!(created.api_key.starts_with("sk-modelhub-"));
 
         let list = store.list();
         assert_eq!(list.len(), 1);
@@ -177,13 +177,13 @@ mod tests {
             let guard = store.inner.lock().unwrap();
             let rec = &guard.records[0];
             assert_ne!(rec.api_key_masked, created.api_key);
-            assert!(!rec.key_hash.contains("sk-octopus-"));
+            assert!(!rec.key_hash.contains("sk-modelhub-"));
             assert!(!format!("{rec:?}").contains(&created.api_key));
         }
 
         let found = store.find_by_raw_key(&created.api_key).unwrap();
         assert_eq!(found.id, created.id);
-        assert!(store.find_by_raw_key("sk-octopus-nope").is_none());
+        assert!(store.find_by_raw_key("sk-modelhub-nope").is_none());
     }
 
     #[test]

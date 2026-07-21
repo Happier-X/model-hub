@@ -1,8 +1,8 @@
 import { gatewayHttp } from "./gatewayHttp";
 
 /**
- * octopus v0.9.28 Windows 二进制的 channel.type 为数字枚举（非当前 dev 源码的字符串）。
- * 实测：`type: 0` 可创建成功；字符串（如 openai/chat_completions）会返回 Invalid JSON format。
+ * channel.type 为数字枚举（非字符串）。
+ * 约定：`type: 0` = OpenAI Chat；字符串类型会返回校验错误。
  */
 export const CHANNEL_TYPE_OPENAI_CHAT = 0;
 

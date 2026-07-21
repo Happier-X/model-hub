@@ -177,7 +177,7 @@ async fn full_auth_matrix() {
     assert_eq!(create.status, 200);
     let raw_key = create.body["data"]["api_key"].as_str().unwrap().to_string();
     let key_id = create.body["data"]["id"].as_i64().unwrap();
-    assert!(raw_key.starts_with("sk-octopus-"));
+    assert!(raw_key.starts_with("sk-modelhub-"));
     assert_eq!(create.body["data"]["name"], "local-client");
 
     // list 脱敏

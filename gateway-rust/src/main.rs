@@ -2,11 +2,10 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use model_hub_gateway::migrate_octopus::{migrate_octopus, MigrateOptions};
 use model_hub_gateway::{run, GatewayConfig, DEFAULT_CONFIG_PATH};
 use tracing_subscriber::EnvFilter;
 
-/// Model Hub Rust 原生网关实验骨架（不可替代当前发布版 octopus）。
+/// Model Hub Rust 原生网关（model-hub-gateway）。
 #[derive(Debug, Parser)]
 #[command(name = "model-hub-gateway", version, about)]
 struct Cli {
@@ -26,21 +25,6 @@ enum Commands {
         #[arg(long, default_value = DEFAULT_CONFIG_PATH)]
         config: PathBuf,
     },
-    /// 将 octopus v0.9.28 SQLite 尽力导入 gateway-rust schema
-    MigrateOctopus {
-        /// octopus 源库路径（只读打开）
-        #[arg(long)]
-        source: PathBuf,
-        /// 目标 gateway-rust 库路径（不存在则创建）
-        #[arg(long)]
-        dest: PathBuf,
-        /// 目标业务表非空时清空后覆盖
-        #[arg(long, default_value_t = false)]
-        force: bool,
-        /// 迁移 relay_logs → request_logs
-        #[arg(long, default_value_t = false)]
-        with_logs: bool,
-    },
 }
 
 #[tokio::main]
@@ -52,12 +36,6 @@ async fn main() -> ExitCode {
     match cli.command {
         None => run_serve(cli.config).await,
         Some(Commands::Serve { config }) => run_serve(config).await,
-        Some(Commands::MigrateOctopus {
-            source,
-            dest,
-            force,
-            with_logs,
-        }) => run_migrate(source, dest, force, with_logs),
     }
 }
 
@@ -83,29 +61,6 @@ async fn run_serve(config_path: PathBuf) -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             tracing::error!(error = %err, "网关运行失败");
-            eprintln!("错误: {err}");
-            ExitCode::from(1)
-        }
-    }
-}
-
-fn run_migrate(source: PathBuf, dest: PathBuf, force: bool, with_logs: bool) -> ExitCode {
-    tracing::info!(
-        source = %source.display(),
-        dest = %dest.display(),
-        force,
-        with_logs,
-        "开始 octopus → gateway-rust 迁移"
-    );
-
-    match migrate_octopus(&source, &dest, &MigrateOptions { force, with_logs }) {
-        Ok(summary) => {
-            println!("迁移成功: {summary}");
-            tracing::info!(%summary, "迁移完成");
-            ExitCode::SUCCESS
-        }
-        Err(err) => {
-            tracing::error!(error = %err, "迁移失败");
             eprintln!("错误: {err}");
             ExitCode::from(1)
         }

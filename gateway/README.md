@@ -55,24 +55,14 @@ model-hub-gateway --config data/config.json
 | 监听地址 | 默认 **`127.0.0.1`** |
 | 端口 | 默认 **8080**（可在设置页停止网关后修改） |
 | 管理 UI | **无登录页**；静默 `POST /api/v1/user/login`（默认 admin/admin） |
-| 客户端网关 Key | 前缀 **`sk-octopus-...`**（历史命名兼容）；与管理 JWT 分离 |
+| 客户端网关 Key | 前缀 **`sk-modelhub-...`**；与管理 JWT 分离 |
 
 ## 两套凭证
 
 | 路径 | 鉴权 |
 |------|------|
 | `/api/v1/*` | Bearer **管理 JWT** |
-| `/v1/*` | Bearer **`sk-octopus-...`** 或 `x-api-key` |
-
-## 从旧版 octopus 数据导入
-
-若你仍持有历史 octopus SQLite，可使用一次性工具（**不**在 serve 路径自动执行）：
-
-```powershell
-model-hub-gateway migrate-octopus --source path\to\old.db --dest path\to\rust.db --force
-```
-
-详见 [gateway-rust/README.md](../gateway-rust/README.md)。**勿**把未迁移的旧库直接当默认 `data/data.db` 使用。
+| `/v1/*` | Bearer **`sk-modelhub-...`** 或 `x-api-key` |
 
 ## 启停
 
@@ -86,4 +76,4 @@ model-hub-gateway migrate-octopus --source path\to\old.db --dest path\to\rust.db
 1. 未找到 exe → 安装版应自带；开发跑 `pnpm prepare:gateway-rust` 或设置 env
 2. 端口占用 → 设置页换端口或结束占用进程
 3. 管理 API 401 → 设置页粘贴 Token，或确认默认 admin 未改密
-4. 客户端 `/v1/*` 401 → **API 密钥** 页创建完整 `sk-octopus-...`
+4. 客户端 `/v1/*` 401 → **API 密钥** 页创建完整 `sk-modelhub-...`

@@ -1,0 +1,5 @@
+{
+  "server": { "host": "127.0.0.1", "port": 18081 },
+  "database": { "type": "sqlite", "path": "data/data.db" },
+  "log": { "level": "info" }
+}

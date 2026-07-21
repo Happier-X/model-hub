@@ -1,24 +1,23 @@
 # model-hub-gateway（默认网关）
 
 > **状态：默认网关实现。** 本 crate 是 Rust 原生网关，当前实现 **HTTP 骨架 + SQLite 持久化 + 渠道/分组 CRUD + 请求日志 list/clear + 管理 JWT / 客户端 API Key 鉴权 + 非流式/SSE 流式 Chat 转发**。  
-> Windows 安装包**默认启动**本二进制（`sidecar/model-hub-gateway.exe`），**不再内嵌** octopus 与 AGPL 侧车材料。  
-> 客户端 API Key 前缀仍为 `sk-octopus-...`（历史命名兼容）。从 octopus 升级请使用 `migrate-octopus` 或新建库，**勿混用**同一 `data/data.db`。
+> Windows 安装包**默认启动**本二进制（`sidecar/model-hub-gateway.exe`）。
 
 ## 目标
 
 - 独立进程，默认只绑定本机 `127.0.0.1`
-- 配置文件契约对齐 octopus：`data/config.json` 的 `server` / `database` / `auth`
+- 配置文件：`data/config.json` 的 `server` / `database` / `auth`
 - `GET /health` 稳定 JSON 200；未知路径 JSON 404
 - **SQLite only**：启动时按 `database.path` 打开/创建库并自动迁移
 - **两套凭证分离**：
   - 管理 API：`Authorization: Bearer <JWT>`
-  - 客户端 `/v1/*`：`Bearer sk-octopus-...` 或 `x-api-key`
+  - 客户端 `/v1/*`：`Bearer sk-modelhub-...` 或 `x-api-key`
 - 客户端 API Key 仅 create 返回完整明文；存储只保留哈希 + 脱敏
 - 渠道上游 Key 可明文存于本机 SQLite；日志禁止打印完整 Key
 - **客户端 `model` = 分组名**；上游 `model` = group item 的 `model_name`
 - `POST /v1/chat/completions`：非流式整包 JSON；`stream=true` 透明代理上游 `text/event-stream`
 - 请求日志：chat 转发后写入 `request_logs`；管理端 list/clear；不落盘完整 messages / 密钥
-- Ctrl-C 优雅退出；测试使用随机端口 + 临时库，不按进程名清理 octopus
+- Ctrl-C 优雅退出；测试使用随机端口 + 临时库，不按进程名清理网关
 
 ## 运行
 
@@ -30,63 +29,25 @@ cargo run --manifest-path gateway-rust/Cargo.toml -- --config gateway-rust/testd
 
 默认配置路径为 `data/config.json`（相对当前工作目录）。**文件不存在会启动失败**，不会静默使用内存默认值。
 
-## 壳接入（默认）
-
+## 壳接入
 
 ```text
 model-hub-gateway.exe --config data/config.json
 ```
 
-（工作目录 = `gateway_dir`，**没有** octopus 的 `start` 子命令。）
+工作目录 = `gateway_dir`。无 subcommand 时即为 serve。
 
 ```powershell
-# 默认即为 rust，一般无需设置 IMPL
 # 安装态：自动从内嵌资源部署（无需手工放置）
 # 开发态：
 cargo build --manifest-path gateway-rust/Cargo.toml --release
 $env:MODEL_HUB_GATEWAY_RUST_BIN = "$PWD\gateway-rust\target\release\model-hub-gateway.exe"
 # 或：pnpm prepare:gateway-rust → tools\gateway-rust\model-hub-gateway.exe
-# 或设置 MODEL_HUB_GATEWAY_BIN 覆盖任意实现
+# 或设置 MODEL_HUB_GATEWAY_BIN
 pnpm tauri dev
 ```
 
-二进制解析（默认 rust）：`MODEL_HUB_GATEWAY_BIN` → `MODEL_HUB_GATEWAY_RUST_BIN` → 安装资源 `sidecar/model-hub-gateway.exe`（按哈希部署到 `bin_dir`）→ `bin_dir/model-hub-gateway.exe`。
-
-
-> **严重警告：勿与 octopus 混用同一 `data/data.db`。** 两套 schema 不兼容；切换实现前请备份/删除库文件，或使用独立 `gateway_dir`。发布包默认已是 rust。
-
-### 从 octopus 迁移数据（尽力而为）
-
-提供 CLI 将 **octopus v0.9.28** SQLite **尽力导入** 到 gateway-rust 自有 schema（生成/写入**目标库**，不在 `serve` 路径自动改写现有 db）：
-
-```powershell
-# 1. 备份源库
-Copy-Item data\data.db data\data.db.octopus.bak
-
-# 2. 导入到新的目标库（推荐独立文件）
-cargo run --manifest-path gateway-rust/Cargo.toml -- migrate-octopus `
-  --source data\data.db `
-  --dest data\data.rust.db `
-  --force `
-  --with-logs
-
-# 3. 将 config.json 的 database.path 指向目标库后，再以 rust 实现启动
-```
-
-| 参数 | 说明 |
-|------|------|
-| `--source` | octopus 源库（只读打开） |
-| `--dest` | 目标 rust 库；不存在则创建并 migrate schema |
-| `--force` | 目标业务表（channels/api_keys/groups/request_logs）非空时清空后覆盖；**无此标志则失败** |
-| `--with-logs` | 可选：`relay_logs` → `request_logs` 字段子集 |
-
-**会迁移**：channels（`base_urls` JSON 拆到 `channel_base_urls`）、channel_keys、groups、group_items、api_keys（明文 → SHA-256 哈希 + 脱敏；**完整客户端 Key 不写目标库**，但原 Key 仍可用 `find_by_raw_key` 校验）。
-
-**不迁移**：`users` / `settings` / 各类 `stats_*`；管理账号仍用 `config.auth`（默认 admin/admin）。统计需在 rust 侧重新积累。
-
-**失败回退**：保留 octopus 源库备份；不要把未迁移完成的目标库当生产。默认路径请用新建库或成功迁移后的目标库。
-
-兼容启动：无 subcommand 时仍为 serve（`model-hub-gateway --config data/config.json`），与壳侧契约一致。
+二进制解析：`MODEL_HUB_GATEWAY_BIN` → `MODEL_HUB_GATEWAY_RUST_BIN` → 安装资源 `sidecar/model-hub-gateway.exe`（按哈希部署到 `bin_dir`）→ `bin_dir/model-hub-gateway.exe`。
 
 ## 配置
 
@@ -112,199 +73,28 @@ cargo run --manifest-path gateway-rust/Cargo.toml -- migrate-octopus `
 }
 ```
 
-- `database.type` **必须**为 `sqlite`；其它类型启动失败。
 - `database.path` 相对路径相对进程 cwd；启动时创建父目录并 migrate v1+v2。
-- `auth` 缺省：用户名/密码 `admin`/`admin`；`jwt_secret` 未配置时进程启动生成随机密钥并 warning（重启后 Token 失效）。
-- 校验：`host` 合法 IP、`port != 0`；默认绑定 `127.0.0.1:8080`。
-- 上游 HTTP：非流式整包超时默认 **60s**；流式连接超时 **10s**、整响应兜底 **300s**（`reqwest` + rustls + stream）。
-- 日志禁止打印完整 JWT / 客户端 Key / 上游 channel_key / 用户 messages 全文。
+- 仅支持 `database.type=sqlite`。
 
-## HTTP 契约
+## 鉴权矩阵（摘要）
 
-### `GET /health`
-
-```json
-{
-  "status": "ok",
-  "service": "model-hub-gateway",
-  "version": "0.1.0"
-}
-```
-
-### 管理登录
-
-`POST /api/v1/user/login`
-
-```json
-// 请求
-{ "username": "admin", "password": "admin", "expire": 86400 }
-
-// 成功 200
-{ "data": { "token": "<jwt>", "expire_at": "<unix 秒字符串>" } }
-
-// 失败 401
-{
-  "message": "用户名或密码错误",
-  "error": { "code": "UNAUTHORIZED", "message": "用户名或密码错误" }
-}
-```
-
-### 管理状态
-
-`GET /api/v1/user/status` + `Authorization: Bearer <jwt>` → `{ "data": "ok" }`
-
-### API Key CRUD（均需管理 JWT）
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/v1/apikey/list` | 列表；`api_key` 为脱敏值 |
-| POST | `/api/v1/apikey/create` | body `{ "name", "enabled?" }`；**完整 Key 仅此返回一次** |
-| POST | `/api/v1/apikey/update` | body `{ "id", "name?", "enabled?", ... }` |
-| DELETE | `/api/v1/apikey/delete/:id` | 删除 |
-
-Key 前缀固定 **`sk-octopus-`**。SQLite 只存 SHA-256 哈希，不落明文；重启后仍可校验。
-
-### 渠道 CRUD（均需管理 JWT）
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/v1/channel/list` | 含 `base_urls` / `keys`；`type` 为数字 |
-| POST | `/api/v1/channel/create` | 对齐 UI：name, type, enabled, base_urls, keys, model, custom_model, proxy, auto_sync, auto_group, custom_header |
-| POST | `/api/v1/channel/update` | 部分更新；支持 `keys_to_update` / `keys_to_add` |
-| POST | `/api/v1/channel/enable` | `{ "id", "enabled" }` |
-| DELETE | `/api/v1/channel/delete/:id` | 删除（级联 base_urls / keys） |
-
-### 分组 CRUD（均需管理 JWT）
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/v1/group/list` | 含 `items`；`mode` 为数字（1=轮询） |
-| POST | `/api/v1/group/create` | name, mode, match_regex, items[] |
-| POST | `/api/v1/group/update` | 支持 `items_to_delete` / `items_to_add` |
-| DELETE | `/api/v1/group/delete/:id` | 删除（级联 items） |
-
-### 请求日志（均需管理 JWT）
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/v1/log/list?page=&page_size=` | 返回 `RelayLog[]`；`page` 从 1；`page_size` clamp 1..=100；按 id 倒序 |
-| DELETE | `/api/v1/log/clear` | 清空全部；`{ "data": null }` |
-
-字段对齐 UI：`id, time`（Unix 秒）, `request_model_name, channel_name, actual_model_name, input_tokens, output_tokens, use_time, cost, error`。
-
-写入时机：
-
-- 非流式 chat 结束后写一条（解析 `usage.prompt_tokens` / `completion_tokens`；`cost` 固定 0）
-- 流式 chat 尽力记路由结果 + `use_time`（tokens 可为 0）
-- 路由失败（未知分组等）`error` 非空
-- 鉴权失败 401 **不**记业务日志
-- **不**落盘完整 messages / 客户端 Key / 上游 Key
-
-成功响应一律 `{ "data": ... }`。
-
-### 客户端 OpenAI 兼容
-
-#### `GET /v1/models`
-
-- 有效 Key → `200` OpenAI list 格式，`data[].id` = **分组名**
-- 无分组时 `data` 可为 `[]`
-- 无凭证 / 坏 Key / 禁用 Key / **管理 JWT** → `401`（含顶层 `message`）
-
-```json
-{
-  "object": "list",
-  "data": [
-    { "id": "my-group", "object": "model", "owned_by": "model-hub" }
-  ]
-}
-```
-
-#### `POST /v1/chat/completions`
-
-- 客户端 Key 鉴权；管理 JWT → 401
-- 请求体至少含 `model`（**分组名**）+ `messages`
-- 路由：`mode=1` 轮询 items；其它 mode 暂取首个可用 item
-- 加载 item 绑定渠道：需 enabled；取首个 base_url + 首个 enabled key
-- 上游 URL：`{base_url 去尾斜杠}/chat/completions`
-- 上游 Header：`Authorization: Bearer {channel_key}`；尽力合并 `custom_header`
-- 改写上游 body：`model` → item.`model_name`
-- **非流式**（`stream` 缺省/`false`）：上游状态码与 JSON body **透传**；网络失败 → 502
-- **流式**（`stream: true`）：保留 `stream: true` 发给上游；成功时透传 `Content-Type: text/event-stream` 与字节流（不整包缓冲完整 SSE）；上游非 2xx 整包透传错误 body；网络失败 → 502
-- 未知分组 → 404；无 items / 无可用渠道 → 400
-
-### 未知路径
-
-```json
-{
-  "error": {
-    "code": "NOT_FOUND",
-    "message": "未找到请求的接口"
-  }
-}
-```
-
-## curl 示例（端口以配置为准，testdata 为 `18081`）
-
-```powershell
-# 登录
-curl.exe -s -X POST http://127.0.0.1:18081/api/v1/user/login `
-  -H "Content-Type: application/json" `
-  -d "{\"username\":\"admin\",\"password\":\"admin\",\"expire\":86400}"
-
-# 状态（替换 TOKEN）
-curl.exe -s http://127.0.0.1:18081/api/v1/user/status -H "Authorization: Bearer TOKEN"
-
-# 创建渠道
-curl.exe -s -X POST http://127.0.0.1:18081/api/v1/channel/create `
-  -H "Authorization: Bearer TOKEN" -H "Content-Type: application/json" `
-  -d "{\"name\":\"demo\",\"type\":0,\"enabled\":true,\"base_urls\":[{\"url\":\"https://api.openai.com/v1\",\"delay\":0}],\"keys\":[{\"enabled\":true,\"channel_key\":\"sk-test\",\"remark\":\"\"}],\"model\":\"gpt-4o-mini\",\"custom_model\":\"\",\"proxy\":false,\"auto_sync\":false,\"auto_group\":0,\"custom_header\":[]}"
-
-# 创建分组（name = 客户端 model）
-curl.exe -s -X POST http://127.0.0.1:18081/api/v1/group/create `
-  -H "Authorization: Bearer TOKEN" -H "Content-Type: application/json" `
-  -d "{\"name\":\"my-group\",\"mode\":1,\"match_regex\":\"\",\"items\":[{\"channel_id\":1,\"model_name\":\"gpt-4o-mini\",\"priority\":1,\"weight\":1}]}"
-
-# 创建客户端 Key
-curl.exe -s -X POST http://127.0.0.1:18081/api/v1/apikey/create `
-  -H "Authorization: Bearer TOKEN" -H "Content-Type: application/json" `
-  -d "{\"name\":\"local-client\",\"enabled\":true}"
-
-# 客户端 models（替换 SK）
-curl.exe -s http://127.0.0.1:18081/v1/models -H "Authorization: Bearer SK"
-
-# 非流式 chat（model = 分组名）
-curl.exe -s -X POST http://127.0.0.1:18081/v1/chat/completions `
-  -H "Authorization: Bearer SK" -H "Content-Type: application/json" `
-  -d "{\"model\":\"my-group\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
-
-# 流式 SSE（model = 分组名）
-curl.exe -s -N -X POST http://127.0.0.1:18081/v1/chat/completions `
-  -H "Authorization: Bearer SK" -H "Content-Type: application/json" `
-  -d "{\"model\":\"my-group\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}"
-```
-
-## 鉴权矩阵
-
-| 路径 | 无凭证 | 管理 JWT | 有效 sk | 无效/禁用 sk |
-|------|--------|----------|---------|--------------|
-| `/health` | 200 | 200 | 200 | 200 |
-| `/api/v1/user/login` | 可调 | 可调 | 可调 | 可调 |
-| `/api/v1/user/status` | 401 | 200 | 401 | 401 |
-| `/api/v1/apikey/*` | 401 | 按业务 | 401 | 401 |
-| `/api/v1/channel/*` | 401 | 按业务 | 401 | 401 |
-| `/api/v1/group/*` | 401 | 按业务 | 401 | 401 |
-| `/api/v1/log/*` | 401 | 按业务 | 401 | 401 |
+| 路径 | 无凭证 | 管理 JWT | 客户端 Key | 禁用 Key |
+|------|--------|----------|------------|----------|
+| `GET /health` | 200 | 200 | 200 | 200 |
+| `/api/v1/*` | 401 | 按业务 | 401 | 401 |
 | `/v1/models` | 401 | 401 | 200 | 401 |
 | `/v1/chat/completions` | 401 | 401 | 按业务 | 401 |
 
-## 与 octopus / Tauri 边界
+Key 前缀固定 **`sk-modelhub-`**。SQLite 只存 SHA-256 哈希，不落明文；重启后仍可校验。
+
+## 与桌面壳边界
 
 | 项 | 约定 |
 |----|------|
-| 当前发布链路 | **默认**内嵌本二进制；**不再**内嵌 octopus；见 `gateway/README.md` |
-| 数据目录 | SQLite 默认 `data/data.db`（相对 cwd）；schema 自有，非 1:1 复制 octopus |
-| 进程清理 | 不按 `octopus` 进程名结束任何进程 |
-| Key 前缀 | 仍为 `sk-octopus-...`（历史兼容，非仍依赖 AGPL 二进制） |
+| 发布链路 | 安装包内嵌本二进制；见 `gateway/README.md` |
+| 数据目录 | SQLite 默认 `data/data.db`（相对 cwd）；自有 schema |
+| 进程清理 | 只按托管 PID / 测试端口结束，不按进程名杀全机 |
+| Key 前缀 | `sk-modelhub-...` |
 
 ## 测试
 
@@ -318,10 +108,10 @@ cargo clippy --manifest-path gateway-rust/Cargo.toml --all-targets -- -D warning
 集成测试绑定 `127.0.0.1:0` 随机端口 + 临时 SQLite，覆盖：
 
 - 登录 → 建 Key → `/v1/models` 鉴权矩阵
-- 登录 → 渠道 CRUD（keys_to_*）→ 分组 CRUD（items_to_*）→ apikey → models（分组名列表）
+- 登录 → 渠道 CRUD → 分组 CRUD → models（分组名列表）
 - API Key 跨进程实例持久化
-- wiremock 上游 200 转发、SSE 多帧 + `[DONE]`、未知分组、轮询切换 model_name
-- mock chat 后 log list 字段 / clear / page_size 上限 100 / 无 JWT 401
+- wiremock 上游 200 转发、SSE 多帧 + `[DONE]`、未知分组、轮询
+- mock chat 后 log list / clear / page_size 上限 / 无 JWT 401
 
 ## 目录
 
@@ -332,14 +122,13 @@ gateway-rust/
 ├── testdata/config.json
 ├── src/
 │   ├── lib.rs
-│   ├── main.rs          # serve | migrate-octopus（默认无 subcommand = serve）
+│   ├── main.rs          # serve（默认无 subcommand = serve）
 │   ├── config.rs
 │   ├── error.rs
 │   ├── http.rs
 │   ├── response.rs
 │   ├── server.rs
 │   ├── db/              # open / migrate v1+v2
-│   ├── migrate_octopus/ # octopus → rust 尽力导入（detect + import）
 │   ├── auth/            # JWT / admin / middleware
 │   ├── apikey/          # model / memory + sqlite store / hash
 │   ├── channel/         # model / store / service

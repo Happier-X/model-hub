@@ -454,7 +454,7 @@ function ClientHintPanel({
         </li>
         <li>
           客户端必须使用网关 API Key（前缀{" "}
-          <code className="rounded bg-slate-100 px-1">sk-octopus-</code>
+          <code className="rounded bg-slate-100 px-1">sk-modelhub-</code>
           ），与上方管理 JWT 不是同一套。请到{" "}
           <button
             type="button"

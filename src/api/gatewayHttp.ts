@@ -17,7 +17,7 @@ export interface GatewayRequestOptions {
    * 鉴权模式。默认 admin。
    * - admin：附带管理 JWT
    * - none：不带 Authorization
-   * - bearer：使用 options.bearer（客户端 sk-octopus，**不得**回落 adminToken）
+   * - bearer：使用 options.bearer（客户端 sk-modelhub，**不得**回落 adminToken）
    */
   authMode?: GatewayAuthMode;
   /** 兼容旧调用：auth:false 等价 authMode:'none' */
@@ -175,7 +175,7 @@ export async function clientProbe(
     return {
       status: 0,
       ok: false,
-      message: "请填写网关 API Key（sk-octopus-...）",
+      message: "请填写网关 API Key（sk-modelhub-...）",
       body: null,
     };
   }

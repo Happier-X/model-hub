@@ -62,7 +62,7 @@ pub fn require_client_api_key(
 ) -> Result<ClientAuth, Response> {
     let raw = extract_client_key(parts).ok_or_else(|| unauthorized("缺少客户端 API Key"))?;
 
-    // 客户端路径只接受 sk-octopus- 前缀；管理 JWT 即使合法也拒绝。
+    // 客户端路径只接受 sk-modelhub- 前缀；管理 JWT 即使合法也拒绝。
     if !raw.starts_with(API_KEY_PREFIX) {
         return Err(unauthorized("无效的客户端 API Key"));
     }

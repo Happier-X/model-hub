@@ -8,14 +8,14 @@
 2. 运行发行版或 `pnpm tauri dev`，在应用内确认网关状态为 **运行中**。
 3. 在 **渠道** 页创建 OpenAI Chat 兼容上游（Base URL + 上游 API Key + 模型名）。
 4. 在 **分组** 页创建分组，**分组名** 将作为客户端的 `model`；负载默认 **轮询**。
-5. 在 **API 密钥** 页创建网关客户端 Key（前缀 `sk-octopus-`），创建成功后**完整复制一次**明文。
+5. 在 **API 密钥** 页创建网关客户端 Key（前缀 `sk-modelhub-`），创建成功后**完整复制一次**明文。
 
 ## 两套凭证（务必区分）
 
 | 用途 | 凭证 | 获取方式 |
 |------|------|----------|
 | 管理 API（`/api/v1/*`） | 管理 JWT | 应用静默 `admin` 登录；设置页可粘贴 Token 兜底 |
-| 客户端 OpenAI 兼容（`/v1/*`） | 网关 API Key（`sk-octopus-...`） | 应用 **API 密钥** 页创建；Header `Authorization: Bearer ...` 或 `x-api-key` |
+| 客户端 OpenAI 兼容（`/v1/*`） | 网关 API Key（`sk-modelhub-...`） | 应用 **API 密钥** 页创建；Header `Authorization: Bearer ...` 或 `x-api-key` |
 
 **不要**把管理 JWT 当作客户端 `api_key`；**不要**使用任意占位字符串——错误 Key 会返回 **401**。
 
@@ -33,26 +33,26 @@
 **注意**：
 
 - 管理台 JWT 与客户端网关 Key **不是同一套**。
-- `/v1/*` **必须**使用网关签发的客户端 API Key（前缀仍为历史兼容名 `sk-octopus-`）。
+- `/v1/*` **必须**使用网关签发的客户端 API Key（前缀仍为历史兼容名 `sk-modelhub-`）。
 - 渠道 `type` 为数字；Model Hub 创建 OpenAI Chat 时使用 `type: 0`。
 
 ## curl 示例
 
-将 `sk-octopus-YOUR_KEY` 换成你在 **API 密钥** 页复制的完整 Key；将 `your-group-name` 换成分组名。
+将 `sk-modelhub-YOUR_KEY` 换成你在 **API 密钥** 页复制的完整 Key；将 `your-group-name` 换成分组名。
 
 ```bash
 # 探测鉴权（期望非 401；空模型列表可接受）
 curl http://127.0.0.1:8080/v1/models \
-  -H "Authorization: Bearer sk-octopus-YOUR_KEY"
+ -H "Authorization: Bearer sk-modelhub-YOUR_KEY"
 
 # Chat 转发（需已配置渠道 + 分组 + 真实上游 Key）
 curl http://127.0.0.1:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer sk-octopus-YOUR_KEY" \
-  -d "{
-    \"model\": \"your-group-name\",
-    \"messages\": [{\"role\": \"user\", \"content\": \"你好\"}]
-  }"
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer sk-modelhub-YOUR_KEY" \
+ -d "{
+  \"model\": \"your-group-name\",
+  \"messages\": [{\"role\": \"user\", \"content\": \"你好\"}]
+ }"
 ```
 
 ## Python（OpenAI SDK）
@@ -61,13 +61,13 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="http://127.0.0.1:8080/v1",
-    api_key="sk-octopus-YOUR_KEY",  # 网关 API Key，非管理 JWT
+  base_url="http://127.0.0.1:8080/v1",
+  api_key="sk-modelhub-YOUR_KEY", # 网关 API Key，非管理 JWT
 )
 
 completion = client.chat.completions.create(
-    model="your-group-name",
-    messages=[{"role": "user", "content": "你好"}],
+  model="your-group-name",
+  messages=[{"role": "user", "content": "你好"}],
 )
 print(completion.choices[0].message.content)
 ```
@@ -84,6 +84,6 @@ print(completion.choices[0].message.content)
 
 `POST /api/v1/apikey/create`，body 最小示例：`{"name":"local-client","enabled":true}`（需管理 JWT）。响应中的 `api_key` 仅完整展示一次。
 
-## 许可证
+## 说明
 
-当前发布包**默认内嵌 Rust 原生网关**，不再分发 octopus 二进制。详见 [gateway/README.md](../gateway/README.md) 与根 `README.md`。
+当前发布包内嵌 Rust 原生网关。详见 [gateway/README.md](../gateway/README.md) 与根 `README.md`。

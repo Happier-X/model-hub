@@ -3,9 +3,9 @@
 use rand::RngCore;
 use sha2::{Digest, Sha256};
 
-pub const API_KEY_PREFIX: &str = "sk-octopus-";
+pub const API_KEY_PREFIX: &str = "sk-modelhub-";
 
-/// 生成 `sk-octopus-` + 高熵随机 hex。
+/// 生成 `sk-modelhub-` + 高熵随机 hex。
 pub fn generate_raw_key() -> String {
     let mut bytes = [0u8; 24];
     rand::thread_rng().fill_bytes(&mut bytes);
@@ -54,7 +54,7 @@ mod tests {
 
     #[test]
     fn hash_is_stable_and_not_raw() {
-        let raw = "sk-octopus-deadbeefcafebabe";
+        let raw = "sk-modelhub-deadbeefcafebabe";
         let h1 = hash_key(raw);
         let h2 = hash_key(raw);
         assert_eq!(h1, h2);
@@ -64,7 +64,7 @@ mod tests {
 
     #[test]
     fn mask_hides_middle() {
-        let raw = "sk-octopus-0123456789abcdef";
+        let raw = "sk-modelhub-0123456789abcdef";
         let masked = mask_key(raw);
         assert!(masked.starts_with(API_KEY_PREFIX));
         assert!(masked.contains("****"));
@@ -76,7 +76,7 @@ mod tests {
     fn store_never_keeps_plaintext_via_hash_only() {
         let raw = generate_raw_key();
         let stored = hash_key(&raw);
-        assert!(!stored.contains("sk-octopus-"));
+        assert!(!stored.contains("sk-modelhub-"));
         assert_ne!(stored, raw);
     }
 }

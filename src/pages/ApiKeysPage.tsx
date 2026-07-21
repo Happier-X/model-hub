@@ -88,7 +88,7 @@ export function ApiKeysPage({ running, authOk, authMessage }: ApiKeysPageProps) 
       <div>
         <h2 className="text-2xl font-bold">API 密钥</h2>
         <p className="mt-1 text-sm text-slate-600">
-          管理客户端网关 API Key（前缀 <code className="rounded bg-slate-100 px-1">sk-octopus-</code>
+          管理客户端网关 API Key（前缀 <code className="rounded bg-slate-100 px-1">sk-modelhub-</code>
           ）。与设置页中的管理 JWT 不是同一套凭证。
         </p>
       </div>

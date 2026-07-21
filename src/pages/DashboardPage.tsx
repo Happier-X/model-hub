@@ -197,7 +197,7 @@ export function DashboardPage({
             ? listError
             : counts
               ? counts.apiKeys > 0
-                ? `已有 ${counts.apiKeys} 条密钥（客户端用 sk-octopus-...，非管理 JWT）`
+                ? `已有 ${counts.apiKeys} 条密钥（客户端用 sk-modelhub-...，非管理 JWT）`
                 : "到 API 密钥页创建并复制完整 Key"
               : loading
                 ? "检测中…"
@@ -225,8 +225,8 @@ export function DashboardPage({
     counts.groups > 0 &&
     counts.apiKeys > 0;
 
-  const modelsCurl = `curl -sS "${v1Root}/models" \\\n  -H "Authorization: Bearer sk-octopus-YOUR_KEY"`;
-  const chatCurl = `curl -sS "${v1Root}/chat/completions" \\\n  -H "Authorization: Bearer sk-octopus-YOUR_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d "{\\"model\\":\\"your-group-name\\",\\"messages\\":[{\\"role\\":\\"user\\",\\"content\\":\\"hi\\"}]}"`;
+  const modelsCurl = `curl -sS "${v1Root}/models" \\\n  -H "Authorization: Bearer sk-modelhub-YOUR_KEY"`;
+  const chatCurl = `curl -sS "${v1Root}/chat/completions" \\\n  -H "Authorization: Bearer sk-modelhub-YOUR_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d "{\\"model\\":\\"your-group-name\\",\\"messages\\":[{\\"role\\":\\"user\\",\\"content\\":\\"hi\\"}]}"`;
 
   const onCopy = async (text: string, label: string) => {
     try {
@@ -246,7 +246,7 @@ export function DashboardPage({
     }
     const key = probeKey.trim();
     if (!key) {
-      setProbeError("请粘贴网关 API Key（sk-octopus-...），不要使用管理 JWT。");
+      setProbeError("请粘贴网关 API Key（sk-modelhub-...），不要使用管理 JWT。");
       return;
     }
     setProbeBusy(true);
@@ -301,7 +301,7 @@ export function DashboardPage({
           <h2 className="text-2xl font-bold">仪表盘</h2>
           <p className="mt-1 text-sm text-slate-600">
             按顺序完成配置闭环。管理 JWT 与客户端{" "}
-            <code className="rounded bg-slate-100 px-1">sk-octopus-</code> Key
+            <code className="rounded bg-slate-100 px-1">sk-modelhub-</code> Key
             不是同一套凭证。
           </p>
         </div>
@@ -370,7 +370,7 @@ export function DashboardPage({
             <h3 className="text-lg font-semibold">客户端快速对接</h3>
             <p className="mt-1 text-sm text-slate-600">
               模板中的{" "}
-              <code className="rounded bg-slate-100 px-1">sk-octopus-YOUR_KEY</code>{" "}
+              <code className="rounded bg-slate-100 px-1">sk-modelhub-YOUR_KEY</code>{" "}
               仅为占位；请到{" "}
               <button
                 type="button"
@@ -457,7 +457,7 @@ export function DashboardPage({
         <h3 className="text-lg font-semibold">客户端路径自检</h3>
         <p className="mt-1 text-sm text-slate-600">
           使用你复制的网关 API Key（
-          <code className="rounded bg-slate-100 px-1">sk-octopus-...</code>
+          <code className="rounded bg-slate-100 px-1">sk-modelhub-...</code>
           ）探测 <code className="rounded bg-slate-100 px-1">/v1</code>
           ，不会使用管理 JWT。Key 仅保存在内存，不写本地存储。
         </p>
@@ -469,7 +469,7 @@ export function DashboardPage({
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
               value={probeKey}
               onChange={(e) => setProbeKey(e.target.value)}
-              placeholder="sk-octopus-..."
+              placeholder="sk-modelhub-..."
               autoComplete="off"
             />
           </label>

@@ -100,7 +100,7 @@ impl ApiKeyStore for SqliteApiKeyStore {
             Ok(conn.last_insert_rowid())
         })?;
 
-        debug_assert!(!key_hash.starts_with("sk-octopus-"));
+        debug_assert!(!key_hash.starts_with("sk-modelhub-"));
         debug_assert_ne!(masked, raw);
 
         Ok(ApiKeyCreated {
@@ -224,7 +224,7 @@ mod tests {
                 supported_models: None,
             })
             .unwrap();
-        assert!(created.api_key.starts_with("sk-octopus-"));
+        assert!(created.api_key.starts_with("sk-modelhub-"));
 
         // 新 store 实例读同一库
         let store2 = SqliteApiKeyStore::new(db);

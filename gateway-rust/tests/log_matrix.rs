@@ -295,7 +295,7 @@ async fn chat_writes_log_list_clear_and_page_size_cap() {
     let dump = listed.body.to_string();
     assert!(!dump.contains("secret-hi"));
     assert!(!dump.contains("sk-upstream-log"));
-    assert!(!dump.contains("sk-octopus-"));
+    assert!(!dump.contains("sk-modelhub-"));
 
     // 失败日志 error 非空
     let failed = logs

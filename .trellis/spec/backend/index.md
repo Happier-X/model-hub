@@ -2,7 +2,7 @@
 
 > 本项目后端约定（**目标栈**，脚手架落地后按真实代码修订）。
 >
-> 架构：**Tauri（Rust 壳）+ 默认可替换 LLM 网关侧车（默认 gateway-rust；可选自备 octopus 回退）**。
+> 架构：**Tauri（Rust 壳）+ Rust 原生网关侧车（gateway-rust / model-hub-gateway）**。
 > 平台：Windows（MVP 仅验收 Windows）。
 
 ---
@@ -12,10 +12,10 @@
 | 层级 | 职责 | 技术 |
 |------|------|------|
 | 桌面壳 | 窗口、生命周期、数据目录、拉起/停止侧车、健康检查 | Tauri 2 + Rust |
-| 网关侧车 | HTTP 管理 API + OpenAI 兼容转发 + SQLite | 阶段 1：外部/内嵌兼容进程；接口以 HTTP 契约为准 |
+| 网关侧车 | HTTP 管理 API + OpenAI 兼容转发 + SQLite | gateway-rust；接口以 HTTP 契约为准 |
 | 持久化（MVP） | 渠道/分组/日志等 | **仅 SQLite** |
 
-管理 UI **无登录**；默认监听 **`127.0.0.1`**；管理 API 用 JWT，客户端 `/v1/*` 须使用侧车签发的网关 API Key（`sk-octopus-...` 历史前缀兼容，见任务 `07-18-gateway-api-key-chat`）。默认网关实现为 `gateway-rust`（任务 `07-21-rust-gateway-drop-octopus`）。
+管理 UI **无登录**；默认监听 **`127.0.0.1`**；管理 API 用 JWT，客户端 `/v1/*` 须使用网关签发的 API Key（`sk-modelhub-...`）。默认网关实现为 `gateway-rust`。
 
 ---
 

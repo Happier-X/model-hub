@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 pub struct ApiKeyRecord {
     pub id: i64,
     pub name: String,
-    /// 脱敏展示值，如 `sk-octopus-****abcd`
+    /// 脱敏展示值，如 `sk-modelhub-****abcd`
     pub api_key_masked: String,
     pub key_hash: String,
     pub enabled: bool,

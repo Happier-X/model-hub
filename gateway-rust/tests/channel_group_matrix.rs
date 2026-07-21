@@ -280,7 +280,7 @@ async fn channel_group_apikey_full_flow() {
         .as_str()
         .unwrap()
         .to_string();
-    assert!(raw_key.starts_with("sk-octopus-"));
+    assert!(raw_key.starts_with("sk-modelhub-"));
 
     let models = http_json("GET", &base, "/v1/models", None, Some(&raw_key)).await;
     assert_eq!(models.status, 200);

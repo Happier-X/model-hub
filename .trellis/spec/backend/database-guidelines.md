@@ -38,7 +38,7 @@
 - 连接策略 MVP：`Arc<Mutex<Connection>>`；handler 内同步短事务，避免跨 await 持锁。
 - 测试优先 tempfile 文件库；单连接场景可用 `:memory:`。
 
-### Schema v1+v2（自有，非 1:1 复制 octopus）
+### Schema v1+v2（gateway-rust 自有）
 
 | 表 | 用途 |
 |----|------|
@@ -55,7 +55,7 @@
 
 | 种类 | 存储 |
 |------|------|
-| 客户端 `sk-octopus-...` | 仅 SHA-256 哈希 + 脱敏展示 |
+| 客户端 `sk-modelhub-...` | 仅 SHA-256 哈希 + 脱敏展示 |
 | 上游 `channel_key` | 可明文存 SQLite（与侧车同类本机数据） |
 | 管理 JWT secret | 配置或启动随机生成，不进业务表 |
 
@@ -70,7 +70,7 @@
 
 ## Naming
 
-- 表/列名：阶段 1 侧车可跟随 octopus；`gateway-rust` 使用自有 snake_case schema（见上表）。
+- 表/列名：`gateway-rust` 使用自有 snake_case schema（见上表）。
 - 配置文件：JSON（如 `config.json`），键名稳定、可环境变量覆盖。
 
 ---

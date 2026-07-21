@@ -11,14 +11,10 @@
 ```
 /
 ├── gateway/
-│   └── README.md              # 默认 rust / 可选 octopus 回退、解析优先级
-├── third-party/octopus/       # 历史 AGPL 材料（发布包不再内嵌；开发回退参考）
-├── tools/octopus/             # 本地下载的 exe（gitignore，勿提交；可选回退）
+│   └── README.md              # 网关解析优先级与产品约定
 ├── tools/gateway-rust/        # 本地 release 构建的 model-hub-gateway.exe（gitignore，勿提交）
 ├── scripts/
-│   ├── prepare-bundled-octopus.ps1       # 可选：下载+SHA-256 校验（不进发布包）
-│   ├── prepare-bundled-gateway-rust.ps1  # cargo release + 复制到 tools/
-│   └── e2e-octopus-smoke.py
+│   └── prepare-bundled-gateway-rust.ps1  # cargo release + 复制到 tools/
 ├── gateway-rust/              # 默认 Rust 原生网关独立 crate（发布内嵌）
 │   ├── src/                   # config/http/server 可测试边界
 │   └── tests/                 # 随机本机端口集成测试
@@ -45,7 +41,7 @@
 └── .trellis/
 ```
 
-网关二进制解析优先级：`MODEL_HUB_GATEWAY_BIN` → `MODEL_HUB_GATEWAY_RUST_BIN` → （若存在）安装资源 `sidecar/model-hub-gateway.exe` 按哈希原子部署到 `{bin_dir}/model-hub-gateway.exe` → 否则直接使用已有 `bin_dir` 副本。安装态以内嵌 rust 为版本真源；勿将大型 exe 提交进 Git。历史 octopus 库可用 `migrate-octopus` 一次性导入。
+网关二进制解析优先级：`MODEL_HUB_GATEWAY_BIN` → `MODEL_HUB_GATEWAY_RUST_BIN` → （若存在）安装资源 `sidecar/model-hub-gateway.exe` 按哈希原子部署到 `{bin_dir}/model-hub-gateway.exe` → 否则直接使用已有 `bin_dir` 副本。安装态以内嵌 rust 为版本真源；勿将大型 exe 提交进 Git。客户端 Key 前缀 `sk-modelhub-`。
 
 ---
 
@@ -83,10 +79,10 @@
 - 鉴权与持久化（实验已实现）：
   - 管理：`POST /api/v1/user/login`（默认 admin/admin）签发 HS256 JWT；`GET /api/v1/user/status`、`/api/v1/apikey/*`、`/api/v1/channel/*`、`/api/v1/group/*`、`/api/v1/log/*` 需管理 JWT。
   - 成功管理/业务响应使用 `{ "data": ... }` 信封；鉴权失败 401 必须含顶层 `message`，并可保留 `error.{code,message}`。
-  - 客户端：`GET /v1/models` 返回已配置**分组名**列表（OpenAI list：`id`=分组名）；`Authorization: Bearer sk-octopus-...` 或 `x-api-key`；管理 JWT 访问 `/v1/*` → 401。
+  - 客户端：`GET /v1/models` 返回已配置**分组名**列表（OpenAI list：`id`=分组名）；`Authorization: Bearer sk-modelhub-...` 或 `x-api-key`；管理 JWT 访问 `/v1/*` → 401。
   - 客户端：`POST /v1/chat/completions` 转发；请求 `model`=分组名，上游 `model`=item.`model_name`；`stream=false`/缺省整包 JSON；`stream=true` 透明代理上游 `text/event-stream`（保留 `stream:true`，不整包缓冲成功 SSE）；上游状态码/body 透传；网络失败 502。
   - 路由：`mode=1` 原子轮询 items；其它 mode 暂用首个可用 item；渠道需 enabled 且具备 base_url + enabled key。
-  - API Key 前缀固定 `sk-octopus-`；完整明文仅 create 返回一次；默认 `SqliteApiKeyStore` 只存哈希 + 脱敏（`MemoryApiKeyStore` 仍可用于单测）。
+  - API Key 前缀固定 `sk-modelhub-`；完整明文仅 create 返回一次；默认 `SqliteApiKeyStore` 只存哈希 + 脱敏（`MemoryApiKeyStore` 仍可用于单测）。
   - SQLite：仅 `database.type=sqlite`；启动 `db::open_from_config` + migrate v1+v2（api_keys/channels/channel_keys/channel_base_urls/groups/group_items/request_logs）；相对路径相对 cwd。
   - 渠道：`type` 数字；create/list/update/enable/delete；update 支持 `keys_to_update` / `keys_to_add`；上游 channel_key 本机可明文，日志禁打完整 Key。
   - 分组：`mode` 数字（1=轮询）；create/list/update/delete；update 支持 `items_to_delete` / `items_to_add`。
@@ -94,7 +90,7 @@
   - 日志禁止打印完整 Token/客户端 Key/上游 Key/用户 messages 全文（可记 group/channel id）。
 - 生命周期：通过预绑定 `TcpListener` + graceful shutdown；测试只绑定 `127.0.0.1:0` + 临时库，不按进程名结束本机网关。
 - 模块边界：`config` / `http` / `server` / `error` / `db` / `auth` / `apikey` / `channel` / `group` / `log` / `router` / `upstream` / `routes` / `response` 保持可测试；SSE 由 `upstream::forward_chat_stream` 透明代理，不把业务塞进 Tauri 壳。
-- 发布边界：安装包**仅**启动 `model-hub-gateway`（`tauri.release.conf.json` **仅**映射 `sidecar/model-hub-gateway.exe`）。壳侧**无** octopus 运行时兼容路径。`gateway-rust` README 可说明 `migrate-octopus` 历史数据导入。
+- 发布边界：安装包**仅**启动 `model-hub-gateway`（`tauri.release.conf.json` **仅**映射 `sidecar/model-hub-gateway.exe`）。无第三方侧车回退与历史数据迁移 CLI。
 
 ### 验证
 
@@ -300,4 +296,4 @@ const { state, base_url } = await gatewayStatus();
 - 在前端硬编码绝对路径到侧车 exe。
 - 管理 API 与转发 API 混在同一无区分路由且无法文档化。
 - 为「完整移植」在壳里重写一套与侧车重复的配置存储。
-- 将 `octopus.exe` 无说明地提交进 Git。
+- 将网关 `*.exe` 无说明地提交进 Git。
