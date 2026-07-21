@@ -2,7 +2,7 @@
 
 Model Hub 是一个 Windows 优先的 Tauri 2 桌面应用，用于承载本地网关侧车（**默认 gateway-rust**，兼容历史 octopus 管理契约）与管理 UI：渠道、分组、**API 密钥**、日志与设置。
 
-**当前版本：0.0.3** — Windows 安装包**默认内嵌** `model-hub-gateway`（gateway-rust）；**不再内嵌** octopus 二进制与 AGPL 合规附件。客户端 Key 前缀仍为 `sk-octopus-...`（历史命名，兼容）。
+**当前版本：0.0.4** — Windows 安装包**默认内嵌** `model-hub-gateway`（gateway-rust）；**不再内嵌** octopus 二进制与 AGPL 合规附件。客户端 Key 前缀仍为 `sk-octopus-...`（历史命名，兼容）。详见 [v0.0.4 发布说明](./docs/release-notes-v0.0.4.md)。
 
 ## Windows 开发前置
 
@@ -123,6 +123,8 @@ Rust 侧提供 `get_paths` 命令，首次调用会确保以下目录存在：
 ## 文档
 
 - [应用内更新说明](./docs/in-app-updater.md)
+- [v0.0.4 发布说明](./docs/release-notes-v0.0.4.md)
+- [v0.0.3 发布说明](./docs/release-notes-v0.0.3.md)
 - [v0.0.2 发布说明](./docs/release-notes-v0.0.2.md)
 - [v0.0.1 发布说明](./docs/release-notes-v0.0.1.md)
 - [Chat 上手与故障排查](./docs/chat-onboarding.md)（端到端 + 错误对照 + 仪表盘自检）
