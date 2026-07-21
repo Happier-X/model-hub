@@ -1,6 +1,6 @@
 # model-hub-gateway（实验）
 
-> **状态：实验性。** 本 crate 是 Rust 原生网关，当前实现 **HTTP 骨架 + SQLite 持久化 + 渠道/分组 CRUD + 管理 JWT / 客户端 API Key 鉴权 + 非流式 Chat 转发**，供后续流式与发布接入切片开发。  
+> **状态：实验性。** 本 crate 是 Rust 原生网关，当前实现 **HTTP 骨架 + SQLite 持久化 + 渠道/分组 CRUD + 管理 JWT / 客户端 API Key 鉴权 + 非流式/SSE 流式 Chat 转发**，供后续发布接入切片开发。  
 > **不能**替代当前 Model Hub 发布版内嵌的 **octopus v0.9.28** 侧车，也 **不会** 被 Tauri 壳默认拉起。
 
 ## 目标
@@ -15,7 +15,7 @@
 - 客户端 API Key 仅 create 返回完整明文；存储只保留哈希 + 脱敏
 - 渠道上游 Key 可明文存于本机 SQLite；日志禁止打印完整 Key
 - **客户端 `model` = 分组名**；上游 `model` = group item 的 `model_name`
-- 非流式 `POST /v1/chat/completions` 转发；`stream=true` 返回 400（本版本不支持 SSE）
+- `POST /v1/chat/completions`：非流式整包 JSON；`stream=true` 透明代理上游 `text/event-stream`
 - Ctrl-C 优雅退出；测试使用随机端口 + 临时库，不按进程名清理 octopus
 
 ## 运行
@@ -56,7 +56,7 @@ cargo run --manifest-path gateway-rust/Cargo.toml -- --config gateway-rust/testd
 - `database.path` 相对路径相对进程 cwd；启动时创建父目录并 migrate v1。
 - `auth` 缺省：用户名/密码 `admin`/`admin`；`jwt_secret` 未配置时进程启动生成随机密钥并 warning（重启后 Token 失效）。
 - 校验：`host` 合法 IP、`port != 0`；默认绑定 `127.0.0.1:8080`。
-- 上游 HTTP 超时默认 **60s**（`reqwest` + rustls）。
+- 上游 HTTP：非流式整包超时默认 **60s**；流式连接超时 **10s**、整响应兜底 **300s**（`reqwest` + rustls + stream）。
 - 日志禁止打印完整 JWT / 客户端 Key / 上游 channel_key / 用户 messages 全文。
 
 ## HTTP 契约
@@ -142,7 +142,7 @@ Key 前缀固定 **`sk-octopus-`**。SQLite 只存 SHA-256 哈希，不落明文
 }
 ```
 
-#### `POST /v1/chat/completions`（非流式）
+#### `POST /v1/chat/completions`
 
 - 客户端 Key 鉴权；管理 JWT → 401
 - 请求体至少含 `model`（**分组名**）+ `messages`
@@ -151,8 +151,8 @@ Key 前缀固定 **`sk-octopus-`**。SQLite 只存 SHA-256 哈希，不落明文
 - 上游 URL：`{base_url 去尾斜杠}/chat/completions`
 - 上游 Header：`Authorization: Bearer {channel_key}`；尽力合并 `custom_header`
 - 改写上游 body：`model` → item.`model_name`
-- 上游状态码与 body **透传**；网络失败 → 502
-- `stream: true` → **400** `STREAM_NOT_SUPPORTED`（不半吊子代理 SSE）
+- **非流式**（`stream` 缺省/`false`）：上游状态码与 JSON body **透传**；网络失败 → 502
+- **流式**（`stream: true`）：保留 `stream: true` 发给上游；成功时透传 `Content-Type: text/event-stream` 与字节流（不整包缓冲完整 SSE）；上游非 2xx 整包透传错误 body；网络失败 → 502
 - 未知分组 → 404；无 items / 无可用渠道 → 400
 
 ### 未知路径
@@ -199,6 +199,11 @@ curl.exe -s http://127.0.0.1:18081/v1/models -H "Authorization: Bearer SK"
 curl.exe -s -X POST http://127.0.0.1:18081/v1/chat/completions `
   -H "Authorization: Bearer SK" -H "Content-Type: application/json" `
   -d "{\"model\":\"my-group\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+
+# 流式 SSE（model = 分组名）
+curl.exe -s -N -X POST http://127.0.0.1:18081/v1/chat/completions `
+  -H "Authorization: Bearer SK" -H "Content-Type: application/json" `
+  -d "{\"model\":\"my-group\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}"
 ```
 
 ## 鉴权矩阵
@@ -237,7 +242,7 @@ cargo clippy --manifest-path gateway-rust/Cargo.toml --all-targets -- -D warning
 - 登录 → 建 Key → `/v1/models` 鉴权矩阵
 - 登录 → 渠道 CRUD（keys_to_*）→ 分组 CRUD（items_to_*）→ apikey → models（分组名列表）
 - API Key 跨进程实例持久化
-- wiremock 上游 200 转发、stream 拒绝、未知分组、轮询切换 model_name
+- wiremock 上游 200 转发、SSE 多帧 + `[DONE]`、未知分组、轮询切换 model_name
 
 ## 目录
 
@@ -260,7 +265,7 @@ gateway-rust/
 │   ├── channel/       # model / store / service
 │   ├── group/         # model / store / service
 │   ├── router/        # 分组 → 渠道 + model_name；轮询
-│   ├── upstream/      # reqwest 非流式转发
+│   ├── upstream/      # reqwest 非流式 + SSE 流式转发
 │   └── routes/        # login / apikey / channel / group / v1 models / chat
 └── tests/
     ├── http_server.rs

@@ -1,4 +1,4 @@
-//! 随机端口 + wiremock 上游：Chat 非流式转发集成测试。
+//! 随机端口 + wiremock 上游：Chat 非流式与 SSE 流式转发集成测试。
 
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -48,13 +48,20 @@ struct HttpResult {
     body: serde_json::Value,
 }
 
-async fn http_json(
+struct HttpRawResult {
+    status: u16,
+    content_type: String,
+    body_raw: String,
+}
+
+async fn http_exchange(
     method: &str,
     base: &str,
     path: &str,
     body: Option<&str>,
     auth: Option<&str>,
-) -> HttpResult {
+    accept: &str,
+) -> (u16, String, String) {
     let url = format!("{base}{path}");
     let url = url.strip_prefix("http://").expect("http url");
     let (host_port, path_only) = url
@@ -69,7 +76,7 @@ async fn http_json(
         .expect("connect");
 
     let mut request = format!(
-        "{method} {path_only} HTTP/1.1\r\nHost: {host_port}\r\nConnection: close\r\nAccept: application/json\r\n"
+        "{method} {path_only} HTTP/1.1\r\nHost: {host_port}\r\nConnection: close\r\nAccept: {accept}\r\n"
     );
     if let Some(token) = auth {
         request.push_str(&format!("Authorization: Bearer {token}\r\n"));
@@ -95,6 +102,29 @@ async fn http_json(
         .unwrap()
         .parse()
         .unwrap();
+    let content_type = header
+        .lines()
+        .find_map(|line| {
+            let (k, v) = line.split_once(':')?;
+            if k.eq_ignore_ascii_case("content-type") {
+                Some(v.trim().to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_default();
+    (status, content_type, body_raw.to_string())
+}
+
+async fn http_json(
+    method: &str,
+    base: &str,
+    path: &str,
+    body: Option<&str>,
+    auth: Option<&str>,
+) -> HttpResult {
+    let (status, _ct, body_raw) =
+        http_exchange(method, base, path, body, auth, "application/json").await;
     let json: serde_json::Value = if body_raw.trim().is_empty() {
         serde_json::Value::Null
     } else {
@@ -102,6 +132,22 @@ async fn http_json(
             .unwrap_or(serde_json::Value::String(body_raw.to_string()))
     };
     HttpResult { status, body: json }
+}
+
+async fn http_raw(
+    method: &str,
+    base: &str,
+    path: &str,
+    body: Option<&str>,
+    auth: Option<&str>,
+) -> HttpRawResult {
+    let (status, content_type, body_raw) =
+        http_exchange(method, base, path, body, auth, "text/event-stream").await;
+    HttpRawResult {
+        status,
+        content_type,
+        body_raw,
+    }
 }
 
 async fn admin_login(base: &str) -> String {
@@ -247,17 +293,8 @@ async fn chat_forward_to_mock_upstream() {
     assert_eq!(chat.body["id"], "chatcmpl-mock");
     assert_eq!(chat.body["choices"][0]["message"]["content"], "pong");
 
-    // stream=true 非 401
-    let stream = http_json(
-        "POST",
-        &base,
-        "/v1/chat/completions",
-        Some(r#"{"model":"demo-group","messages":[{"role":"user","content":"hi"}],"stream":true}"#),
-        Some(&raw_key),
-    )
-    .await;
-    assert_eq!(stream.status, 400);
-    assert_eq!(stream.body["error"]["code"], "STREAM_NOT_SUPPORTED");
+    // stream=true 无 mock 上游 SSE 时会 502 或上游错误，但绝非 401 / STREAM_NOT_SUPPORTED
+    // 完整 SSE 见 chat_sse_stream_proxy；此处保证非流式路径仍正常且未知分组非 401
 
     // 未知分组
     let unknown = http_json(
@@ -270,6 +307,197 @@ async fn chat_forward_to_mock_upstream() {
     .await;
     assert_eq!(unknown.status, 404);
     assert_ne!(unknown.status, 401);
+
+    shutdown_tx.send(()).expect("send shutdown");
+    tokio::time::timeout(Duration::from_secs(5), handle)
+        .await
+        .expect("server task timed out")
+        .expect("server task join");
+}
+
+#[tokio::test]
+async fn chat_sse_stream_proxy() {
+    let mock = MockServer::start().await;
+    let sse_body = concat!(
+        "data: {\"id\":\"1\",\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n",
+        "\n",
+        "data: [DONE]\n",
+        "\n",
+    );
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .and(header("authorization", "Bearer sk-upstream-sse"))
+        .and(body_partial_json(json!({
+            "model": "gpt-4o-mini",
+            "stream": true
+        })))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw(sse_body.as_bytes().to_vec(), "text/event-stream"),
+        )
+        .mount(&mock)
+        .await;
+
+    let (addr, shutdown_tx, handle, _dir, _state) = start_test_server().await;
+    let base = format!("http://{addr}");
+    let token = admin_login(&base).await;
+
+    let create_ch = http_json(
+        "POST",
+        &base,
+        "/api/v1/channel/create",
+        Some(&format!(
+            r#"{{
+            "name": "sse-openai",
+            "type": 0,
+            "enabled": true,
+            "base_urls": [{{"url": "{}/v1", "delay": 0}}],
+            "keys": [{{"enabled": true, "channel_key": "sk-upstream-sse", "remark": ""}}],
+            "model": "gpt-4o-mini",
+            "custom_model": "",
+            "proxy": false,
+            "auto_sync": false,
+            "auto_group": 0,
+            "custom_header": []
+        }}"#,
+            mock.uri()
+        )),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(create_ch.status, 200, "{:?}", create_ch.body);
+    let channel_id = create_ch.body["data"]["id"].as_i64().unwrap();
+
+    let create_g = http_json(
+        "POST",
+        &base,
+        "/api/v1/group/create",
+        Some(&format!(
+            r#"{{
+            "name": "sse-group",
+            "mode": 1,
+            "match_regex": "",
+            "items": [{{
+                "channel_id": {channel_id},
+                "model_name": "gpt-4o-mini",
+                "priority": 1,
+                "weight": 1
+            }}]
+        }}"#
+        )),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(create_g.status, 200, "{:?}", create_g.body);
+
+    let create_key = http_json(
+        "POST",
+        &base,
+        "/api/v1/apikey/create",
+        Some(r#"{"name":"sse-client","enabled":true}"#),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(create_key.status, 200);
+    let raw_key = create_key.body["data"]["api_key"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // 无 Key → 401
+    let no_key = http_raw(
+        "POST",
+        &base,
+        "/v1/chat/completions",
+        Some(r#"{"model":"sse-group","messages":[{"role":"user","content":"hi"}],"stream":true}"#),
+        None,
+    )
+    .await;
+    assert_eq!(no_key.status, 401);
+
+    // 管理 JWT → 401
+    let admin_as_client = http_raw(
+        "POST",
+        &base,
+        "/v1/chat/completions",
+        Some(r#"{"model":"sse-group","messages":[{"role":"user","content":"hi"}],"stream":true}"#),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(admin_as_client.status, 401);
+
+    // 未知分组 → 非 401
+    let unknown = http_raw(
+        "POST",
+        &base,
+        "/v1/chat/completions",
+        Some(r#"{"model":"nope-sse","messages":[{"role":"user","content":"hi"}],"stream":true}"#),
+        Some(&raw_key),
+    )
+    .await;
+    assert_eq!(unknown.status, 404);
+    assert_ne!(unknown.status, 401);
+    assert!(!unknown.body_raw.contains("STREAM_NOT_SUPPORTED"));
+
+    // 有效 Key + stream → event-stream 含 data 与 [DONE]
+    let stream = http_raw(
+        "POST",
+        &base,
+        "/v1/chat/completions",
+        Some(r#"{"model":"sse-group","messages":[{"role":"user","content":"hi"}],"stream":true}"#),
+        Some(&raw_key),
+    )
+    .await;
+    assert_eq!(stream.status, 200, "stream body: {}", stream.body_raw);
+    assert!(
+        stream
+            .content_type
+            .to_ascii_lowercase()
+            .contains("text/event-stream"),
+        "content-type: {}",
+        stream.content_type
+    );
+    assert!(
+        stream.body_raw.contains("data:"),
+        "body: {}",
+        stream.body_raw
+    );
+    assert!(
+        stream.body_raw.contains("[DONE]"),
+        "body: {}",
+        stream.body_raw
+    );
+    assert!(stream.body_raw.contains("hi"), "body: {}", stream.body_raw);
+    assert!(!stream.body_raw.contains("STREAM_NOT_SUPPORTED"));
+
+    // stream=false 仍走整包 JSON
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .and(body_partial_json(json!({
+            "model": "gpt-4o-mini"
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "chatcmpl-nonstream",
+            "object": "chat.completion",
+            "choices": [{
+                "index": 0,
+                "message": {"role": "assistant", "content": "json"},
+                "finish_reason": "stop"
+            }]
+        })))
+        .mount(&mock)
+        .await;
+
+    let non_stream = http_json(
+        "POST",
+        &base,
+        "/v1/chat/completions",
+        Some(r#"{"model":"sse-group","messages":[{"role":"user","content":"hi"}],"stream":false}"#),
+        Some(&raw_key),
+    )
+    .await;
+    assert_eq!(non_stream.status, 200, "{:?}", non_stream.body);
+    assert_eq!(non_stream.body["id"], "chatcmpl-nonstream");
 
     shutdown_tx.send(()).expect("send shutdown");
     tokio::time::timeout(Duration::from_secs(5), handle)

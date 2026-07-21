@@ -1,18 +1,17 @@
-//! 客户端 OpenAI 兼容 `POST /v1/chat/completions`（非流式）。
+//! 客户端 OpenAI 兼容 `POST /v1/chat/completions`（非流式 + SSE 流式）。
 
 use axum::extract::State;
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
+use axum::response::Response;
 use axum::Json;
 use serde_json::Value;
 
 use crate::auth::ClientAuth;
 use crate::http::AppState;
-use crate::response::{bad_request, not_found_api, AuthErrorBody, AuthErrorDetail};
+use crate::response::{bad_request, not_found_api};
 use crate::router::RouteError;
 use crate::upstream::rewrite_upstream_body;
 
-/// 处理非流式 chat 转发。
+/// 处理 chat 转发（`stream=true` 走 SSE 透明代理，否则整包 JSON）。
 pub async fn chat_completions_handler(
     _auth: ClientAuth,
     State(state): State<AppState>,
@@ -22,9 +21,7 @@ pub async fn chat_completions_handler(
         return bad_request("请求体必须为 JSON 对象");
     };
 
-    if obj.get("stream").and_then(|v| v.as_bool()) == Some(true) {
-        return stream_not_supported();
-    }
+    let stream = obj.get("stream").and_then(|v| v.as_bool()) == Some(true);
 
     let group_name = match obj.get("model").and_then(|v| v.as_str()) {
         Some(name) if !name.trim().is_empty() => name.trim(),
@@ -52,34 +49,28 @@ pub async fn chat_completions_handler(
         }
     };
 
-    let upstream_body = rewrite_upstream_body(body, &target.upstream_model);
+    let upstream_body = rewrite_upstream_body(body, &target.upstream_model, stream);
 
-    match state.upstream.forward_chat(&target, &upstream_body).await {
+    let result = if stream {
+        state
+            .upstream
+            .forward_chat_stream(&target, &upstream_body)
+            .await
+    } else {
+        state.upstream.forward_chat(&target, &upstream_body).await
+    };
+
+    match result {
         Ok(response) => response,
         Err(err) => err.into_response(),
     }
-}
-
-fn stream_not_supported() -> Response {
-    let message = "本版本不支持流式（stream=true）".to_string();
-    (
-        StatusCode::BAD_REQUEST,
-        Json(AuthErrorBody {
-            message: message.clone(),
-            error: AuthErrorDetail {
-                code: "STREAM_NOT_SUPPORTED",
-                message,
-            },
-        }),
-    )
-        .into_response()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use axum::body::Body;
-    use axum::http::Request;
+    use axum::http::{Request, StatusCode};
     use http_body_util::BodyExt;
     use tower::ServiceExt;
 
@@ -108,7 +99,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn stream_true_returns_400_not_401() {
+    async fn stream_true_unknown_group_not_401_and_not_stream_rejected() {
         let state = AppState::for_tests();
         let key = seed_client_key(&state);
         let app = build_router(state);
@@ -128,10 +119,15 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        // 流式不再拒绝；未知分组走业务 404，不得 401 / STREAM_NOT_SUPPORTED
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_ne!(response.status(), StatusCode::UNAUTHORIZED);
         let json = body_json(response).await;
-        assert_eq!(json["error"]["code"], "STREAM_NOT_SUPPORTED");
-        assert!(json["message"].as_str().unwrap().contains("不支持流式"));
+        assert_ne!(
+            json["error"]["code"].as_str().unwrap_or(""),
+            "STREAM_NOT_SUPPORTED"
+        );
+        assert!(json["message"].as_str().unwrap().contains("未知分组"));
     }
 
     #[tokio::test]

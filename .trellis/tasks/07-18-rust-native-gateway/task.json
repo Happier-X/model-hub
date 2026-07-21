@@ -22,7 +22,8 @@
     "07-20-rust-gateway-http-skeleton",
     "07-21-rust-gateway-auth-apikey",
     "07-21-rust-gateway-sqlite-channel-group",
-    "07-21-rust-gateway-chat-forward"
+    "07-21-rust-gateway-chat-forward",
+    "07-21-rust-gateway-chat-sse"
   ],
   "parent": null,
   "relatedFiles": [],

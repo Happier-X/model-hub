@@ -1,0 +1,6 @@
+{"path":"gateway-rust/src/routes/v1_chat.rs","reason":"去掉 stream 拒绝并分支"}
+{"path":"gateway-rust/src/upstream/mod.rs","reason":"流式转发"}
+{"path":"gateway-rust/src/router/mod.rs","reason":"路由复用"}
+{"path":"gateway-rust/tests/chat_forward.rs","reason":"更新 stream 期望"}
+{"path":"docs/chat-onboarding.md","reason":"流式约定参考"}
+{"path":".trellis/spec/backend/directory-structure.md","reason":"模块说明"}

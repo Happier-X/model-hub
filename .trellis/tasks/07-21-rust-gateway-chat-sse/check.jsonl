@@ -1,0 +1,4 @@
+{"path":"gateway-rust/src/routes/v1_chat.rs","reason":"stream 分支与鉴权"}
+{"path":"gateway-rust/src/upstream/mod.rs","reason":"SSE 代理实现"}
+{"path":"gateway-rust/tests/chat_forward.rs","reason":"回归非流式"}
+{"path":".trellis/spec/backend/quality-guidelines.md","reason":"密钥与安全"}
