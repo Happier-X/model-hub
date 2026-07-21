@@ -1,6 +1,6 @@
-# 构建并复制钉扎路径的 model-hub-gateway Windows 二进制，供发布内嵌与本地开发使用。
-# 用法: powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-gateway-rust.ps1
-# 不提交 tools/gateway-rust/ 下的大二进制。
+# Build pinned model-hub-gateway for Windows release bundle and local dev.
+# Usage: powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-gateway-rust.ps1
+# Do not commit binaries under tools/gateway-rust/.
 
 $ErrorActionPreference = "Stop"
 
@@ -11,7 +11,7 @@ $OutDir = Join-Path $Root "tools\gateway-rust"
 $Target = Join-Path $OutDir "model-hub-gateway.exe"
 
 if (-not (Test-Path $Manifest)) {
-    throw "未找到 gateway-rust Cargo.toml: $Manifest"
+    throw "gateway-rust Cargo.toml not found: $Manifest"
 }
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
@@ -21,20 +21,21 @@ Push-Location $Root
 try {
     cargo build --manifest-path $Manifest --release
     if ($LASTEXITCODE -ne 0) {
-        throw "cargo build --release 失败，exit=$LASTEXITCODE"
+        throw "cargo build --release failed; exit=$LASTEXITCODE"
     }
-} finally {
+}
+finally {
     Pop-Location
 }
 
 if (-not (Test-Path $Built)) {
-    throw "构建产物不存在: $Built"
+    throw "build artifact missing: $Built"
 }
 
 Copy-Item -Force $Built $Target
 
 if (-not (Test-Path $Target)) {
-    throw "复制失败: $Target"
+    throw "copy failed: $Target"
 }
 
 $sha = [System.Security.Cryptography.SHA256]::Create()
@@ -42,10 +43,12 @@ try {
     $stream = [System.IO.File]::OpenRead($Target)
     try {
         $hashBytes = $sha.ComputeHash($stream)
-    } finally {
+    }
+    finally {
         $stream.Dispose()
     }
-} finally {
+}
+finally {
     $sha.Dispose()
 }
 $hex = ($hashBytes | ForEach-Object { $_.ToString("x2") }) -join ""
