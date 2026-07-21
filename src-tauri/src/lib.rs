@@ -13,6 +13,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // 桌面 UI 访问本机网关走 Rust HTTP 客户端，避免 WebView CORS / Private Network 限制。
+        .plugin(tauri_plugin_http::init())
         .setup(|app| {
             let app_paths = paths::resolve_paths(app.handle()).map_err(|error| {
                 let message = error.to_string();

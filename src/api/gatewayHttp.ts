@@ -1,3 +1,5 @@
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
+
 export class GatewayHttpError extends Error {
   readonly status: number;
   readonly code?: string;
@@ -54,6 +56,21 @@ function resolveBaseUrl(): string {
   return base.replace(/\/$/, "");
 }
 
+/**
+ * 优先使用 Tauri HTTP 插件（原生，无 CORS）；
+ * 浏览器预览 `pnpm dev` 时回退到 window.fetch。
+ */
+async function nativeFetch(input: string, init?: RequestInit): Promise<Response> {
+  const isTauri =
+    typeof window !== "undefined" &&
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
+  if (isTauri) {
+    return tauriFetch(input, init);
+  }
+  return fetch(input, init);
+}
+
 async function parseBody(response: Response): Promise<unknown> {
   const contentType = response.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {
@@ -93,11 +110,11 @@ async function gatewayRequest<T>(
 
   let response: Response;
   try {
-    response = await fetch(url, init);
+    response = await nativeFetch(url, init);
   } catch (cause: unknown) {
     const detail = cause instanceof Error ? cause.message : String(cause);
     throw new GatewayHttpError(
-      `无法连接网关（${detail}）。请确认状态条显示运行中，且请求地址与设置端口一致（默认 127.0.0.1）。若 8080 被其他程序占用，请在设置中更换端口。`,
+      `无法连接网关（${detail}）。请确认状态条显示运行中，且请求地址与设置端口一致（当前 ${base}）。若默认 8080 被其他程序占用，请在设置中更换端口并保存。`,
       0,
     );
   }
@@ -156,7 +173,7 @@ export async function clientProbe(
       headers.set("Content-Type", "application/json");
       requestInit.body = JSON.stringify(init.body);
     }
-    const response = await fetch(url, requestInit);
+    const response = await nativeFetch(url, requestInit);
     const body = await parseBody(response);
     return {
       status: response.status,
