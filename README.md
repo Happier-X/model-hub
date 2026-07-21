@@ -2,7 +2,7 @@
 
 Model Hub 是一个 Windows 优先的 Tauri 2 桌面应用，用于承载本地网关（**gateway-rust / model-hub-gateway**）与管理 UI：渠道、分组、日志与设置。
 
-**当前版本：0.0.6** — Windows 安装包内嵌 `model-hub-gateway`。本地默认无鉴权。详见 [v0.0.6 发布说明](./docs/release-notes-v0.0.6.md)。
+**当前版本：0.0.7** — Windows 安装包内嵌 `model-hub-gateway`。本地默认无鉴权。详见 [v0.0.7 发布说明](./docs/release-notes-v0.0.7.md)。
 
 ## Windows 开发前置
 
@@ -111,6 +111,7 @@ Rust 侧提供 `get_paths` 命令，首次调用会确保以下目录存在：
 ## 文档
 
 - [应用内更新说明](./docs/in-app-updater.md)
+- [v0.0.7 发布说明](./docs/release-notes-v0.0.7.md)
 - [v0.0.6 发布说明](./docs/release-notes-v0.0.6.md)
 - [v0.0.5 发布说明](./docs/release-notes-v0.0.5.md)
 - [v0.0.4 发布说明](./docs/release-notes-v0.0.4.md)
