@@ -52,3 +52,4 @@ tools/gateway-rust/
 
 # Windows reserved name artifact (do not commit)
 nul
+tools/octopus/
