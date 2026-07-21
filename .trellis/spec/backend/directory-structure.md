@@ -32,10 +32,9 @@
 │   │       ├── mod.rs         # gateway_start/stop/status
 │   │       ├── state.rs
 │   │       ├── process.rs
-│   │       ├── impl_kind.rs   # MODEL_HUB_GATEWAY_IMPL → 默认 rust；仅 octopus 回退
 │   │       ├── health.rs
 │   │       ├── config.rs
-│   │       └── binary.rs      # 解析优先级 + 内嵌 rust 部署 + 可选 octopus
+│   │       └── binary.rs      # model-hub-gateway 解析 + 内嵌资源部署
 │   ├── capabilities/
 │   ├── icons/
 │   ├── Cargo.toml
@@ -46,9 +45,7 @@
 └── .trellis/
 ```
 
-Windows 侧车解析优先级（**默认 rust**）：`MODEL_HUB_GATEWAY_BIN` → `MODEL_HUB_GATEWAY_RUST_BIN` → （若存在）安装资源 `sidecar/model-hub-gateway.exe` 按哈希原子部署到 `{bin_dir}/model-hub-gateway.exe` → 否则直接使用已有 `bin_dir` 副本。安装态以内嵌 rust 为版本真源；勿将大型 exe 提交进 Git。
-
-可选回退：仅当 `MODEL_HUB_GATEWAY_IMPL=octopus`（大小写不敏感）时启动自备 `octopus`（参数 `start --config data/config.json`）。octopus 解析：`MODEL_HUB_GATEWAY_BIN` → 可选本地资源/bin_dir 副本；**发布包不再内嵌** octopus 与 `third-party/octopus/`。缺失时错误文案须提示默认已改为 rust、需自备二进制。**警告**：octopus 与 gateway-rust 的 SQLite schema 不兼容，禁止混用同一 `data/data.db`；升级请 `migrate-octopus` 或新建库。
+网关二进制解析优先级：`MODEL_HUB_GATEWAY_BIN` → `MODEL_HUB_GATEWAY_RUST_BIN` → （若存在）安装资源 `sidecar/model-hub-gateway.exe` 按哈希原子部署到 `{bin_dir}/model-hub-gateway.exe` → 否则直接使用已有 `bin_dir` 副本。安装态以内嵌 rust 为版本真源；勿将大型 exe 提交进 Git。历史 octopus 库可用 `migrate-octopus` 一次性导入。
 
 ---
 
@@ -95,9 +92,9 @@ Windows 侧车解析优先级（**默认 rust**）：`MODEL_HUB_GATEWAY_BIN` →
   - 分组：`mode` 数字（1=轮询）；create/list/update/delete；update 支持 `items_to_delete` / `items_to_add`。
   - 请求日志：`GET /api/v1/log/list?page&page_size`（page 从 1，page_size clamp 1..=100，id 倒序）+ `DELETE /api/v1/log/clear`；字段对齐 UI `RelayLog`；chat 非流式结束后写 usage tokens；流式尽力记 use_time/error；路由失败 error 非空；401 不记；不落 messages/密钥；cost 可 0。
   - 日志禁止打印完整 Token/客户端 Key/上游 Key/用户 messages 全文（可记 group/channel id）。
-- 生命周期：通过预绑定 `TcpListener` + graceful shutdown；测试只绑定 `127.0.0.1:0` + 临时库，不结束任何 octopus 进程。
+- 生命周期：通过预绑定 `TcpListener` + graceful shutdown；测试只绑定 `127.0.0.1:0` + 临时库，不按进程名结束本机网关。
 - 模块边界：`config` / `http` / `server` / `error` / `db` / `auth` / `apikey` / `channel` / `group` / `log` / `router` / `upstream` / `routes` / `response` 保持可测试；SSE 由 `upstream::forward_chat_stream` 透明代理，不把业务塞进 Tauri 壳。
-- 发布边界：安装包**默认启动** `model-hub-gateway`（`tauri.release.conf.json` **仅**映射 `sidecar/model-hub-gateway.exe`）。`MODEL_HUB_GATEWAY_IMPL` 缺省/未知 → rust；仅显式 `octopus` 回退自备二进制。**不再**内嵌 octopus 与 AGPL 合规附件。`gateway-rust` README 必须声明默认地位、迁移提醒与「勿混用 data.db」警告。
+- 发布边界：安装包**仅**启动 `model-hub-gateway`（`tauri.release.conf.json` **仅**映射 `sidecar/model-hub-gateway.exe`）。壳侧**无** octopus 运行时兼容路径。`gateway-rust` README 可说明 `migrate-octopus` 历史数据导入。
 
 ### 验证
 
@@ -196,9 +193,9 @@ TypeScript：`gatewayStart` / `gatewayStop` / `gatewayStatus` / `gatewaySetPort`
 | `base_url` | `http://{host}:{port}` |
 | `data_dir` | `gateway_dir` |
 | `binary_path` | 解析到的 exe，可空 |
-| `impl_name` | `octopus` \| `rust`（由 `MODEL_HUB_GATEWAY_IMPL` 解析；前端类型可选） |
+| `impl_name` | 固定 `rust`（前端类型可选，兼容读取） |
 
-启动前写入 **`{gateway_dir}/data/config.json`**。默认（rust）：`{bin} --config data/config.json`（不注入 `OCTOPUS_*`）。仅 `MODEL_HUB_GATEWAY_IMPL=octopus` 时：`{bin} start --config data/config.json`，并注入 `OCTOPUS_SERVER_HOST/PORT` 等环境变量。工作目录为 `gateway_dir`。数据库默认相对路径 `data/data.db`。**勿在 octopus / rust 之间混用同一 db 文件。**
+启动前写入 **`{gateway_dir}/data/config.json`**。启动命令：`{bin} --config data/config.json`。工作目录为 `gateway_dir`。数据库默认相对路径 `data/data.db`。
 
 用户端口设置以 **`{config_dir}/shell.json`** 的 `gateway_port` 为唯一持久化真源，缺失或损坏时安全回退 `8080`。仅 `idle` / `error` 状态允许保存 `1..=65535`；运行、启动或停止中必须提示先停止。保存后不自动重启，下次手动启动时同步用于状态、Base URL、侧车配置、环境变量和健康检查。不得自动选择端口或结束占用进程。
 

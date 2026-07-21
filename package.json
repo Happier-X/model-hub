@@ -9,7 +9,6 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "tauri": "tauri",
-    "prepare:octopus": "powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-octopus.ps1",
     "prepare:gateway-rust": "powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-gateway-rust.ps1",
     "release:windows": "pnpm prepare:gateway-rust && tauri build --bundles nsis -c src-tauri/tauri.release.conf.json"
   },

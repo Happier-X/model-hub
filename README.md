@@ -39,18 +39,14 @@ powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-gateway-rust.ps
 可选：本地回退 octopus（**不会**打进发布包）：
 
 ```powershell
-pnpm prepare:octopus
 # 或
-powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-octopus.ps1
-$env:MODEL_HUB_GATEWAY_IMPL = "octopus"
-$env:MODEL_HUB_GATEWAY_BIN = "$PWD\tools\octopus\octopus.exe"
+$env:MODEL_HUB_GATEWAY_BIN = "$PWD\tools\gateway-rust\model-hub-gateway.exe"
 ```
 
 开发覆盖（可选）：
 
 ```powershell
 # 默认即为 rust，一般无需设置 IMPL
-# $env:MODEL_HUB_GATEWAY_IMPL = "rust"
 $env:MODEL_HUB_GATEWAY_BIN = "$PWD\tools\gateway-rust\model-hub-gateway.exe"
 ```
 
@@ -103,7 +99,7 @@ Rust 侧提供 `get_paths` 命令，首次调用会确保以下目录存在：
 - `app_data_dir`：应用数据根目录
 - `config_dir`：配置目录
 - `gateway_dir`：网关数据目录（配置、SQLite）
-- `bin_dir`：侧车二进制目录（运行时从内嵌资源部署 `model-hub-gateway.exe`；显式 `IMPL=octopus` 时使用自备 `octopus.exe`）
+- `bin_dir`：网关二进制目录（运行时从内嵌资源部署 `model-hub-gateway.exe`）
 
 前端设置区会展示这些路径，用于验证桌面壳与 UI 的基础通信。
 

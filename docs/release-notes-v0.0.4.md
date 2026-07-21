@@ -12,8 +12,7 @@
 
 | 能力 | 说明 |
 |------|------|
-| 默认实现 | `MODEL_HUB_GATEWAY_IMPL` 缺省 / 未知 → **rust** |
-| 可选回退 | 显式 `octopus` + 自备 `octopus.exe` / `MODEL_HUB_GATEWAY_BIN` |
+| 默认实现 | 仅 **Rust** `model-hub-gateway`（已移除 octopus 运行时兼容） |
 | 鉴权 | 管理 JWT + 客户端 `sk-octopus-...`（历史前缀保留） |
 | 数据 | SQLite：渠道 / 分组 / API Key / 请求日志 |
 | Chat | 非流式 + SSE 流式；客户端 `model` = **分组名** |
@@ -31,7 +30,6 @@
 3. **数据目录**：若你曾用默认 octopus 写过 `data/data.db`，切换到 Rust 后 schema 不兼容。请：
    - 备份后使用 `migrate-octopus` 导入到新库，或
    - 清空 / 更换 gateway 数据目录后重新配置。
-4. **勿**在同一 `data.db` 上混跑 octopus 与 rust。
 
 ## 安装与安全提示
 
@@ -44,8 +42,6 @@
 pnpm prepare:gateway-rust
 pnpm tauri dev
 # 可选兼容侧车：
-# $env:MODEL_HUB_GATEWAY_IMPL = "octopus"
-# pnpm prepare:octopus
 ```
 
 ## 校验（发布方）

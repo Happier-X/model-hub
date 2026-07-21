@@ -105,8 +105,7 @@ function GatewayPanel({
           <h3 className="text-lg font-semibold">本地网关（默认 Rust）</h3>
           <p className="mt-1 text-sm text-slate-500">
             默认监听 127.0.0.1。正式安装包已内嵌 model-hub-gateway，启动时自动部署。开发请运行
-            pnpm prepare:gateway-rust 或设置 MODEL_HUB_GATEWAY_BIN。可选
-            MODEL_HUB_GATEWAY_IMPL=octopus 使用自备兼容侧车（与默认库勿混用）。关闭主窗口会
+            pnpm prepare:gateway-rust 或设置 MODEL_HUB_GATEWAY_BIN。关闭主窗口会
             <strong>隐藏到系统托盘</strong>，网关继续运行；请从托盘菜单选择「退出」才会停止网关并关闭应用。
           </p>
         </div>

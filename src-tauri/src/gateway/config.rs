@@ -6,7 +6,7 @@ use crate::error::AppError;
 
 pub const DEFAULT_HOST: &str = "127.0.0.1";
 pub const DEFAULT_PORT: u16 = 8080;
-/// 相对 gateway 工作目录的默认配置文件（对齐 octopus `start --config`）
+/// 相对 gateway 工作目录的默认配置文件（传给 model-hub-gateway `--config`）
 pub const DEFAULT_CONFIG_RELATIVE: &str = "data/config.json";
 /// 相对 gateway 工作目录的 SQLite 路径
 pub const DEFAULT_DATABASE_RELATIVE: &str = "data/data.db";
@@ -19,7 +19,7 @@ pub struct GatewayRuntimeConfig {
     /// 相对 gateway 工作目录，或绝对路径
     pub database_path: String,
     pub log_level: String,
-    /// 传给 `octopus start --config`
+    /// 传给 `model-hub-gateway --config`
     pub config_relative: String,
 }
 
@@ -112,22 +112,12 @@ pub fn write_config_file(
     Ok(())
 }
 
-pub fn env_overrides(config: &GatewayRuntimeConfig) -> Vec<(String, String)> {
-    vec![
-        ("OCTOPUS_SERVER_HOST".into(), config.host.clone()),
-        ("OCTOPUS_SERVER_PORT".into(), config.port.to_string()),
-        ("OCTOPUS_DATABASE_TYPE".into(), config.database_type.clone()),
-        ("OCTOPUS_DATABASE_PATH".into(), config.database_path.clone()),
-        ("OCTOPUS_LOG_LEVEL".into(), config.log_level.clone()),
-    ]
-}
-
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
 
     use super::{
-        env_overrides, write_config_file, GatewayRuntimeConfig, DEFAULT_CONFIG_RELATIVE,
+        write_config_file, GatewayRuntimeConfig, DEFAULT_CONFIG_RELATIVE,
         DEFAULT_DATABASE_RELATIVE, DEFAULT_HOST, DEFAULT_PORT,
     };
 
@@ -143,17 +133,7 @@ mod tests {
     }
 
     #[test]
-    fn env_overrides_cover_upstream_keys() {
-        let config = GatewayRuntimeConfig::default_local(&PathBuf::from("g"));
-        let env = env_overrides(&config);
-        let keys: Vec<_> = env.iter().map(|(k, _)| k.as_str()).collect();
-        assert!(keys.contains(&"OCTOPUS_SERVER_HOST"));
-        assert!(keys.contains(&"OCTOPUS_SERVER_PORT"));
-        assert!(keys.contains(&"OCTOPUS_DATABASE_PATH"));
-    }
-
-    #[test]
-    fn non_default_port_propagates_to_config_and_environment() {
+    fn non_default_port_propagates_to_config_file() {
         let dir =
             std::env::temp_dir().join(format!("model-hub-gateway-config-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -166,8 +146,6 @@ mod tests {
         assert!(text.contains("18080"));
         assert!(text.contains("sqlite"));
         assert!(text.contains("data/data.db"));
-        assert!(env_overrides(&config)
-            .contains(&("OCTOPUS_SERVER_PORT".to_string(), "18080".to_string())));
         let _ = std::fs::remove_dir_all(dir);
     }
 }

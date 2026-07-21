@@ -43,16 +43,14 @@ pnpm build
 cargo test --manifest-path src-tauri/Cargo.toml
 cargo check --manifest-path src-tauri/Cargo.toml
 cargo test --manifest-path gateway-rust/Cargo.toml
-# 可选：兼容侧车历史冒烟（需自备 tools/octopus/octopus.exe）
-# python scripts/e2e-octopus-smoke.py
 ```
 
 ## 已知边界
 
 - **默认网关为 Rust**（`model-hub-gateway`）；安装包内嵌该二进制（见 `gateway/README.md`、`scripts/prepare-bundled-gateway-rust.ps1`）。
-- 公开安装包**不再**内嵌 octopus；Git 不提交 `tools/gateway-rust/` / `tools/octopus/` 大二进制。
+- 公开安装包**不再**内嵌 octopus；Git 不提交 `tools/gateway-rust/` / `tools/gateway-rust/` 大二进制。
 - 渠道 `type` 为 **数字**（OpenAI Chat = `0`）。
 - `/v1/*` 客户端 **必须** 使用网关签发的 `sk-octopus-...` Key（历史前缀）；管理 API 用 JWT。
-- 从旧 octopus 库切换请用 `migrate-octopus` 或新建数据目录；勿混用同一 `data.db`。
+- 从历史 octopus 库导入请用 `migrate-octopus` 或新建数据目录。
 - 开发清理**只结束测试端口/PID**，勿按进程名乱杀。
 - 无真实供应商 Key 时不保证 Chat 200；鉴权闭环以 `/v1/models` 非 401 为准。

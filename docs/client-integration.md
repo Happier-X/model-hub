@@ -86,4 +86,4 @@ print(completion.choices[0].message.content)
 
 ## 许可证
 
-当前发布包**默认内嵌 Rust 原生网关**，不再分发 octopus 二进制。历史/可选兼容侧车说明见 [gateway/README.md](../gateway/README.md) 与根 `README.md`；仓库内 `third-party/octopus/` 仅作参考。
+当前发布包**默认内嵌 Rust 原生网关**，不再分发 octopus 二进制。详见 [gateway/README.md](../gateway/README.md) 与根 `README.md`。

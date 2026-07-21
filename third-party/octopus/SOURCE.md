@@ -21,10 +21,10 @@
 ## 本地校验二进制
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-octopus.ps1
+# historical: scripts/prepare-bundled-octopus.ps1 removed; use upstream release zip if needed
 ```
 
-脚本将下载 zip、校验 SHA-256，并产出 `tools/octopus/octopus.exe`（目录已 gitignore，勿提交）。
+历史脚本已移除。当前产品不下载/启动 octopus；数据导入请用 model-hub-gateway migrate-octopus。
 
 ## 说明
 

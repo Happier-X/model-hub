@@ -55,5 +55,4 @@ $hex = ($hashBytes | ForEach-Object { $_.ToString("x2") }) -join ""
 
 Write-Host "OK: $Target"
 Write-Host "SHA-256: $hex"
-Write-Host "Dev override: `$env:MODEL_HUB_GATEWAY_IMPL = 'rust'"
-Write-Host "              `$env:MODEL_HUB_GATEWAY_RUST_BIN = '$Target'"
+Write-Host "Dev override: `$env:MODEL_HUB_GATEWAY_BIN = '$Target'"
