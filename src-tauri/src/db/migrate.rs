@@ -1,4 +1,4 @@
-//! Schema 迁移（新栈 v1，不兼容旧 gateway-rust 库）。
+//! 当前 Schema v1 迁移；不执行旧版数据库自动迁移。
 
 use rusqlite::Connection;
 

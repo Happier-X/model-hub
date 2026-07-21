@@ -53,4 +53,4 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 - 客户端面：本机 HTTP `/v1/*`
 - 数据：应用数据目录下 SQLite（新 schema，不兼容旧版）
 
-旧 `gateway-rust` 侧车与 React UI 已废弃，不再作为运行时依赖。
+详细组件边界、路由与安全设计见 [当前架构](docs/current-architecture.md)。

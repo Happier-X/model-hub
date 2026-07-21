@@ -5,7 +5,7 @@ import pluginVue from "eslint-plugin-vue";
 import vueParser from "vue-eslint-parser";
 
 export default tseslint.config(
-  { ignores: ["dist", "src-tauri", ".pi", ".trellis", "gateway-rust", "gateway"] },
+  { ignores: ["dist", "src-tauri", ".pi", ".trellis"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

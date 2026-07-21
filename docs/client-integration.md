@@ -1,89 +1,68 @@
-# 客户端对接（MVP）
+# 客户端对接
 
-> 端到端步骤、错误对照与仪表盘自检见 **[Chat 上手与故障排查](./chat-onboarding.md)**。
+Model Hub 对外提供统一的本机 OpenAI 兼容地址。管理操作通过桌面应用完成，外部客户端只访问 `/v1/*`。
 
-## 前提
+## 接入前提
 
-1. **安装版**无需自备网关二进制（内嵌 **model-hub-gateway**，启动时自动部署）。**开发**请见 [gateway/README.md](../gateway/README.md)：`pnpm prepare:gateway-rust` 或设置 `MODEL_HUB_GATEWAY_BIN`。
-2. 运行发行版或 `pnpm tauri dev`，在应用内确认网关状态为 **运行中**。
-3. 在 **渠道** 页创建 OpenAI Chat 兼容上游（Base URL + 上游 API Key + 模型名）。
-4. 在 **分组** 页创建分组，**分组名** 将作为客户端的 `model`；负载默认 **轮询**。
-5. 在 **API 密钥** 页创建网关客户端 Key（前缀 `sk-modelhub-`），创建成功后**完整复制一次**明文。
+1. 在应用内配置供应商。
+2. 创建分组，并为分组配置有序队列。分组名就是对外模型名。
+3. 创建客户端 API Key；明文仅在创建成功时展示一次。
+4. 在概览页确认代理正在运行，并复制 Base URL。
 
-## 两套凭证（务必区分）
+## 地址与鉴权
 
-| 用途 | 凭证 | 获取方式 |
-|------|------|----------|
-| 管理 API（`/api/v1/*`） | （已移除） | 应用静默 `admin` 登录；设置页可粘贴 Token 兜底 |
-| 客户端 OpenAI 兼容（`/v1/*`） | （本地开放无需 Key）（`（本地开放，无需 Key）`） | 应用 **API 密钥** 页创建；Header `Authorization: Bearer ...` 或 `x-api-key` |
-
-**不要**把（已移除） 当作客户端 `api_key`；**不要**使用任意占位字符串——错误 Key 会返回 **401**。
-
-## 默认地址
-
-| 项 | 值 |
-|----|-----|
-| 网关 Base | `http://127.0.0.1:8080` |
-| OpenAI 兼容根 | `http://127.0.0.1:8080/v1` |
-| Chat 路径 | `POST /v1/chat/completions` |
+| 项 | 默认值 |
+|----|--------|
+| Base URL | `http://127.0.0.1:8080` |
+| OpenAI SDK Base URL | `http://127.0.0.1:8080/v1` |
 | 模型列表 | `GET /v1/models` |
+| Chat | `POST /v1/chat/completions` |
 
-监听地址默认 **仅本机** `127.0.0.1`。
+`/v1/*` 强制校验客户端 Key。推荐使用：
 
-**注意**：
+```http
+Authorization: Bearer sk-modelhub-...
+```
 
-- 管理台 JWT 与客户端网关 Key **不是同一套**。
-- `/v1/*` **必须**使用网关签发的客户端 API Key（前缀仍为历史兼容名 `sk-modelhub-`）。
-- 渠道 `type` 为数字；Model Hub 创建 OpenAI Chat 时使用 `type: 0`。
+同时兼容 `api-key` 或 `x-api-key` 请求头。代理默认仅监听 `127.0.0.1`。
 
 ## curl 示例
 
-将 `` 换成你在 **API 密钥** 页复制的完整 Key；将 `your-group-name` 换成分组名。
-
 ```bash
-# 探测鉴权（期望非 401；空模型列表可接受）
 curl http://127.0.0.1:8080/v1/models \
- -H "Authorization: Bearer "
+  -H "Authorization: Bearer sk-modelhub-..."
 
-# Chat 转发（需已配置渠道 + 分组 + 真实上游 Key）
 curl http://127.0.0.1:8080/v1/chat/completions \
- -H "Content-Type: application/json" \
- -H "Authorization: Bearer " \
- -d "{
-  \"model\": \"your-group-name\",
-  \"messages\": [{\"role\": \"user\", \"content\": \"你好\"}]
- }"
+  -H "Authorization: Bearer sk-modelhub-..." \
+  -H "Content-Type: application/json" \
+  -d '{"model":"你的分组名","messages":[{"role":"user","content":"你好"}]}'
 ```
 
-## Python（OpenAI SDK）
+## OpenAI Python SDK
 
 ```python
 from openai import OpenAI
 
 client = OpenAI(
-  base_url="http://127.0.0.1:8080/v1",
-  api_key="", # （本地开放无需 Key），非（已移除）
+    base_url="http://127.0.0.1:8080/v1",
+    api_key="sk-modelhub-...",
 )
 
 completion = client.chat.completions.create(
-  model="your-group-name",
-  messages=[{"role": "user", "content": "你好"}],
+    model="你的分组名",
+    messages=[{"role": "user", "content": "你好"}],
 )
 print(completion.choices[0].message.content)
 ```
 
-## 管理 API 说明
+流式调用只需增加 `stream=True`。Model Hub 在首个数据块提交给客户端之前可以自动换源；提交后只透传当前上游，不会混合两路响应。
 
-桌面管理 UI **无登录页**，在网关运行后会静默调用：
+## 路由规则
 
-`POST /api/v1/user/login`（默认 `admin` / `admin`）
+- 客户端 `model` 对应分组名，而不是上游模型名。
+- 队列从第一项开始按顺序尝试。
+- 自动故障转移开启后，网络错误、超时和可重试的上游错误会触发下一项。
+- 明确不可重试的请求错误不会盲目换源。
+- 连续失败会触发默认熔断；恢复等待结束后进行半开探测。
 
-业务管理接口形如 `/api/v1/channel/*`、`/api/v1/group/*`、`/api/v1/apikey/*`、`/api/v1/log/*`，需要 Bearer **管理 Token**。若你修改了默认管理密码，请在应用 **设置** 中粘贴有效管理 Token。
-
-创建网关客户端 Key：
-
-`POST /api/v1/apikey/create`，body 最小示例：`{"name":"local-client","enabled":true}`（需（已移除））。响应中的 `api_key` 仅完整展示一次。
-
-## 说明
-
-当前发布包内嵌 Rust 原生网关。详见 [gateway/README.md](../gateway/README.md) 与根 `README.md`。
+桌面管理数据只经 Tauri IPC 读写，不提供旧式 HTTP 管理接口。

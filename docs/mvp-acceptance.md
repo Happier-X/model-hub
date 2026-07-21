@@ -1,55 +1,45 @@
-# M1 验收清单
+# MVP 验收清单
 
-对照父任务 `07-17-tauri-port-octopus` 的 MVP 验收项，并含（本地开放无需 Key） 鉴权闭环。
-
-| ID | 标准 | 状态 | 说明 |
-|----|------|------|------|
-| AC1 | Windows 启动；管理 UI **无需登录** | 代码完成 | 无登录页；静默 admin + Token 兜底 |
-| AC2 | OpenAI 渠道 + 分组 Chat 转发 | 代码完成 / 环境待验 | 安装版内嵌 model-hub-gateway；开发需 `pnpm prepare:gateway-rust` 或 `MODEL_HUB_GATEWAY_BIN`；Chat 需真实上游 Key |
-| AC3 | 至少一种负载策略 | 代码完成 | 分组默认 **轮询 (mode=1)** |
-| AC4 | 基础请求日志；正常退出停侧车 | 代码完成 | 日志轮询 list；Exit 时 stop 托管进程 |
-| AC5 | SQLite；目录可发现 | 代码完成 | `get_paths` + 设置页路径；DB 在 gateway_dir |
-| AC6 | 启停/健康检查；端口占用可提示 | 代码完成 | 缺 exe / 端口占用有错误文案 |
-| AC7 | （本地开放无需 Key） 管理与客户端鉴权 | 代码完成 | UI 创建/列表/删除；`GET /v1/models` 非 401 |
-| AC8 | 仪表盘配置检查清单 | 代码完成 | 网关/鉴权/渠道/分组/Key 状态 + 客户端 curl 模板 |
-| AC9 | 渠道编辑与 Key 显示 | 代码完成 | 改 name/URL/model/轮换 Key；列表脱敏可显示；删除确认 |
-| AC10 | 分组绑定可读与编辑 | 代码完成 | 列表展示渠道+model_name；改名/换绑；删除确认 |
-| AC11 | Chat 上手文档与客户端自检 | 代码完成 | `docs/chat-onboarding.md`；仪表盘用 sk-modelhub 测 /v1 |
-| AC12 | 日志分页/过滤/详情 | 代码完成 | 分页、当前页过滤、详情展开、清空确认、自动刷新可关 |
-| AC13 | 托盘与关窗隐藏 | 代码完成 | 关窗隐藏到托盘；托盘退出才停托管网关 |
-
-## 手工验收步骤
-
-1. `pnpm install`
-2. 安装版可跳过；开发执行 `pnpm prepare:gateway-rust` 或设置 `MODEL_HUB_GATEWAY_BIN`
-3. `pnpm tauri dev`
-4. 仪表盘 → 查看配置检查清单（网关未启动时 3–5 应为「等待前置」）
-5. 设置 → 启动网关 → 状态「运行中」
-6. 渠道 → 创建 OpenAI Chat 渠道
-7. 分组 → 创建分组并绑定渠道
-8. **API 密钥** → 创建密钥 → 复制完整 `（本地开放，无需 Key）`
-9. 返回仪表盘确认步骤 1–5 为已完成；复制 curl 模板
-10. 使用 [client-integration.md](./client-integration.md) 或 [chat-onboarding.md](./chat-onboarding.md)，以该 Key 调用 `GET /v1/models`（期望非 401）
-11. 仪表盘「客户端路径自检」粘贴 Key；可选填分组名测 chat
-12. （可选）有真实上游时发起 Chat；无上游时业务错误可接受
-13. 日志页查看是否出现记录
-14. 关闭主窗口：确认应用隐藏到托盘且侧车仍运行；托盘「显示」恢复窗口；托盘「退出」后确认侧车进程结束（任务管理器）
+本清单对应 Vue 3 管理台、Tauri 2 桌面壳与进程内 Rust 代理。
 
 ## 自动化验证
 
-```bash
+```powershell
+pnpm install
 pnpm lint
-pnpm build
-cargo test --manifest-path src-tauri/Cargo.toml
-cargo check --manifest-path src-tauri/Cargo.toml
-cargo test --manifest-path gateway-rust/Cargo.toml
+pnpm typecheck
+cd src-tauri
+cargo test
+cargo check
 ```
 
-## 已知边界
+## 手工验收
 
-- **默认网关为 Rust**（`model-hub-gateway`）；安装包内嵌该二进制（见 `gateway/README.md`、`scripts/prepare-bundled-gateway-rust.ps1`）。
-- Git 不提交 `tools/gateway-rust/` 大二进制。
-- 渠道 `type` 为 **数字**（OpenAI Chat = `0`）。
-- `/v1/*` 客户端 **必须** 使用网关签发的 `（本地开放，无需 Key）` Key；管理 API 用 JWT。
-- 开发清理**只结束测试端口/PID**，勿按进程名乱杀。
-- 无真实供应商 Key 时不保证 Chat 200；鉴权闭环以 `/v1/models` 非 401 为准。
+| ID | 验收项 | 操作与期望 |
+|----|--------|------------|
+| AC1 | 本机监听与端口配置 | 启动应用；概览页显示 `127.0.0.1`、端口与 Base URL；修改端口后可重新启动 |
+| AC2 | 强制客户端 Key | 无 Key 调用 `/v1/models` 和 `/v1/chat/completions`，均返回 401 |
+| AC3 | 模型列表 | 创建有效 Key 与分组；`GET /v1/models` 返回分组名 |
+| AC4 | 模型改写 | 分组名与上游模型名设为不同值；确认上游收到队列条目的上游模型名 |
+| AC5 | 有序队列 | 在分组页新增、删除、上移或下移条目；刷新后顺序保持 |
+| AC6 | 自动故障转移 | 第一条配置为失败上游，第二条为可用上游；开启后请求成功，关闭后不尝试第二条 |
+| AC7 | 默认熔断 | 让同一供应商连续失败达到阈值；健康状态显示熔断，后续请求跳过它；等待恢复后可半开探测 |
+| AC8 | 响应边界 | 非流式完整读取后返回；流式在首个数据块前可换源，输出开始后不拼接其他上游 |
+| AC9 | 日志 | 日志页可见时间、供应商、状态、耗时及故障转移来源、目标和原因 |
+| AC10 | 管理 CRUD | 完成供应商、分组、客户端 Key 的创建、编辑、启停与删除 |
+| AC11 | 生命周期 | 应用启动时代理自动启动；概览页可启停；退出应用后监听端口释放 |
+| AC12 | 架构独立 | 开发与构建仅需根前端和 `src-tauri`，不需要额外代理程序或旧管理接口 |
+
+## 推荐故障转移场景
+
+1. 创建两个供应商：第一个指向必定返回 5xx 的测试服务，第二个指向正常 OpenAI 兼容服务。
+2. 创建分组，按上述顺序加入两个队列条目并开启自动故障转移。
+3. 创建客户端 Key，使用分组名发起非流式 Chat。
+4. 确认请求最终成功，日志记录从第一供应商转移到第二供应商及失败原因。
+5. 对流式请求重复测试，确认首个数据块出现前允许转移，开始输出后不混合响应。
+
+## 安全检查
+
+- 客户端 Key 只在创建时显示一次，数据库仅保存哈希和脱敏值。
+- 请求日志不包含完整客户端 Key、上游 Key 或消息正文。
+- 默认监听地址为 `127.0.0.1`。

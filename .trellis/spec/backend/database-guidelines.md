@@ -11,7 +11,7 @@
 | 引擎 | **SQLite only** |
 | 位置 | 应用数据目录（代理 `gateway_dir` 下 `data.db` 或等价） |
 | 所有者 | 进程内代理 / domain 层读写 |
-| 迁移 | 新栈 schema v1；**不**兼容旧 gateway-rust 库自动迁移 |
+| 迁移 | 当前 schema v1；不执行旧版数据库自动迁移 |
 
 ---
 

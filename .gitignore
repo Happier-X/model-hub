@@ -32,7 +32,6 @@ Thumbs.db
 
 # Rust / Tauri
 src-tauri/target/
-gateway-rust/target/
 src-tauri/gen/schemas/
 src-tauri/WixTools/
 src-tauri/*.log
@@ -45,11 +44,9 @@ tmp/
 temp/
 .cache/
 
-# 本地下载/构建的侧车二进制（勿提交）
-tools/gateway-rust/
+# Windows 可执行构建产物（图标资源除外）
 *.exe
 !src-tauri/icons/**
 
-# Windows reserved name artifact (do not commit)
+# Windows 保留名称产生的意外文件
 nul
-tools/octopus/

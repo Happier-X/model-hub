@@ -36,9 +36,7 @@ jobs:
       - name: Cache cargo
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: |
-            src-tauri
-            gateway-rust
+          workspaces: src-tauri
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
@@ -49,10 +47,6 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
             throw "缺少 GitHub Secret TAURI_SIGNING_PRIVATE_KEY，拒绝发布未签名更新包。"
           }
-
-      - name: Prepare bundled gateway-rust (cargo release + copy)
-        shell: pwsh
-        run: powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-gateway-rust.ps1
 
       - name: Build and release Tauri updater assets
         uses: tauri-apps/tauri-action@v0
@@ -65,8 +59,8 @@ jobs:
           releaseName: Model Hub ${{ github.ref_name }}
           releaseBody: |
             请先阅读随 Release 附件提供的中文发布说明与 SHA256SUMS.txt。
-            本版本默认网关为 gateway-rust（model-hub-gateway）；发布包不再内嵌 octopus 二进制。
-            本版本支持设置页手动检查更新；更新包必须通过 Tauri 签名校验。
+            本版本包含 Vue 3 管理台与 Tauri 进程内 Rust 代理。
+            更新资产必须通过 Tauri 签名校验。
           releaseDraft: false
           prerelease: false
           uploadUpdaterJson: true
@@ -121,7 +115,7 @@ jobs:
           body: |
 
             发布说明与 SHA-256 已作为附件上传。Updater 使用 Tauri 签名校验。
-            默认网关为 gateway-rust；发布包不再内嵌 octopus / AGPL 侧车二进制。
+            应用包含 Vue 3 管理台与 Tauri 进程内 Rust 代理。
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

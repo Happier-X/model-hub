@@ -13,12 +13,12 @@
 |------|------|------|
 | 桌面壳 | 窗口、生命周期、数据目录、托盘、代理启停 | Tauri 2 + Rust |
 | 内嵌代理 | OpenAI 兼容 `/v1/*`、故障转移、熔断、SQLite | `src-tauri/src/proxy` + `domain` + `db` |
-| 持久化（MVP） | 供应商/分组/客户端 Key/请求日志 | **仅 SQLite**（新 schema，不兼容旧 gateway-rust） |
+| 持久化（MVP） | 供应商/分组/客户端 Key/请求日志 | **仅 SQLite**（当前 schema 不执行旧数据自动迁移） |
 
 - 管理 UI **无登录**；数据经 **Tauri commands**。
 - 默认监听 **`127.0.0.1`**。
 - 客户端 `/v1/*` **强制** API Key（`Authorization: Bearer sk-modelhub-...` 或等价头）。
-- **废弃**：独立 `gateway-rust` 侧车、React 管理 UI、旧管理 HTTP 契约。
+- 代理始终作为 Tauri 进程内模块运行；管理面不暴露 HTTP CRUD 契约。
 
 ---
 

@@ -29,7 +29,6 @@
 │   ├── tauri.conf.json
 │   └── tauri.release.conf.json
 ├── src/                       # Vue 3 管理 UI
-├── gateway-rust/              # 历史侧车，非运行时依赖（可删/归档）
 └── .trellis/
 ```
 
@@ -111,6 +110,6 @@
 
 ## Anti-Patterns
 
-- 再引入独立侧车 exe 作为默认运行时。
+- 再引入独立代理进程作为默认运行时。
 - 管理 CRUD 只暴露不可调试的隐式全局状态。
 - 提交 `tools/**/*.exe` 到 Git。

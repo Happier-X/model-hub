@@ -19,4 +19,4 @@ pnpm typecheck
 
 - 提交 `.env` 含真实 Key。
 - 引入 Next 专用 API。
-- 恢复 React 运行时依赖作为默认 UI。
+- 引入与 Vue 3 当前架构重复的前端运行时或状态框架。

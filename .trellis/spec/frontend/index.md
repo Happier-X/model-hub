@@ -28,7 +28,7 @@
 |-------|-------------|
 | [Directory Structure](./directory-structure.md) | 页面/组件/API |
 | [Component Guidelines](./component-guidelines.md) | 组件与布局 |
-| [Hook Guidelines](./hook-guidelines.md) | 组合式函数（历史命名） |
+| [组合式函数规范](./hook-guidelines.md) | Vue 组合式函数与生命周期 |
 | [State Management](./state-management.md) | 本地状态约定 |
 | [Type Safety](./type-safety.md) | TS 与 invoke 类型 |
 | [Quality Guidelines](./quality-guidelines.md) | 质量底线 |

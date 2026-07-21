@@ -1,74 +1,68 @@
 # Chat 上手与故障排查
 
-从零把 **OpenAI 兼容客户端** 接到本机 Model Hub（默认 **Rust 原生网关**）并跑通 Chat。
+本文介绍如何把 OpenAI 兼容客户端接入本机 Model Hub，并验证模型列表、非流式 Chat 与流式 Chat。
 
-## 你需要准备
+## 准备工作
 
-| 项 | 说明 |
-|----|------|
-| Windows + Model Hub | 安装版或 `pnpm tauri dev` |
-| 内置网关 | 安装版已内嵌 **model-hub-gateway**；开发见 [gateway/README.md](../gateway/README.md) |
-| **真实上游 API Key** | 渠道里的供应商 Key（假 Key 只能测鉴权，Chat 通常业务失败） |
-| 网关客户端 Key | 应用 **API 密钥** 页创建的 `（本地开放，无需 Key）` |
+1. 安装并启动 Model Hub，或在源码目录运行 `pnpm tauri dev`。
+2. 在「供应商」页创建至少一个 OpenAI 兼容上游，填写 Base URL、上游 API Key。
+3. 在「分组」页创建分组：
+   - 分组名就是客户端请求中的 `model`；
+   - 队列条目选择供应商并填写对应的上游模型名；
+   - 多个条目按从上到下的顺序尝试；
+   - 需要失败后自动尝试下一条时，开启自动故障转移。
+4. 在「API 密钥」页创建客户端 Key，并立即保存仅展示一次的明文。
+5. 在「概览」页确认代理为「运行中」，复制 Base URL。默认地址是 `http://127.0.0.1:8080`。
 
-## 五分钟配置
+## 验证模型列表
 
-1. **设置** → 启动网关 → 状态「运行中」。 
-2. **渠道** → 新建 OpenAI Chat（`type=0`）：真实 Base URL + **真实上游 Key** + 上游模型名。 
-3. **分组** → 新建分组： 
-  - **分组名** = 客户端请求里的 `model` 
-  - 绑定渠道，`model_name` = 上游真实模型 
-4. **API 密钥** → 创建并**完整复制一次** `（本地开放，无需 Key）`（与设置页（已移除） **不是**同一套）。 
-5. **仪表盘** → 确认检查清单 1–5 完成；或使用「客户端路径自检」。
-
-## 验证鉴权：`GET /v1/models`
+将示例 Key 替换为刚创建的完整客户端 Key：
 
 ```bash
-curl -sS "http://127.0.0.1:8080/v1/models" \
- -H "Authorization: Bearer "
+curl -i http://127.0.0.1:8080/v1/models \
+  -H "Authorization: Bearer sk-modelhub-..."
 ```
 
-- **期望**：HTTP **非 401**（常见 200；`data` 为空也可能）。 
-- **401**：Key 错、用了（已移除）、或未创建网关 Key。
+期望返回 HTTP 200，`data[].id` 是已配置的分组名。没有有效 Key 时应返回 HTTP 401。
 
-## 验证 Chat：`POST /v1/chat/completions`
-
-将 `your-group-name` 换成**分组名**（不是上游模型名）：
+## 验证非流式 Chat
 
 ```bash
-curl -sS "http://127.0.0.1:8080/v1/chat/completions" \
- -H "Authorization: Bearer " \
- -H "Content-Type: application/json" \
- -d "{\"model\":\"your-group-name\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+curl http://127.0.0.1:8080/v1/chat/completions \
+  -H "Authorization: Bearer sk-modelhub-..." \
+  -H "Content-Type: application/json" \
+  -d '{"model":"你的分组名","messages":[{"role":"user","content":"你好"}]}'
 ```
 
-- **200 + choices**：真上游转发成功。 
-- **非 401 的 4xx/5xx**（如 502）：**鉴权已过**，查上游 Key、Base URL、分组绑定、`model_name`。 
-- **无真实上游时不保证 200**；产品鉴权闭环以 models 非 401 为准。
+客户端的 `model` 必须填写分组名。Model Hub 会在转发前将其替换为当前队列条目的上游模型名。
 
-## 错误对照
+## 验证流式 Chat
 
-| 现象 | 常见原因 | 处理 |
-|------|----------|------|
-| 连接失败 / status 0 | 网关未启动、端口不对 | 设置启动；Base 默认 `http://127.0.0.1:8080` |
-| **401** Authentication failed | 占位 Key、（已移除）、Key 禁用/过期 | API 密钥页创建并复制完整 `（本地开放，无需 Key）` |
-| models **200** 但列表空 | 尚无分组或路由未就绪 | 建分组并绑定渠道；再测 chat |
-| chat **非 401** 业务错误 | 上游 Key 无效、URL 错、`model_name` 不匹配、无绑定 | 渠道编辑轮换上游 Key；分组页核对绑定 |
-| chat 提示 model 不存在 | 客户端 `model` 填成了上游名 | 改成**分组名** |
-| 管理 API 401 | 静默 admin 失败或改密 | 设置页粘贴管理 Token（仅管理端） |
+```bash
+curl -N http://127.0.0.1:8080/v1/chat/completions \
+  -H "Authorization: Bearer sk-modelhub-..." \
+  -H "Content-Type: application/json" \
+  -d '{"model":"你的分组名","stream":true,"messages":[{"role":"user","content":"你好"}]}'
+```
 
-## 仪表盘「客户端路径自检」
+流式请求在向客户端提交首个数据块前允许换源；一旦开始向客户端输出，就不会拼接另一家供应商的后半段响应。
 
-1. 打开 **仪表盘** → **客户端路径自检**。 
-2. 粘贴（本地开放无需 Key）（**不要**粘（已移除））。 
-3. 可选填分组名 → **运行自检**。 
-4. 解读： 
-  - models **401** → Key 问题 
-  - models 成功 + chat **非 401** → 鉴权 OK；若 chat 非 200，按上表查上游/分组 
-5. Key **仅内存**，不写 localStorage。
+## 常见问题
+
+| 现象 | 常见原因 | 处理方式 |
+|------|----------|----------|
+| 无法连接 | 代理未运行或端口错误 | 在概览页启动代理并核对 Base URL |
+| HTTP 401 | Key 缺失、错误、禁用或已删除 | 创建或启用客户端 Key，并发送 `Authorization: Bearer ...` |
+| 模型列表为空 | 尚未创建分组 | 创建分组并配置至少一个队列条目 |
+| 提示模型不存在 | `model` 使用了上游模型名 | 改为分组名 |
+| Chat 返回上游错误 | Base URL、上游 Key 或模型名错误 | 检查供应商与队列条目；在日志页查看错误摘要 |
+| 主供应商失败后未换源 | 自动故障转移关闭或没有备用条目 | 开启自动故障转移并配置多个有序条目 |
+| 某供应商被跳过 | 连续失败触发熔断 | 在健康状态中确认；等待恢复窗口后会进入半开探测 |
+
+日志不会保存完整客户端 Key、上游 Key 或消息正文。
 
 ## 相关文档
 
-- [客户端对接（接口说明）](./client-integration.md) 
-- [M1 验收清单](./mvp-acceptance.md) 
-- [网关侧车](../gateway/README.md) 
+- [客户端对接](./client-integration.md)
+- [MVP 验收清单](./mvp-acceptance.md)
+- [当前架构](./current-architecture.md)
