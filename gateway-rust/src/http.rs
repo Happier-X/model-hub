@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
-use axum::http::StatusCode;
+use axum::http::{Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::Serialize;
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::apikey::{ApiKeyStore, MemoryApiKeyStore, SqliteApiKeyStore};
 use crate::auth::AuthService;
@@ -187,10 +188,24 @@ pub fn build_router(state: AppState) -> Router {
             post(routes::chat_completions_handler),
         );
 
+    // 桌面 WebView（tauri.localhost / localhost:1420）通过 fetch 访问本机网关需 CORS，
+    // 否则会表现为 Failed to fetch，尽管 curl 正常、状态条显示 running。
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers(Any);
+
     public
         .merge(admin)
         .merge(client)
         .fallback(not_found_handler)
+        .layer(cors)
         .with_state(state)
 }
 

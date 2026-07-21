@@ -96,7 +96,10 @@ async function gatewayRequest<T>(
     response = await fetch(url, init);
   } catch (cause: unknown) {
     const detail = cause instanceof Error ? cause.message : String(cause);
-    throw new GatewayHttpError(`无法连接网关（${detail}）。请确认网关已启动。`, 0);
+    throw new GatewayHttpError(
+      `无法连接网关（${detail}）。请确认状态条显示运行中，且请求地址与设置端口一致（默认 127.0.0.1）。若 8080 被其他程序占用，请在设置中更换端口。`,
+      0,
+    );
   }
 
   const data = await parseBody(response);
