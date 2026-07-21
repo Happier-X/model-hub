@@ -68,6 +68,21 @@ export async function listChannels(): Promise<Channel[]> {
   }));
 }
 
+/** 代理探测上游 OpenAI 兼容 models 列表。 */
+export async function probeUpstreamModels(input: {
+  baseUrl: string;
+  apiKey: string;
+}): Promise<string[]> {
+  const data = await gatewayHttp.post<{ models: string[] }>(
+    "/api/v1/channel/probe-models",
+    {
+      base_url: input.baseUrl.replace(/\/$/, ""),
+      api_key: input.apiKey,
+    },
+  );
+  return data?.models ?? [];
+}
+
 export async function createOpenAiChatChannel(
   input: CreateChannelInput,
 ): Promise<unknown> {

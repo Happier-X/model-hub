@@ -156,6 +156,10 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/v1/channel/list", get(routes::list_channel_handler))
         .route(
+            "/api/v1/channel/probe-models",
+            post(routes::probe_models_handler),
+        )
+        .route(
             "/api/v1/channel/create",
             post(routes::create_channel_handler),
         )

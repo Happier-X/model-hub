@@ -156,6 +156,12 @@ pub fn build_chat_url(base_url: &str) -> String {
     format!("{base}/chat/completions")
 }
 
+/// 拼接上游 OpenAI 兼容 models 列表 URL：`{base_url 去尾斜杠}/models`。
+pub fn build_models_url(base_url: &str) -> String {
+    let base = base_url.trim().trim_end_matches('/');
+    format!("{base}/models")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

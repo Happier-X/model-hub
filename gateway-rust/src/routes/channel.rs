@@ -3,6 +3,7 @@
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use serde::{Deserialize, Serialize};
 
 use crate::auth::AdminAuth;
 use crate::channel::{
@@ -10,6 +11,7 @@ use crate::channel::{
 };
 use crate::http::AppState;
 use crate::response::{bad_request, not_found_api, DataEnvelope};
+use crate::upstream::UpstreamError;
 
 fn map_channel_err(err: ChannelError) -> Response {
     match err {
@@ -24,6 +26,38 @@ pub async fn list_channel_handler(_auth: AdminAuth, State(state): State<AppState
     match state.channels.list() {
         Ok(list) => DataEnvelope::new(list).into_response(),
         Err(err) => map_channel_err(err),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ProbeModelsRequest {
+    pub base_url: String,
+    #[serde(default)]
+    pub api_key: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProbeModelsData {
+    pub models: Vec<String>,
+}
+
+/// 代理探测上游 OpenAI 兼容 `GET {base_url}/models`，供创建渠道时选模型。
+pub async fn probe_models_handler(
+    _auth: AdminAuth,
+    State(state): State<AppState>,
+    Json(body): Json<ProbeModelsRequest>,
+) -> Response {
+    let base_url = body.base_url.trim();
+    if base_url.is_empty() {
+        return bad_request("Base URL 不能为空");
+    }
+    if !(base_url.starts_with("http://") || base_url.starts_with("https://")) {
+        return bad_request("Base URL 须以 http:// 或 https:// 开头");
+    }
+
+    match state.upstream.fetch_models(base_url, &body.api_key).await {
+        Ok(models) => DataEnvelope::new(ProbeModelsData { models }).into_response(),
+        Err(UpstreamError::Network(message)) => bad_request(message),
     }
 }
 

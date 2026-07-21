@@ -6,6 +6,7 @@ import {
   listChannels,
   maskSecret,
   primaryChannelKey,
+  probeUpstreamModels,
   setChannelEnabled,
   updateOpenAiChatChannel,
   type Channel,
@@ -32,9 +33,13 @@ export function ChannelsPage({ running }: ChannelsPageProps) {
   const [baseUrl, setBaseUrl] = useState("https://api.openai.com/v1");
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("gpt-4o-mini");
+  const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const [probingModels, setProbingModels] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
+  const [editModelOptions, setEditModelOptions] = useState<string[]>([]);
+  const [editProbingModels, setEditProbingModels] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
   const [revealedKeyIds, setRevealedKeyIds] = useState<Set<number>>(() => new Set());
   const [copyHint, setCopyHint] = useState<string | null>(null);
@@ -81,12 +86,62 @@ export function ChannelsPage({ running }: ChannelsPageProps) {
       model: channel.model,
       apiKey: "",
     });
+    setEditModelOptions(channel.model ? [channel.model] : []);
     setCopyHint(null);
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setEditDraft(null);
+    setEditModelOptions([]);
+  };
+
+  const onProbeCreateModels = async () => {
+    setError(null);
+    setProbingModels(true);
+    try {
+      const models = await probeUpstreamModels({ baseUrl, apiKey });
+      setModelOptions(models);
+      if (models.length === 0) {
+        setError("上游返回空模型列表。可检查 Base URL / Key，或手动填写模型名。");
+      } else if (!models.includes(model)) {
+        setModel(models[0]);
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setProbingModels(false);
+    }
+  };
+
+  const onProbeEditModels = async () => {
+    if (!editDraft) {
+      return;
+    }
+    setError(null);
+    setEditProbingModels(true);
+    try {
+      const key =
+        editDraft.apiKey.trim() ||
+        primaryChannelKey(
+          channels.find((c) => c.id === editingId) as Channel,
+        )?.channel_key ||
+        "";
+      const models = await probeUpstreamModels({
+        baseUrl: editDraft.baseUrl,
+        apiKey: key,
+      });
+      setEditModelOptions(models);
+      if (models.length === 0) {
+        setError("上游返回空模型列表。可检查 Base URL / Key，或手动填写模型名。");
+      } else if (!models.includes(editDraft.model)) {
+        setEditDraft({ ...editDraft, model: models[0] });
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setEditProbingModels(false);
+    }
   };
 
   const onSaveEdit = async (channel: Channel) => {
@@ -194,15 +249,6 @@ export function ChannelsPage({ running }: ChannelsPageProps) {
                 required
               />
             </label>
-            <label className="block text-sm">
-              <span className="font-medium text-slate-700">上游模型名</span>
-              <input
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                required
-              />
-            </label>
             <label className="block text-sm md:col-span-2">
               <span className="font-medium text-slate-700">Base URL</span>
               <input
@@ -231,6 +277,41 @@ export function ChannelsPage({ running }: ChannelsPageProps) {
                   {showKey ? "隐藏" : "显示"}
                 </button>
               </div>
+            </label>
+            <label className="block text-sm md:col-span-2">
+              <span className="font-medium text-slate-700">上游模型名</span>
+              <div className="mt-1 flex flex-col gap-2 sm:flex-row">
+                <input
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                  list="create-channel-model-options"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  required
+                  placeholder="可拉取后选择，或手动填写"
+                />
+                <button
+                  type="button"
+                  disabled={probingModels || !baseUrl.trim() || !apiKey.trim()}
+                  onClick={() => void onProbeCreateModels()}
+                  className="shrink-0 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-medium text-cyan-800 hover:bg-cyan-100 disabled:opacity-50"
+                >
+                  {probingModels ? "拉取中…" : "拉取模型列表"}
+                </button>
+              </div>
+              <datalist id="create-channel-model-options">
+                {modelOptions.map((id) => (
+                  <option key={id} value={id} />
+                ))}
+              </datalist>
+              {modelOptions.length > 0 ? (
+                <p className="mt-1 text-xs text-slate-500">
+                  已拉取 {modelOptions.length} 个模型，可从输入建议中选择。
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-slate-500">
+                  填写 Base URL 与上游 Key 后点击「拉取模型列表」（调用上游 GET /models）。
+                </p>
+              )}
             </label>
           </div>
           <button
@@ -356,17 +437,6 @@ export function ChannelsPage({ running }: ChannelsPageProps) {
                               required
                             />
                           </label>
-                          <label className="block text-sm">
-                            <span className="font-medium text-slate-700">上游模型名</span>
-                            <input
-                              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
-                              value={editDraft.model}
-                              onChange={(e) =>
-                                setEditDraft({ ...editDraft, model: e.target.value })
-                              }
-                              required
-                            />
-                          </label>
                           <label className="block text-sm md:col-span-2">
                             <span className="font-medium text-slate-700">Base URL</span>
                             <input
@@ -380,7 +450,7 @@ export function ChannelsPage({ running }: ChannelsPageProps) {
                           </label>
                           <label className="block text-sm md:col-span-2">
                             <span className="font-medium text-slate-700">
-                              上游 API Key（留空则不修改）
+                              上游 API Key（留空则用已保存 Key 拉取；填写则轮换）
                             </span>
                             <input
                               type="password"
@@ -392,6 +462,33 @@ export function ChannelsPage({ running }: ChannelsPageProps) {
                               placeholder="填写新 Key 以轮换"
                               autoComplete="off"
                             />
+                          </label>
+                          <label className="block text-sm md:col-span-2">
+                            <span className="font-medium text-slate-700">上游模型名</span>
+                            <div className="mt-1 flex flex-col gap-2 sm:flex-row">
+                              <input
+                                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
+                                list={`edit-channel-model-options-${channel.id}`}
+                                value={editDraft.model}
+                                onChange={(e) =>
+                                  setEditDraft({ ...editDraft, model: e.target.value })
+                                }
+                                required
+                              />
+                              <button
+                                type="button"
+                                disabled={editProbingModels || !editDraft.baseUrl.trim()}
+                                onClick={() => void onProbeEditModels()}
+                                className="shrink-0 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-medium text-cyan-800 hover:bg-cyan-100 disabled:opacity-50"
+                              >
+                                {editProbingModels ? "拉取中…" : "拉取模型列表"}
+                              </button>
+                            </div>
+                            <datalist id={`edit-channel-model-options-${channel.id}`}>
+                              {editModelOptions.map((id) => (
+                                <option key={id} value={id} />
+                              ))}
+                            </datalist>
                           </label>
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">

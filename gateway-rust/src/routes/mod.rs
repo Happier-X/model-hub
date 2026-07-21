@@ -14,7 +14,7 @@ pub use apikey::{
 };
 pub use channel::{
     create_channel_handler, delete_channel_handler, enable_channel_handler, list_channel_handler,
-    update_channel_handler,
+    probe_models_handler, update_channel_handler,
 };
 pub use group::{
     create_group_handler, delete_group_handler, list_group_handler, update_group_handler,

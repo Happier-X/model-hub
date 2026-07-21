@@ -1,6 +1,6 @@
 [package]
 name = "model-hub"
-version = "0.0.7"
+version = "0.0.8"
 description = "Model Hub 桌面管理应用"
 authors = ["Model Hub Contributors"]
 edition = "2021"

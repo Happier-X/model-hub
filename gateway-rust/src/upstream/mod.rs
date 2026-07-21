@@ -11,7 +11,7 @@ use reqwest::Client;
 use serde_json::Value;
 
 use crate::response::AuthErrorBody;
-use crate::router::{build_chat_url, RouteTarget};
+use crate::router::{build_chat_url, build_models_url, RouteTarget};
 
 /// 非流式上游整包超时（秒）。
 pub const DEFAULT_UPSTREAM_TIMEOUT_SECS: u64 = 60;
@@ -57,6 +57,47 @@ impl UpstreamClient {
 
     pub fn with_default_timeout() -> Self {
         Self::new(DEFAULT_UPSTREAM_TIMEOUT_SECS).expect("default reqwest client")
+    }
+
+    /// 探测上游 OpenAI 兼容 `GET {base}/models`，返回模型 id 列表。
+    pub async fn fetch_models(
+        &self,
+        base_url: &str,
+        api_key: &str,
+    ) -> Result<Vec<String>, UpstreamError> {
+        let url = build_models_url(base_url);
+        tracing::info!(%url, "探测上游 models");
+
+        let mut request = self.client.get(&url).header("Accept", "application/json");
+        let key = api_key.trim();
+        if !key.is_empty() {
+            request = request.header("Authorization", format!("Bearer {key}"));
+        }
+
+        let response = request.send().await.map_err(|err| {
+            tracing::warn!(error = %err, %url, "上游 models 网络请求失败");
+            UpstreamError::Network(format!("上游 models 请求失败: {err}"))
+        })?;
+
+        let status = response.status();
+        let text = response.text().await.map_err(|err| {
+            UpstreamError::Network(format!("读取上游 models 响应失败: {err}"))
+        })?;
+
+        if !status.is_success() {
+            let snippet: String = text.chars().take(200).collect();
+            return Err(UpstreamError::Network(format!(
+                "上游 models 返回 HTTP {}：{}",
+                status.as_u16(),
+                snippet
+            )));
+        }
+
+        let value: Value = serde_json::from_str(&text).map_err(|err| {
+            UpstreamError::Network(format!("解析上游 models JSON 失败: {err}"))
+        })?;
+
+        Ok(extract_model_ids(&value))
     }
 
     /// 非流式转发 chat completions。
@@ -275,6 +316,38 @@ fn header_pair_from_value(item: &Value) -> Option<(String, String)> {
     Some((name.to_string(), value.to_string()))
 }
 
+/// 从 OpenAI 兼容 models 响应中提取 id 列表。
+pub fn extract_model_ids(value: &Value) -> Vec<String> {
+    let mut ids = Vec::new();
+    if let Some(arr) = value.get("data").and_then(|v| v.as_array()) {
+        for item in arr {
+            if let Some(id) = item.get("id").and_then(|v| v.as_str()) {
+                let id = id.trim();
+                if !id.is_empty() {
+                    ids.push(id.to_string());
+                }
+            }
+        }
+    } else if let Some(arr) = value.as_array() {
+        for item in arr {
+            if let Some(id) = item.as_str() {
+                let id = id.trim();
+                if !id.is_empty() {
+                    ids.push(id.to_string());
+                }
+            } else if let Some(id) = item.get("id").and_then(|v| v.as_str()) {
+                let id = id.trim();
+                if !id.is_empty() {
+                    ids.push(id.to_string());
+                }
+            }
+        }
+    }
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
 /// 改写发往上游的 body：`model` → 上游模型名。
 /// - `stream=true` 路径保留 `stream: true`
 /// - 非流式去掉 `stream` 字段
@@ -294,6 +367,22 @@ pub fn rewrite_upstream_body(mut body: Value, upstream_model: &str, stream: bool
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn extract_model_ids_from_openai_list() {
+        let value = json!({
+            "object": "list",
+            "data": [
+                {"id": "gpt-4o-mini", "object": "model"},
+                {"id": "gpt-4o", "object": "model"},
+                {"id": "gpt-4o-mini", "object": "model"}
+            ]
+        });
+        assert_eq!(
+            extract_model_ids(&value),
+            vec!["gpt-4o".to_string(), "gpt-4o-mini".to_string()]
+        );
+    }
 
     #[test]
     fn rewrite_replaces_model_and_strips_stream_when_non_stream() {
