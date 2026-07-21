@@ -1,18 +1,20 @@
 # model-hub-gateway（实验）
 
-> **状态：实验性。** 本 crate 是 Rust 原生网关，当前实现 **HTTP 骨架 + 管理 JWT / 客户端 API Key 鉴权闭环**，供后续 SQLite / 渠道 / Chat 切片开发。  
+> **状态：实验性。** 本 crate 是 Rust 原生网关，当前实现 **HTTP 骨架 + SQLite 持久化 + 渠道/分组 CRUD + 管理 JWT / 客户端 API Key 鉴权闭环**，供后续 Chat 转发切片开发。  
 > **不能**替代当前 Model Hub 发布版内嵌的 **octopus v0.9.28** 侧车，也 **不会** 被 Tauri 壳默认拉起。
 
 ## 目标
 
 - 独立进程，默认只绑定本机 `127.0.0.1`
-- 配置文件契约对齐 octopus：`data/config.json` 的 `server.host` / `server.port`
+- 配置文件契约对齐 octopus：`data/config.json` 的 `server` / `database` / `auth`
 - `GET /health` 稳定 JSON 200；未知路径 JSON 404
+- **SQLite only**：启动时按 `database.path` 打开/创建库并自动迁移
 - **两套凭证分离**：
   - 管理 API：`Authorization: Bearer <JWT>`
   - 客户端 `/v1/*`：`Bearer sk-octopus-...` 或 `x-api-key`
-- 完整 API Key 仅创建时返回一次；存储只保留哈希 + 脱敏元数据
-- Ctrl-C 优雅退出；测试使用随机端口，不按进程名清理 octopus
+- 客户端 API Key 仅 create 返回完整明文；存储只保留哈希 + 脱敏
+- 渠道上游 Key 可明文存于本机 SQLite；日志禁止打印完整 Key
+- Ctrl-C 优雅退出；测试使用随机端口 + 临时库，不按进程名清理 octopus
 
 ## 运行
 
@@ -48,10 +50,11 @@ cargo run --manifest-path gateway-rust/Cargo.toml -- --config gateway-rust/testd
 }
 ```
 
-- 当前消费 `server` 与可选 `auth`；`database` / `log` 保留字段以便与壳写入的配置兼容。
+- `database.type` **必须**为 `sqlite`；其它类型启动失败。
+- `database.path` 相对路径相对进程 cwd；启动时创建父目录并 migrate v1。
 - `auth` 缺省：用户名/密码 `admin`/`admin`；`jwt_secret` 未配置时进程启动生成随机密钥并 warning（重启后 Token 失效）。
 - 校验：`host` 合法 IP、`port != 0`；默认绑定 `127.0.0.1:8080`。
-- 日志禁止打印完整 JWT / API Key。
+- 日志禁止打印完整 JWT / 客户端 Key / 上游 channel_key。
 
 ## HTTP 契约
 
@@ -96,7 +99,28 @@ cargo run --manifest-path gateway-rust/Cargo.toml -- --config gateway-rust/testd
 | POST | `/api/v1/apikey/update` | body `{ "id", "name?", "enabled?", ... }` |
 | DELETE | `/api/v1/apikey/delete/:id` | 删除 |
 
-Key 前缀固定 **`sk-octopus-`**。内存 store 只存 SHA-256 哈希，不落明文。
+Key 前缀固定 **`sk-octopus-`**。SQLite 只存 SHA-256 哈希，不落明文；重启后仍可校验。
+
+### 渠道 CRUD（均需管理 JWT）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/channel/list` | 含 `base_urls` / `keys`；`type` 为数字 |
+| POST | `/api/v1/channel/create` | 对齐 UI：name, type, enabled, base_urls, keys, model, custom_model, proxy, auto_sync, auto_group, custom_header |
+| POST | `/api/v1/channel/update` | 部分更新；支持 `keys_to_update` / `keys_to_add` |
+| POST | `/api/v1/channel/enable` | `{ "id", "enabled" }` |
+| DELETE | `/api/v1/channel/delete/:id` | 删除（级联 base_urls / keys） |
+
+### 分组 CRUD（均需管理 JWT）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/group/list` | 含 `items`；`mode` 为数字（1=轮询） |
+| POST | `/api/v1/group/create` | name, mode, match_regex, items[] |
+| POST | `/api/v1/group/update` | 支持 `items_to_delete` / `items_to_add` |
+| DELETE | `/api/v1/group/delete/:id` | 删除（级联 items） |
+
+成功响应一律 `{ "data": ... }`。
 
 ### 客户端占位
 
@@ -127,6 +151,11 @@ curl.exe -s -X POST http://127.0.0.1:18081/api/v1/user/login `
 # 状态（替换 TOKEN）
 curl.exe -s http://127.0.0.1:18081/api/v1/user/status -H "Authorization: Bearer TOKEN"
 
+# 创建渠道
+curl.exe -s -X POST http://127.0.0.1:18081/api/v1/channel/create `
+  -H "Authorization: Bearer TOKEN" -H "Content-Type: application/json" `
+  -d "{\"name\":\"demo\",\"type\":0,\"enabled\":true,\"base_urls\":[{\"url\":\"https://api.openai.com/v1\",\"delay\":0}],\"keys\":[{\"enabled\":true,\"channel_key\":\"sk-test\",\"remark\":\"\"}],\"model\":\"gpt-4o-mini\",\"custom_model\":\"\",\"proxy\":false,\"auto_sync\":false,\"auto_group\":0,\"custom_header\":[]}"
+
 # 创建客户端 Key
 curl.exe -s -X POST http://127.0.0.1:18081/api/v1/apikey/create `
   -H "Authorization: Bearer TOKEN" -H "Content-Type: application/json" `
@@ -144,6 +173,8 @@ curl.exe -s http://127.0.0.1:18081/v1/models -H "Authorization: Bearer SK"
 | `/api/v1/user/login` | 可调 | 可调 | 可调 | 可调 |
 | `/api/v1/user/status` | 401 | 200 | 401 | 401 |
 | `/api/v1/apikey/*` | 401 | 按业务 | 401 | 401 |
+| `/api/v1/channel/*` | 401 | 按业务 | 401 | 401 |
+| `/api/v1/group/*` | 401 | 按业务 | 401 | 401 |
 | `/v1/models` | 401 | 401 | 200 | 401 |
 
 ## 与 octopus / Tauri 边界
@@ -152,7 +183,7 @@ curl.exe -s http://127.0.0.1:18081/v1/models -H "Authorization: Bearer SK"
 |----|------|
 | 当前发布链路 | 仍使用内嵌 octopus；见 `gateway/README.md` |
 | Tauri `GatewayRuntime` | **不修改** 默认侧车启动路径 |
-| 数据目录 | 本任务使用内存 API Key store；后续 SQLite 任务替换 |
+| 数据目录 | SQLite 默认 `data/data.db`（相对 cwd）；schema 自有，非 1:1 复制 octopus |
 | 进程清理 | 不按 `octopus` 进程名结束任何进程 |
 
 ## 测试
@@ -164,7 +195,11 @@ cargo test --manifest-path gateway-rust/Cargo.toml
 cargo clippy --manifest-path gateway-rust/Cargo.toml --all-targets -- -D warnings
 ```
 
-集成测试绑定 `127.0.0.1:0` 随机端口，覆盖登录 → 建 Key → `/v1/models` 鉴权矩阵。
+集成测试绑定 `127.0.0.1:0` 随机端口 + 临时 SQLite，覆盖：
+
+- 登录 → 建 Key → `/v1/models` 鉴权矩阵
+- 登录 → 渠道 CRUD（keys_to_*）→ 分组 CRUD（items_to_*）→ apikey → models
+- API Key 跨进程实例持久化
 
 ## 目录
 
@@ -181,10 +216,14 @@ gateway-rust/
 │   ├── http.rs
 │   ├── response.rs
 │   ├── server.rs
+│   ├── db/            # open / migrate v1
 │   ├── auth/          # JWT / admin / middleware
-│   ├── apikey/        # model / store / hash
-│   └── routes/        # login / apikey / v1 models
+│   ├── apikey/        # model / memory + sqlite store / hash
+│   ├── channel/       # model / store / service
+│   ├── group/         # model / store / service
+│   └── routes/        # login / apikey / channel / group / v1 models
 └── tests/
     ├── http_server.rs
-    └── auth_matrix.rs
+    ├── auth_matrix.rs
+    └── channel_group_matrix.rs
 ```

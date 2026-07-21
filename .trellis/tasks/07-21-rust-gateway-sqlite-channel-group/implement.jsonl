@@ -1,0 +1,10 @@
+{"path":".trellis/spec/backend/directory-structure.md","reason":"gateway-rust 模块边界"}
+{"path":".trellis/spec/backend/quality-guidelines.md","reason":"密钥与 SQLite 约定"}
+{"path":".trellis/spec/backend/error-handling.md","reason":"HTTP 信封与错误"}
+{"path":"src/api/channel.ts","reason":"渠道 UI 字段契约"}
+{"path":"src/api/group.ts","reason":"分组 UI 字段契约"}
+{"path":"scripts/e2e-octopus-smoke.py","reason":"端到端字段对照"}
+{"path":"gateway-rust/src/apikey/store.rs","reason":"ApiKeyStore trait"}
+{"path":"gateway-rust/src/http.rs","reason":"AppState 与路由组装"}
+{"path":"gateway-rust/src/config.rs","reason":"database 配置"}
+{"path":".trellis/tasks/07-18-rust-native-gateway/prd.md","reason":"父任务切片"}

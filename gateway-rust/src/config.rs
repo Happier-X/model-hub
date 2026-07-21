@@ -209,6 +209,17 @@ impl GatewayConfig {
             ));
         }
 
+        if !self.database.db_type.trim().eq_ignore_ascii_case("sqlite") {
+            return Err(GatewayError::invalid_config(format!(
+                "仅支持 database.type = sqlite，当前为: {}",
+                self.database.db_type
+            )));
+        }
+
+        if self.database.path.trim().is_empty() {
+            return Err(GatewayError::invalid_config("database.path 不能为空"));
+        }
+
         Ok(())
     }
 

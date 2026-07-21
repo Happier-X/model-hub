@@ -1,0 +1,5 @@
+{"path":".trellis/spec/backend/quality-guidelines.md","reason":"安全与持久化审查"}
+{"path":"src/api/channel.ts","reason":"渠道字段兼容"}
+{"path":"src/api/group.ts","reason":"分组字段兼容"}
+{"path":"gateway-rust/src/apikey/store.rs","reason":"Key 哈希契约"}
+{"path":"scripts/e2e-octopus-smoke.py","reason":"smoke 路径对照"}

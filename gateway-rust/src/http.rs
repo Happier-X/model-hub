@@ -6,9 +6,13 @@ use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::Serialize;
 
-use crate::apikey::{ApiKeyStore, MemoryApiKeyStore};
+use crate::apikey::{ApiKeyStore, MemoryApiKeyStore, SqliteApiKeyStore};
 use crate::auth::AuthService;
+use crate::channel::{ChannelService, ChannelStore};
 use crate::config::GatewayConfig;
+use crate::db::{open_from_config, open_path, DbConn};
+use crate::error::GatewayError;
+use crate::group::{GroupService, GroupStore};
 use crate::routes;
 
 /// 应用共享状态。
@@ -17,23 +21,62 @@ pub struct AppState {
     pub config: Arc<GatewayConfig>,
     pub auth: Arc<AuthService>,
     pub api_keys: Arc<dyn ApiKeyStore>,
+    pub channels: Arc<ChannelService>,
+    pub groups: Arc<GroupService>,
 }
 
 impl AppState {
-    pub fn from_config(config: GatewayConfig) -> Self {
+    /// 从配置打开 SQLite 并组装状态。
+    pub fn from_config(config: GatewayConfig) -> Result<Self, GatewayError> {
+        let db = open_from_config(&config.database)?;
+        Ok(Self::from_config_and_db(config, db))
+    }
+
+    pub fn from_config_and_db(config: GatewayConfig, db: DbConn) -> Self {
+        let auth = AuthService::from_config(&config.auth);
+        let api_keys: Arc<dyn ApiKeyStore> = Arc::new(SqliteApiKeyStore::new(db.clone()));
+        let channels = Arc::new(ChannelService::new(ChannelStore::new(db.clone())));
+        let groups = Arc::new(GroupService::new(GroupStore::new(db)));
+        Self {
+            config: Arc::new(config),
+            auth: Arc::new(auth),
+            api_keys,
+            channels,
+            groups,
+        }
+    }
+
+    /// 测试用：临时文件库 + 固定 JWT secret。
+    pub fn for_tests() -> Self {
+        let mut config = GatewayConfig::default();
+        config.auth.jwt_secret = Some("test-jwt-secret-do-not-use-prod".into());
+        let db = open_path(":memory:").expect("open memory db for tests");
+        Self::from_config_and_db(config, db)
+    }
+
+    /// 测试注入：可指定 DB 路径（如 tempfile）。
+    pub fn for_tests_with_db_path(path: &str) -> Self {
+        let mut config = GatewayConfig::default();
+        config.auth.jwt_secret = Some("test-jwt-secret-do-not-use-prod".into());
+        config.database.path = path.to_string();
+        let db = open_path(path).expect("open test db");
+        Self::from_config_and_db(config, db)
+    }
+
+    /// 仅内存 API Key（无 SQLite 渠道）——保留给极简单测；路由仍需 channels/groups。
+    #[allow(dead_code)]
+    pub fn for_tests_memory_keys_only() -> Self {
+        let mut config = GatewayConfig::default();
+        config.auth.jwt_secret = Some("test-jwt-secret-do-not-use-prod".into());
+        let db = open_path(":memory:").expect("open memory db");
         let auth = AuthService::from_config(&config.auth);
         Self {
             config: Arc::new(config),
             auth: Arc::new(auth),
             api_keys: Arc::new(MemoryApiKeyStore::new()),
+            channels: Arc::new(ChannelService::new(ChannelStore::new(db.clone()))),
+            groups: Arc::new(GroupService::new(GroupStore::new(db))),
         }
-    }
-
-    /// 测试/注入用：固定 secret 与内存 store。
-    pub fn for_tests() -> Self {
-        let mut config = GatewayConfig::default();
-        config.auth.jwt_secret = Some("test-jwt-secret-do-not-use-prod".into());
-        Self::from_config(config)
     }
 }
 
@@ -49,6 +92,8 @@ impl std::fmt::Debug for AppState {
             .field("config", &self.config)
             .field("auth", &"<redacted>")
             .field("api_keys", &"<store>")
+            .field("channels", &"<service>")
+            .field("groups", &"<service>")
             .finish()
     }
 }
@@ -84,6 +129,30 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/v1/apikey/delete/{id}",
             delete(routes::delete_apikey_handler),
+        )
+        .route("/api/v1/channel/list", get(routes::list_channel_handler))
+        .route(
+            "/api/v1/channel/create",
+            post(routes::create_channel_handler),
+        )
+        .route(
+            "/api/v1/channel/update",
+            post(routes::update_channel_handler),
+        )
+        .route(
+            "/api/v1/channel/enable",
+            post(routes::enable_channel_handler),
+        )
+        .route(
+            "/api/v1/channel/delete/{id}",
+            delete(routes::delete_channel_handler),
+        )
+        .route("/api/v1/group/list", get(routes::list_group_handler))
+        .route("/api/v1/group/create", post(routes::create_group_handler))
+        .route("/api/v1/group/update", post(routes::update_group_handler))
+        .route(
+            "/api/v1/group/delete/{id}",
+            delete(routes::delete_group_handler),
         );
 
     let client = Router::new().route("/v1/models", get(routes::models_handler));
@@ -234,5 +303,20 @@ mod tests {
         assert_eq!(with_token.status(), StatusCode::OK);
         let status_json = body_json(with_token).await;
         assert_eq!(status_json["data"], "ok");
+    }
+
+    #[tokio::test]
+    async fn channel_requires_jwt() {
+        let app = build_router(AppState::default());
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/channel/list")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 }

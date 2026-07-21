@@ -25,7 +25,7 @@ pub async fn run_with_shutdown(
     config: GatewayConfig,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> Result<(), GatewayError> {
-    let state = AppState::from_config(config.clone());
+    let state = AppState::from_config(config.clone())?;
     run_with_state(config, state, shutdown).await
 }
 

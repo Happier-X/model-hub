@@ -20,7 +20,8 @@
   "subtasks": [],
   "children": [
     "07-20-rust-gateway-http-skeleton",
-    "07-21-rust-gateway-auth-apikey"
+    "07-21-rust-gateway-auth-apikey",
+    "07-21-rust-gateway-sqlite-channel-group"
   ],
   "parent": null,
   "relatedFiles": [],

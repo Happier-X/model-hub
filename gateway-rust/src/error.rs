@@ -38,11 +38,20 @@ pub enum GatewayError {
         #[source]
         source: io::Error,
     },
+
+    #[error("数据库错误: {message}")]
+    Database { message: String },
 }
 
 impl GatewayError {
     pub fn invalid_config(message: impl Into<String>) -> Self {
         Self::ConfigInvalid {
+            message: message.into(),
+        }
+    }
+
+    pub fn database(message: impl Into<String>) -> Self {
+        Self::Database {
             message: message.into(),
         }
     }

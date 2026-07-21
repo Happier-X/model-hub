@@ -30,6 +30,7 @@ pub async fn create_apikey_handler(
         }
         Err(ApiKeyStoreError::InvalidName) => bad_request("名称不能为空"),
         Err(ApiKeyStoreError::NotFound) => not_found_api("API Key 不存在"),
+        Err(ApiKeyStoreError::Internal) => bad_request("内部存储错误"),
     }
 }
 
@@ -45,6 +46,7 @@ pub async fn update_apikey_handler(
         }
         Err(ApiKeyStoreError::NotFound) => not_found_api("API Key 不存在"),
         Err(ApiKeyStoreError::InvalidName) => bad_request("名称不能为空"),
+        Err(ApiKeyStoreError::Internal) => bad_request("内部存储错误"),
     }
 }
 
@@ -60,5 +62,6 @@ pub async fn delete_apikey_handler(
         }
         Err(ApiKeyStoreError::NotFound) => not_found_api("API Key 不存在"),
         Err(ApiKeyStoreError::InvalidName) => bad_request("名称不能为空"),
+        Err(ApiKeyStoreError::Internal) => bad_request("内部存储错误"),
     }
 }

@@ -1,12 +1,15 @@
 //! Model Hub Rust 原生网关实验实现。
 //!
-//! 提供配置、HTTP 路由、管理 JWT / 客户端 API Key 鉴权与优雅退出 API。
+//! 提供配置、HTTP 路由、SQLite 持久化、渠道/分组 CRUD、管理 JWT / 客户端 API Key 鉴权与优雅退出 API。
 //! **本 crate 不能替代当前发布版内嵌的 octopus 侧车。**
 
 pub mod apikey;
 pub mod auth;
+pub mod channel;
 pub mod config;
+pub mod db;
 pub mod error;
+pub mod group;
 pub mod http;
 pub mod response;
 pub mod routes;

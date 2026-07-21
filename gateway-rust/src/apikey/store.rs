@@ -11,6 +11,8 @@ use super::service::{generate_raw_key, hash_key, hashes_equal, mask_key};
 pub enum ApiKeyStoreError {
     NotFound,
     InvalidName,
+    /// 数据库/锁等内部错误
+    Internal,
 }
 
 impl std::fmt::Display for ApiKeyStoreError {
@@ -18,6 +20,7 @@ impl std::fmt::Display for ApiKeyStoreError {
         match self {
             Self::NotFound => write!(f, "API Key 不存在"),
             Self::InvalidName => write!(f, "名称不能为空"),
+            Self::Internal => write!(f, "内部存储错误"),
         }
     }
 }
