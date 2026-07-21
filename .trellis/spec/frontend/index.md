@@ -1,8 +1,8 @@
 # Frontend Development Guidelines
 
-> 管理 UI 约定（**目标栈**，脚手架落地后按真实代码修订）。
+> 管理 UI 约定（**Vue 3 重写后**）。
 >
-> **React + Vite + TypeScript + Tailwind** SPA，嵌入 Tauri WebView。
+> **Vue 3 + Vite + TypeScript + Tailwind** SPA，嵌入 Tauri WebView。
 > **无登录页**；打开即用。
 
 ---
@@ -12,27 +12,26 @@
 | 能力 | 约定 |
 |------|------|
 | 构建 | Vite |
-| UI | React 函数组件 + TypeScript |
+| UI | Vue 3 SFC + TypeScript |
 | 样式 | Tailwind CSS |
-| 服务端状态 | TanStack Query（优先） |
-| 客户端状态 | Zustand（UI/本地偏好） |
-| 与壳通信 | `@tauri-apps/api` invoke（网关启停/状态/路径） |
-| 与网关通信 | HTTP 调用侧车管理 API（业务 CRUD） |
+| 路由 | vue-router |
+| 与壳通信 | `@tauri-apps/api` **invoke only**（代理启停 + 业务 CRUD） |
+| 与客户端代理 | 不走前端；外部工具直连本机 `/v1/*` |
 
-信息架构以渠道/分组/日志/设置为中心，**不要求**像素级复刻，**不使用** Next.js SSR。
+信息架构：概览、供应商、分组（故障转移队列）、API Key、日志。
 
 ---
 
 ## Guidelines Index
 
-| Guide | Description | Status |
-|-------|-------------|--------|
-| [Directory Structure](./directory-structure.md) | 页面/组件/API 目录 | Target |
-| [Component Guidelines](./component-guidelines.md) | 组件与布局 | Target |
-| [Hook Guidelines](./hook-guidelines.md) | hooks 约定 | Target |
-| [State Management](./state-management.md) | Query / Zustand 边界 | Target |
-| [Type Safety](./type-safety.md) | TS 与 API 类型 | Target |
-| [Quality Guidelines](./quality-guidelines.md) | 质量与 a11y 底线 | Target |
+| Guide | Description |
+|-------|-------------|
+| [Directory Structure](./directory-structure.md) | 页面/组件/API |
+| [Component Guidelines](./component-guidelines.md) | 组件与布局 |
+| [Hook Guidelines](./hook-guidelines.md) | 组合式函数（历史命名） |
+| [State Management](./state-management.md) | 本地状态约定 |
+| [Type Safety](./type-safety.md) | TS 与 invoke 类型 |
+| [Quality Guidelines](./quality-guidelines.md) | 质量底线 |
 
 ---
 

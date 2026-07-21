@@ -1,44 +1,39 @@
 # Quality Guidelines
 
-> 后端/壳代码质量门禁。
+> 后端/壳质量门禁（内嵌代理）。
 
 ---
 
 ## Standards
 
-1. **Windows MVP**：CI/本地验收以 Windows 为准；不引入仅在 macOS 验证的脚本作为唯一路径。
-2. **进程安全**：正常退出路径必须尝试优雅停止侧车；超时才允许强制结束，并打 warn。
-3. **默认安全绑定**：默认 `127.0.0.1`；改为非本机地址必须有 UI/文档风险提示。
-4. **无管理登录**：禁止重新引入 admin 登录作为默认路径（产品 D3）。
-5. **本地开放鉴权**：默认本机场景下管理 API 与 `/v1/*` **不强制** Token/API Key；上游渠道 Key 可明文存本机库，但日志禁止打印完整值。若监听改为非本机地址须有风险提示。
-6. **依赖**：钉版本；默认网关说明写入 `gateway/README.md`。
-7. **内嵌网关**：Git **禁止**提交 `tools/**/*.exe`；发布包**仅**内嵌 `model-hub-gateway.exe`（`prepare:gateway-rust`）。
-8. **进程清理**：测试/脚本只按测试端口或托管 PID 结束进程，**禁止**按进程名杀 `model-hub-gateway` 误杀本机实例。
+1. **Windows MVP** 验收优先。
+2. **进程安全**：退出路径 stop 内嵌代理。
+3. **默认 `127.0.0.1`**；改非本机须提示风险。
+4. **强制客户端 API Key**（与旧「本地开放无 Key」相反）。
+5. **禁止**提交真实 Key、无说明的大型 exe。
+6. 默认运行时 **不**依赖 `model-hub-gateway` 侧车。
 
 ---
 
-## Testing (MVP 最低)
+## Testing（最低）
 
 | 类型 | 要求 |
 |------|------|
-| 单元 | 路径解析、状态机（idle/starting/running/stopping）可测 |
-| 集成（手动可接受） | 启动 → health → 停止；端口占用失败可见 |
-| 端到端 | OpenAI Chat 经分组转发（真上游或 mock） |
+| 单元 | 熔断、队列、路径、Key 校验 |
+| 集成 | 缺 Key 401；models 分组列表；5xx 换源成功（wiremock） |
 
----
-
-## Forbidden
-
-- 提交真实上游 API Key、个人 access token。
-- 在仓库提交巨大无用二进制而不说明来源/许可证。
-- 文档谎称仍支持第三方侧车回退，或客户端 Key 前缀仍为历史 `sk-octopus-`。
+```powershell
+cd src-tauri
+cargo test
+cargo check
+```
 
 ---
 
 ## Review Checklist
 
 - [ ] 数据目录可发现
-- [ ] 启停与健康检查
+- [ ] 代理启停与 Base URL
 - [ ] 无密钥进日志
 - [ ] 默认只监听本机
-- [ ] 用户可见错误有下一步
+- [ ] `/v1` 强制 Key

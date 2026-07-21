@@ -1,8 +1,8 @@
 # Backend Development Guidelines
 
-> 本项目后端约定（**目标栈**，脚手架落地后按真实代码修订）。
+> 本项目后端约定（**Vue3 重写后目标栈**）。
 >
-> 架构：**Tauri（Rust 壳）+ Rust 原生网关侧车（gateway-rust / model-hub-gateway）**。
+> 架构：**Tauri 2（Rust 壳 + 进程内本地代理）**，管理面 IPC，客户端面本机 HTTP。
 > 平台：Windows（MVP 仅验收 Windows）。
 
 ---
@@ -11,11 +11,14 @@
 
 | 层级 | 职责 | 技术 |
 |------|------|------|
-| 桌面壳 | 窗口、生命周期、数据目录、拉起/停止侧车、健康检查 | Tauri 2 + Rust |
-| 网关侧车 | HTTP 管理 API + OpenAI 兼容转发 + SQLite | gateway-rust；接口以 HTTP 契约为准 |
-| 持久化（MVP） | 渠道/分组/日志等 | **仅 SQLite** |
+| 桌面壳 | 窗口、生命周期、数据目录、托盘、代理启停 | Tauri 2 + Rust |
+| 内嵌代理 | OpenAI 兼容 `/v1/*`、故障转移、熔断、SQLite | `src-tauri/src/proxy` + `domain` + `db` |
+| 持久化（MVP） | 供应商/分组/客户端 Key/请求日志 | **仅 SQLite**（新 schema，不兼容旧 gateway-rust） |
 
-管理 UI **无登录**；默认监听 **`127.0.0.1`**；本地开放模式：管理 API 与客户端 `/v1/*` **均无需** Token。默认网关实现为 `gateway-rust`。
+- 管理 UI **无登录**；数据经 **Tauri commands**。
+- 默认监听 **`127.0.0.1`**。
+- 客户端 `/v1/*` **强制** API Key（`Authorization: Bearer sk-modelhub-...` 或等价头）。
+- **废弃**：独立 `gateway-rust` 侧车、React 管理 UI、旧管理 HTTP 契约。
 
 ---
 
@@ -23,18 +26,17 @@
 
 | Guide | Description | Status |
 |-------|-------------|--------|
-| [Directory Structure](./directory-structure.md) | 仓库与 Rust/侧车目录 | Target |
-| [Database Guidelines](./database-guidelines.md) | SQLite、路径、迁移原则 | Target |
-| [Error Handling](./error-handling.md) | 壳错误、进程失败、HTTP 错误 | Target |
-| [Logging Guidelines](./logging-guidelines.md) | 日志级别与落盘 | Target |
-| [Quality Guidelines](./quality-guidelines.md) | 质量门禁与禁止项 | Target |
+| [Directory Structure](./directory-structure.md) | 仓库与 Rust 模块 | Current |
+| [Database Guidelines](./database-guidelines.md) | SQLite、迁移 | Current |
+| [Error Handling](./error-handling.md) | 壳错误与 HTTP 错误 | Current |
+| [Logging Guidelines](./logging-guidelines.md) | 日志与脱敏 | Current |
+| [Quality Guidelines](./quality-guidelines.md) | 质量门禁 | Current |
 
 ---
 
 ## Related Product Decisions
 
-- 路径 C 混合渐进、M1 MVP、Windows only、无管理登录：见任务 `07-17-tauri-port-octopus/prd.md`。
-- 客户端网关 API Key 与鉴权闭环：见任务 `07-18-gateway-api-key-chat/prd.md`。
+- Vue3 重写 + CC Switch 式故障转移：任务 `07-21-vue3-rewrite-api-gateway`。
 
 ---
 
