@@ -13,6 +13,7 @@ pub mod error;
 pub mod group;
 pub mod http;
 pub mod log;
+pub mod migrate_octopus;
 pub mod response;
 pub mod router;
 pub mod routes;

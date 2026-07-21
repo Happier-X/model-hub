@@ -57,6 +57,39 @@ pnpm tauri dev
 
 > **严重警告：勿与 octopus 混用同一 `data/data.db`。** 两套 schema 不兼容；切换实现前请备份/删除库文件，或使用独立 `gateway_dir`。生产路径请保持默认 octopus。
 
+### 从 octopus 迁移数据（尽力而为）
+
+提供 CLI 将 **octopus v0.9.28** SQLite **尽力导入** 到 gateway-rust 自有 schema（生成/写入**目标库**，不在 `serve` 路径自动改写现有 db）：
+
+```powershell
+# 1. 备份源库
+Copy-Item data\data.db data\data.db.octopus.bak
+
+# 2. 导入到新的目标库（推荐独立文件）
+cargo run --manifest-path gateway-rust/Cargo.toml -- migrate-octopus `
+  --source data\data.db `
+  --dest data\data.rust.db `
+  --force `
+  --with-logs
+
+# 3. 将 config.json 的 database.path 指向目标库后，再以 rust 实现启动
+```
+
+| 参数 | 说明 |
+|------|------|
+| `--source` | octopus 源库（只读打开） |
+| `--dest` | 目标 rust 库；不存在则创建并 migrate schema |
+| `--force` | 目标业务表（channels/api_keys/groups/request_logs）非空时清空后覆盖；**无此标志则失败** |
+| `--with-logs` | 可选：`relay_logs` → `request_logs` 字段子集 |
+
+**会迁移**：channels（`base_urls` JSON 拆到 `channel_base_urls`）、channel_keys、groups、group_items、api_keys（明文 → SHA-256 哈希 + 脱敏；**完整客户端 Key 不写目标库**，但原 Key 仍可用 `find_by_raw_key` 校验）。
+
+**不迁移**：`users` / `settings` / 各类 `stats_*`；管理账号仍用 `config.auth`（默认 admin/admin）。统计需在 rust 侧重新积累。
+
+**失败回退**：继续使用 octopus + 备份的源库；不要把未迁移完成的目标库当生产。
+
+兼容启动：无 subcommand 时仍为 serve（`model-hub-gateway --config data/config.json`），与壳侧契约一致。
+
 ## 配置
 
 ```json
@@ -301,21 +334,22 @@ gateway-rust/
 ├── testdata/config.json
 ├── src/
 │   ├── lib.rs
-│   ├── main.rs
+│   ├── main.rs          # serve | migrate-octopus（默认无 subcommand = serve）
 │   ├── config.rs
 │   ├── error.rs
 │   ├── http.rs
 │   ├── response.rs
 │   ├── server.rs
-│   ├── db/            # open / migrate v1+v2
-│   ├── auth/          # JWT / admin / middleware
-│   ├── apikey/        # model / memory + sqlite store / hash
-│   ├── channel/       # model / store / service
-│   ├── group/         # model / store / service
-│   ├── log/           # request_logs store / service
-│   ├── router/        # 分组 → 渠道 + model_name；轮询
-│   ├── upstream/      # reqwest 非流式 + SSE 流式转发
-│   └── routes/        # login / apikey / channel / group / log / v1 models / chat
+│   ├── db/              # open / migrate v1+v2
+│   ├── migrate_octopus/ # octopus → rust 尽力导入（detect + import）
+│   ├── auth/            # JWT / admin / middleware
+│   ├── apikey/          # model / memory + sqlite store / hash
+│   ├── channel/         # model / store / service
+│   ├── group/           # model / store / service
+│   ├── log/             # request_logs store / service
+│   ├── router/          # 分组 → 渠道 + model_name；轮询
+│   ├── upstream/        # reqwest 非流式 + SSE 流式转发
+│   └── routes/          # login / apikey / channel / group / log / v1 models / chat
 └── tests/
     ├── http_server.rs
     ├── auth_matrix.rs

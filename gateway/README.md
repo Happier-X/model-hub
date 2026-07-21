@@ -68,6 +68,8 @@ $env:MODEL_HUB_GATEWAY_IMPL = "rust"
 两种实现共用壳写入的 `data/config.json`（host/port/sqlite 路径）以及端口占用、健康检查、停止托管子进程逻辑。
 
 > **警告：勿混用同一 SQLite。** octopus 与 `gateway-rust` 的数据库 schema **不兼容**。在同一 `gateway_dir` 下切换实现可能导致启动失败或数据损坏。切换前请备份/清空 `data/data.db`，或使用独立数据目录。生产用户请保持默认 octopus。
+>
+> 若需把 octopus 数据导入实验性 Rust 网关，请使用 **`model-hub-gateway migrate-octopus`**（详见 `gateway-rust/README.md`）：写入**独立目标库**、客户端 Key 明文 rehash 后可继续使用、**不**迁移 users/settings/stats；默认 `serve` 路径不会自动改写现有 db。
 
 发布安装包 **默认仍启动 octopus**，并**额外内嵌**实验性 `model-hub-gateway.exe`（与 octopus / AGPL 材料并存）。安装后可通过 `MODEL_HUB_GATEWAY_IMPL=rust` 零手工放置二进制试用 Rust 网关；**未设置时行为与现网一致**。
 

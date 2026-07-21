@@ -1,0 +1,5 @@
+{"path":"gateway-rust/src/db/migrate.rs","reason":"目标 schema"}
+{"path":"gateway-rust/src/apikey/service.rs","reason":"hash/mask"}
+{"path":"gateway-rust/src/main.rs","reason":"CLI 扩展"}
+{"path":"tools/octopus/testdata-smoke/data/data.db","reason":"源库字段样例（本地，不提交）"}
+{"path":"gateway/README.md","reason":"混用与迁移文档入口"}
