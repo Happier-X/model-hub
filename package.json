@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "prepare:octopus": "powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-octopus.ps1",
-    "release:windows": "powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-octopus.ps1 && tauri build --bundles nsis -c src-tauri/tauri.release.conf.json"
+    "prepare:gateway-rust": "powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-gateway-rust.ps1",
+    "release:windows": "powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-octopus.ps1 && powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-gateway-rust.ps1 && tauri build --bundles nsis -c src-tauri/tauri.release.conf.json"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.0",

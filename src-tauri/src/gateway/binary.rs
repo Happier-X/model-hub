@@ -13,8 +13,10 @@ pub const DEFAULT_WINDOWS_BINARY_NAME: &str = "octopus.exe";
 pub const DEFAULT_RUST_BINARY_NAME: &str = "model-hub-gateway.exe";
 pub const BINARY_ENV_OVERRIDE: &str = "MODEL_HUB_GATEWAY_BIN";
 pub const RUST_BINARY_ENV: &str = "MODEL_HUB_GATEWAY_RUST_BIN";
-/// 安装包内嵌侧车相对 resource_dir 的路径。
+/// 安装包内嵌 octopus 侧车相对 resource_dir 的路径。
 pub const BUNDLED_SIDECAR_RELATIVE: &str = "sidecar/octopus.exe";
+/// 安装包内嵌实验 Rust 网关相对 resource_dir 的路径。
+pub const BUNDLED_RUST_SIDECAR_RELATIVE: &str = "sidecar/model-hub-gateway.exe";
 /// 产品文档用的内置网关版本钉扎。
 pub const BUNDLED_GATEWAY_VERSION: &str = "v0.9.28";
 
@@ -39,7 +41,7 @@ pub fn resolve_binary_path_with_resource(
 /// 优先级：
 /// 1. `MODEL_HUB_GATEWAY_BIN`（两种实现均可覆盖）
 /// 2. octopus：内嵌资源部署 / `bin_dir/octopus.exe`
-/// 3. rust：`MODEL_HUB_GATEWAY_RUST_BIN` → `bin_dir/model-hub-gateway.exe`
+/// 3. rust：`MODEL_HUB_GATEWAY_RUST_BIN` → 内嵌资源部署 / `bin_dir/model-hub-gateway.exe`
 pub fn resolve_binary_for_impl(
     impl_kind: GatewayImpl,
     bin_dir: &Path,
@@ -57,7 +59,7 @@ pub fn resolve_binary_for_impl(
                     "环境变量 {BINARY_ENV_OVERRIDE} 指向的文件不存在。请检查路径，或依赖安装包内置网关 {BUNDLED_GATEWAY_VERSION}。"
                 ),
                 GatewayImpl::Rust => format!(
-                    "环境变量 {BINARY_ENV_OVERRIDE} 指向的文件不存在。Rust 网关请先 `cargo build --manifest-path gateway-rust/Cargo.toml --release`，或设置 {RUST_BINARY_ENV} / 将 {DEFAULT_RUST_BINARY_NAME} 放到 bin_dir。"
+                    "环境变量 {BINARY_ENV_OVERRIDE} 指向的文件不存在。Rust 网关请先 `cargo build --manifest-path gateway-rust/Cargo.toml --release`，或依赖安装包内嵌实验网关 / 设置 {RUST_BINARY_ENV} / 将 {DEFAULT_RUST_BINARY_NAME} 放到 bin_dir。"
                 ),
             },
         });
@@ -65,7 +67,7 @@ pub fn resolve_binary_for_impl(
 
     match impl_kind {
         GatewayImpl::Octopus => resolve_octopus_binary(bin_dir, resource_dir),
-        GatewayImpl::Rust => resolve_rust_binary(bin_dir),
+        GatewayImpl::Rust => resolve_rust_binary(bin_dir, resource_dir),
     }
 }
 
@@ -96,7 +98,7 @@ fn resolve_octopus_binary(
     })
 }
 
-fn resolve_rust_binary(bin_dir: &Path) -> Result<PathBuf, AppError> {
+fn resolve_rust_binary(bin_dir: &Path, resource_dir: Option<&Path>) -> Result<PathBuf, AppError> {
     if let Ok(override_path) = env::var(RUST_BINARY_ENV) {
         let path = PathBuf::from(override_path);
         if path.is_file() {
@@ -105,12 +107,21 @@ fn resolve_rust_binary(bin_dir: &Path) -> Result<PathBuf, AppError> {
         return Err(AppError::BinaryMissing {
             path: path.display().to_string(),
             hint: format!(
-                "环境变量 {RUST_BINARY_ENV} 指向的文件不存在。请执行 `cargo build --manifest-path gateway-rust/Cargo.toml --release`，将产物放到该路径，或设置 {BINARY_ENV_OVERRIDE}。"
+                "环境变量 {RUST_BINARY_ENV} 指向的文件不存在。请执行 `cargo build --manifest-path gateway-rust/Cargo.toml --release`，将产物放到该路径，或依赖安装包内嵌实验网关 / 设置 {BINARY_ENV_OVERRIDE}。"
             ),
         });
     }
 
     let target = bin_dir.join(DEFAULT_RUST_BINARY_NAME);
+
+    if let Some(resource_root) = resource_dir {
+        let source = resource_root.join(BUNDLED_RUST_SIDECAR_RELATIVE);
+        if source.is_file() {
+            ensure_bundled_deployed(&source, &target)?;
+            return Ok(target);
+        }
+    }
+
     if target.is_file() {
         return Ok(target);
     }
@@ -118,7 +129,7 @@ fn resolve_rust_binary(bin_dir: &Path) -> Result<PathBuf, AppError> {
     Err(AppError::BinaryMissing {
         path: target.display().to_string(),
         hint: format!(
-            "未找到 Rust 实验网关。请执行 `cargo build --manifest-path gateway-rust/Cargo.toml --release`，将 {DEFAULT_RUST_BINARY_NAME} 复制到「{path}」，或设置 {RUST_BINARY_ENV}/{BINARY_ENV_OVERRIDE}。注意：勿与 octopus 混用同一 data/data.db。详见 gateway-rust/README.md。",
+            "未找到 Rust 实验网关。正式安装包应自带 sidecar/{DEFAULT_RUST_BINARY_NAME}；开发环境请运行 scripts/prepare-bundled-gateway-rust.ps1，将 {DEFAULT_RUST_BINARY_NAME} 复制到「{path}」，或设置 {RUST_BINARY_ENV}/{BINARY_ENV_OVERRIDE}。注意：勿与 octopus 混用同一 data/data.db。详见 gateway-rust/README.md。",
             path = target.display()
         ),
     })
@@ -214,8 +225,8 @@ mod tests {
     use super::{
         ensure_bundled_deployed, file_sha256, resolve_binary_for_impl,
         resolve_binary_path_with_resource, write_fake_binary, BINARY_ENV_OVERRIDE,
-        BUNDLED_SIDECAR_RELATIVE, DEFAULT_RUST_BINARY_NAME, DEFAULT_WINDOWS_BINARY_NAME,
-        RUST_BINARY_ENV,
+        BUNDLED_RUST_SIDECAR_RELATIVE, BUNDLED_SIDECAR_RELATIVE, DEFAULT_RUST_BINARY_NAME,
+        DEFAULT_WINDOWS_BINARY_NAME, RUST_BINARY_ENV,
     };
     use crate::gateway::impl_kind::GatewayImpl;
     use std::{
@@ -426,6 +437,66 @@ mod tests {
                 .unwrap_err()
                 .to_string();
             assert!(err.contains(DEFAULT_WINDOWS_BINARY_NAME) || err.contains("未找到"));
+            let _ = std::fs::remove_dir_all(&root);
+        });
+    }
+
+    #[test]
+    fn rust_deploys_bundled_sidecar_when_target_missing() {
+        with_cleared_overrides(|| {
+            let root = unique_dir("rust-deploy");
+            let resource = root.join("resources");
+            let bin_dir = root.join("bin");
+            let source = resource.join(BUNDLED_RUST_SIDECAR_RELATIVE);
+            write_fake_binary(&source, b"rust-bundled-v1");
+
+            let resolved =
+                resolve_binary_for_impl(GatewayImpl::Rust, &bin_dir, Some(&resource)).unwrap();
+            let target = bin_dir.join(DEFAULT_RUST_BINARY_NAME);
+            assert_eq!(resolved, target);
+            assert_eq!(std::fs::read(&target).unwrap(), b"rust-bundled-v1");
+
+            let _ = std::fs::remove_dir_all(&root);
+        });
+    }
+
+    #[test]
+    fn rust_overwrites_bin_dir_when_resource_hash_differs() {
+        with_cleared_overrides(|| {
+            let root = unique_dir("rust-hash-diff");
+            let resource = root.join("resources");
+            let bin_dir = root.join("bin");
+            let source = resource.join(BUNDLED_RUST_SIDECAR_RELATIVE);
+            let target = bin_dir.join(DEFAULT_RUST_BINARY_NAME);
+            write_fake_binary(&source, b"rust-new");
+            write_fake_binary(&target, b"rust-old");
+
+            let resolved =
+                resolve_binary_for_impl(GatewayImpl::Rust, &bin_dir, Some(&resource)).unwrap();
+            assert_eq!(resolved, target);
+            assert_eq!(std::fs::read(&target).unwrap(), b"rust-new");
+
+            let _ = std::fs::remove_dir_all(&root);
+        });
+    }
+
+    #[test]
+    fn octopus_does_not_read_rust_resource_name() {
+        with_cleared_overrides(|| {
+            let root = unique_dir("no-rust-resource");
+            let resource = root.join("resources");
+            let bin_dir = root.join("bin");
+            write_fake_binary(
+                &resource.join(BUNDLED_RUST_SIDECAR_RELATIVE),
+                b"rust-resource-only",
+            );
+
+            let err = resolve_binary_for_impl(GatewayImpl::Octopus, &bin_dir, Some(&resource))
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains(DEFAULT_WINDOWS_BINARY_NAME) || err.contains("未找到"));
+            assert!(!bin_dir.join(DEFAULT_WINDOWS_BINARY_NAME).is_file());
+
             let _ = std::fs::remove_dir_all(&root);
         });
     }

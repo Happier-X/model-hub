@@ -25,7 +25,8 @@
     "07-21-rust-gateway-chat-forward",
     "07-21-rust-gateway-chat-sse",
     "07-21-rust-gateway-request-logs",
-    "07-21-rust-gateway-shell-switch"
+    "07-21-rust-gateway-shell-switch",
+    "07-21-rust-gateway-release-bundle"
   ],
   "parent": null,
   "relatedFiles": [],

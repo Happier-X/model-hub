@@ -1,7 +1,7 @@
 # model-hub-gateway（实验）
 
-> **状态：实验性。** 本 crate 是 Rust 原生网关，当前实现 **HTTP 骨架 + SQLite 持久化 + 渠道/分组 CRUD + 请求日志 list/clear + 管理 JWT / 客户端 API Key 鉴权 + 非流式/SSE 流式 Chat 转发**，供后续发布接入切片开发。  
-> **不能**替代当前 Model Hub 发布版内嵌的 **octopus v0.9.28** 侧车；安装包默认仍内嵌 octopus，**不会**把本二进制打进 NSIS。  
+> **状态：实验性。** 本 crate 是 Rust 原生网关，当前实现 **HTTP 骨架 + SQLite 持久化 + 渠道/分组 CRUD + 请求日志 list/clear + 管理 JWT / 客户端 API Key 鉴权 + 非流式/SSE 流式 Chat 转发**。  
+> 安装包**默认仍启动** **octopus v0.9.28**，并**额外内嵌**本二进制（`sidecar/model-hub-gateway.exe`），可通过 `MODEL_HUB_GATEWAY_IMPL=rust` 试用；**不**替代默认路径，**不**移除 AGPL 侧车与合规材料。  
 > Tauri 壳可通过环境变量 **可选** 拉起本网关（见下文「壳接入」）；未设置时行为与现网一致。
 
 ## 目标
@@ -42,13 +42,16 @@ model-hub-gateway.exe --config data/config.json
 
 ```powershell
 $env:MODEL_HUB_GATEWAY_IMPL = "rust"
+# 安装态：可直接试用内嵌资源（无需手工放置）
+# 开发态：
 cargo build --manifest-path gateway-rust/Cargo.toml --release
 $env:MODEL_HUB_GATEWAY_RUST_BIN = "$PWD\gateway-rust\target\release\model-hub-gateway.exe"
-# 或设置 MODEL_HUB_GATEWAY_BIN 覆盖任意实现；或复制到 app data bin_dir\model-hub-gateway.exe
+# 或：pnpm prepare:gateway-rust → tools\gateway-rust\model-hub-gateway.exe
+# 或设置 MODEL_HUB_GATEWAY_BIN 覆盖任意实现
 pnpm tauri dev
 ```
 
-二进制解析（`impl=rust`）：`MODEL_HUB_GATEWAY_BIN` → `MODEL_HUB_GATEWAY_RUST_BIN` → `bin_dir/model-hub-gateway.exe`。
+二进制解析（`impl=rust`）：`MODEL_HUB_GATEWAY_BIN` → `MODEL_HUB_GATEWAY_RUST_BIN` → 安装资源 `sidecar/model-hub-gateway.exe`（按哈希部署到 `bin_dir`）→ `bin_dir/model-hub-gateway.exe`。
 
 状态字段 `GatewayStatus.impl_name` 会报告 `"rust"` 或 `"octopus"`。
 

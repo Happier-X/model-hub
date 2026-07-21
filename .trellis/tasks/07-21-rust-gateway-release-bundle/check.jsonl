@@ -1,0 +1,4 @@
+{"path":"src-tauri/src/gateway/binary.rs","reason":"解析与部署"}
+{"path":"src-tauri/tauri.release.conf.json","reason":"双 sidecar 资源"}
+{"path":".github/workflows/release-windows.yml","reason":"CI 顺序"}
+{"path":"gateway/README.md","reason":"默认 octopus 与警告"}

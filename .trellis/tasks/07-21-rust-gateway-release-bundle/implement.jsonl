@@ -1,0 +1,6 @@
+{"path":"src-tauri/src/gateway/binary.rs","reason":"rust 资源部署"}
+{"path":"src-tauri/tauri.release.conf.json","reason":"bundle resources"}
+{"path":".github/workflows/release-windows.yml","reason":"CI 构建 gateway-rust"}
+{"path":"scripts/prepare-bundled-octopus.ps1","reason":"prepare 脚本模式对照"}
+{"path":".gitignore","reason":"忽略 tools 二进制"}
+{"path":"gateway/README.md","reason":"发布与切换文档"}

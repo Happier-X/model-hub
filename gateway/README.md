@@ -50,11 +50,12 @@ $env:MODEL_HUB_GATEWAY_BIN = "$PWD\tools\octopus\octopus.exe"
 
 ```powershell
 # 默认：与现网一致（octopus）
-# 实验：使用 Rust 网关
+# 实验：使用 Rust 网关（安装态可直接设 IMPL，无需手工放置二进制）
 $env:MODEL_HUB_GATEWAY_IMPL = "rust"
-cargo build --manifest-path gateway-rust/Cargo.toml --release
-$env:MODEL_HUB_GATEWAY_RUST_BIN = "$PWD\gateway-rust\target\release\model-hub-gateway.exe"
-# 或复制到 app data bin_dir 下的 model-hub-gateway.exe
+# 开发态可选：
+# cargo build --manifest-path gateway-rust/Cargo.toml --release
+# $env:MODEL_HUB_GATEWAY_RUST_BIN = "$PWD\gateway-rust\target\release\model-hub-gateway.exe"
+# 或 pnpm prepare:gateway-rust 后使用 tools\gateway-rust\model-hub-gateway.exe
 ```
 
 启动参数差异：
@@ -68,7 +69,16 @@ $env:MODEL_HUB_GATEWAY_RUST_BIN = "$PWD\gateway-rust\target\release\model-hub-ga
 
 > **警告：勿混用同一 SQLite。** octopus 与 `gateway-rust` 的数据库 schema **不兼容**。在同一 `gateway_dir` 下切换实现可能导致启动失败或数据损坏。切换前请备份/清空 `data/data.db`，或使用独立数据目录。生产用户请保持默认 octopus。
 
-发布安装包 **默认仍内嵌 octopus**；本仓库当前 **不会** 把 `model-hub-gateway` 打进 NSIS。
+发布安装包 **默认仍启动 octopus**，并**额外内嵌**实验性 `model-hub-gateway.exe`（与 octopus / AGPL 材料并存）。安装后可通过 `MODEL_HUB_GATEWAY_IMPL=rust` 零手工放置二进制试用 Rust 网关；**未设置时行为与现网一致**。
+
+> **不**宣称已移除 AGPL 侧车：octopus 与 `third-party/octopus/` 合规材料仍随包分发。
+
+本地准备内嵌实验网关（**不提交** exe）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-gateway-rust.ps1
+# 或 pnpm prepare:gateway-rust
+```
 
 ## 二进制解析优先级
 
@@ -85,8 +95,9 @@ $env:MODEL_HUB_GATEWAY_RUST_BIN = "$PWD\gateway-rust\target\release\model-hub-ga
 
 1. `MODEL_HUB_GATEWAY_BIN`（与上相同，两种实现通用覆盖）
 2. `MODEL_HUB_GATEWAY_RUST_BIN`（须指向存在的文件）
-3. `bin_dir/model-hub-gateway.exe`
-4. 仍缺失 → 可行动错误（提示 `cargo build --manifest-path gateway-rust/Cargo.toml`）；窗口仍可打开，壳不崩溃
+3. 若安装资源存在 `resource_dir/sidecar/model-hub-gateway.exe`：按 SHA-256 **原子部署**到 `bin_dir/model-hub-gateway.exe`，然后使用 `bin_dir` 副本
+4. 已有 `bin_dir/model-hub-gateway.exe`
+5. 仍缺失 → 可行动错误（提示 prepare 脚本 / `cargo build`）；窗口仍可打开，壳不崩溃
 
 ## 配置约定（壳侧写入）
 

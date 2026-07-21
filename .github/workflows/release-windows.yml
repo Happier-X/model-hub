@@ -36,7 +36,9 @@ jobs:
       - name: Cache cargo
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: |
+            src-tauri
+            gateway-rust
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
@@ -51,6 +53,10 @@ jobs:
       - name: Prepare bundled octopus (download + SHA-256)
         shell: pwsh
         run: powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-octopus.ps1
+
+      - name: Prepare bundled gateway-rust (cargo release + copy)
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-gateway-rust.ps1
 
       - name: Build and release Tauri updater assets
         uses: tauri-apps/tauri-action@v0

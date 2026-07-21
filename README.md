@@ -28,18 +28,25 @@ pnpm lint
 
 ## 准备内嵌侧车（开发 / 发布）
 
-二进制**不进 Git**。构建前下载并校验：
+二进制**不进 Git**。构建前准备默认 octopus 与可选实验网关：
 
 ```powershell
 pnpm prepare:octopus
 # 或
 powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-octopus.ps1
+
+# 发布 / 试用内嵌实验网关时额外执行：
+pnpm prepare:gateway-rust
+# 或
+powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-gateway-rust.ps1
 ```
 
 开发覆盖（可选）：
 
 ```powershell
 $env:MODEL_HUB_GATEWAY_BIN = "$PWD\tools\octopus\octopus.exe"
+# 实验：默认仍为 octopus；切换时
+# $env:MODEL_HUB_GATEWAY_IMPL = "rust"
 ```
 
 ## Tauri 桌面开发
@@ -55,16 +62,16 @@ cd src-tauri
 cargo check
 ```
 
-## 实验性 Rust 网关骨架
+## 实验性 Rust 网关
 
-仓库新增独立 crate [`gateway-rust/`](./gateway-rust/)，用于冻结 Rust 原生网关的配置、健康检查、JSON 404 与优雅退出契约。它目前**不包含**鉴权、SQLite、渠道、分组或 Chat 转发，**不能替代**当前发布版内嵌的 octopus，也未接入 Tauri 默认启停链路。
+独立 crate [`gateway-rust/`](./gateway-rust/) 已作为**额外内嵌**实验侧车打进 Windows 安装包（与 octopus 并存）。**默认仍启动 octopus**；设置 `MODEL_HUB_GATEWAY_IMPL=rust` 可试用，**勿与 octopus 混用同一 `data/data.db`**。AGPL 侧车与合规材料**未移除**。
 
 ```powershell
 cargo run --manifest-path gateway-rust/Cargo.toml -- --config gateway-rust/testdata/config.json
 cargo test --manifest-path gateway-rust/Cargo.toml
 ```
 
-详见 [Rust 网关实验骨架](./gateway-rust/README.md)。
+详见 [Rust 网关实验说明](./gateway-rust/README.md) 与 [网关侧车文档](./gateway/README.md)。
 
 ## Windows 发布构建（NSIS + 内嵌侧车）
 
@@ -72,7 +79,7 @@ cargo test --manifest-path gateway-rust/Cargo.toml
 pnpm release:windows
 ```
 
-等价于 prepare 侧车后执行：
+等价于 prepare **octopus + gateway-rust** 后执行：
 
 ```text
 tauri build --bundles nsis -c src-tauri/tauri.release.conf.json
@@ -91,7 +98,7 @@ Rust 侧提供 `get_paths` 命令，首次调用会确保以下目录存在：
 - `app_data_dir`：应用数据根目录
 - `config_dir`：配置目录
 - `gateway_dir`：网关数据目录（配置、SQLite）
-- `bin_dir`：侧车二进制目录（运行时从内嵌资源部署 `octopus.exe`）
+- `bin_dir`：侧车二进制目录（运行时从内嵌资源部署 `octopus.exe`；`IMPL=rust` 时部署 `model-hub-gateway.exe`）
 
 前端设置区会展示这些路径，用于验证桌面壳与 UI 的基础通信。
 
@@ -99,8 +106,8 @@ Rust 侧提供 `get_paths` 命令，首次调用会确保以下目录存在：
 
 桌面壳已集成侧车启停（`gateway_start` / `gateway_stop` / `gateway_status`）：
 
-1. **安装版**：无需手工放置 exe；启动时自动部署内置网关 v0.9.28。
-2. **开发版**：运行 `pnpm prepare:octopus`，或设置 `MODEL_HUB_GATEWAY_BIN`。
+1. **安装版**：无需手工放置 exe；默认自动部署内置 octopus v0.9.28；实验网关亦已内嵌，设 `MODEL_HUB_GATEWAY_IMPL=rust` 即可试用。
+2. **开发版**：运行 `pnpm prepare:octopus`（及可选 `pnpm prepare:gateway-rust`），或设置 `MODEL_HUB_GATEWAY_BIN`。
 3. 运行 `pnpm tauri dev`，在应用内查看状态条或设置页启动/停止。
 4. 默认监听 `http://127.0.0.1:8080`（本机绑定）；可在设置页停止网关后修改监听端口，配置保存于应用配置目录的 `shell.json`，下次手动启动生效。
 5. 在 **渠道 / 分组 / API 密钥 / 日志** 完成配置（无登录页；静默管理鉴权）。

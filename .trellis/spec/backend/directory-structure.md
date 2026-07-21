@@ -14,10 +14,12 @@
 │   └── README.md              # 侧车二进制钉扎、解析优先级、AGPL
 ├── third-party/octopus/       # AGPL 全文、NOTICE、对应源码链接
 ├── tools/octopus/             # 本地下载的 exe（gitignore，勿提交）
+├── tools/gateway-rust/        # 本地 release 构建的 model-hub-gateway.exe（gitignore，勿提交）
 ├── scripts/
-│   ├── prepare-bundled-octopus.ps1  # 下载+SHA-256 校验
+│   ├── prepare-bundled-octopus.ps1       # 下载+SHA-256 校验
+│   ├── prepare-bundled-gateway-rust.ps1  # cargo release + 复制到 tools/
 │   └── e2e-octopus-smoke.py
-├── gateway-rust/              # 实验性 Rust 原生网关独立 crate（不接入当前发布链路）
+├── gateway-rust/              # 实验性 Rust 原生网关独立 crate（发布额外内嵌，默认不启）
 │   ├── src/                   # config/http/server 可测试边界
 │   └── tests/                 # 随机本机端口集成测试
 ├── src-tauri/                 # Tauri / Rust 壳
@@ -46,7 +48,7 @@
 
 Windows 侧车解析优先级（**默认 octopus**）：`MODEL_HUB_GATEWAY_BIN` → （若存在）安装资源 `sidecar/octopus.exe` 按哈希原子部署到 `{bin_dir}/octopus.exe` → 否则直接使用已有 `bin_dir` 副本。安装态以内嵌为版本真源；勿将大型 exe 提交进 Git。
 
-可选实验实现：`MODEL_HUB_GATEWAY_IMPL=rust`（大小写不敏感）时启动 `model-hub-gateway`（参数 `--config data/config.json`，无 `start` 子命令）。rust 二进制解析：`MODEL_HUB_GATEWAY_BIN` → `MODEL_HUB_GATEWAY_RUST_BIN` → `{bin_dir}/model-hub-gateway.exe`。**不**把 rust 网关打进当前 NSIS；发布默认仍内嵌 octopus。**警告**：octopus 与 gateway-rust 的 SQLite schema 不兼容，禁止混用同一 `data/data.db`。
+可选实验实现：`MODEL_HUB_GATEWAY_IMPL=rust`（大小写不敏感）时启动 `model-hub-gateway`（参数 `--config data/config.json`，无 `start` 子命令）。rust 二进制解析：`MODEL_HUB_GATEWAY_BIN` → `MODEL_HUB_GATEWAY_RUST_BIN` → 安装资源 `sidecar/model-hub-gateway.exe` 按哈希部署到 `{bin_dir}/model-hub-gateway.exe` → 已有 `bin_dir` 副本。发布安装包**默认仍启动 octopus**，并**额外内嵌** rust 实验侧车（与 AGPL 材料并存）。**警告**：octopus 与 gateway-rust 的 SQLite schema 不兼容，禁止混用同一 `data/data.db`。
 
 ---
 
@@ -95,7 +97,7 @@ Windows 侧车解析优先级（**默认 octopus**）：`MODEL_HUB_GATEWAY_BIN` 
   - 日志禁止打印完整 Token/客户端 Key/上游 Key/用户 messages 全文（可记 group/channel id）。
 - 生命周期：通过预绑定 `TcpListener` + graceful shutdown；测试只绑定 `127.0.0.1:0` + 临时库，不结束任何 octopus 进程。
 - 模块边界：`config` / `http` / `server` / `error` / `db` / `auth` / `apikey` / `channel` / `group` / `log` / `router` / `upstream` / `routes` / `response` 保持可测试；SSE 由 `upstream::forward_chat_stream` 透明代理，不把业务塞进 Tauri 壳。
-- 发布边界：安装包默认仍内嵌 octopus，**不**把 `model-hub-gateway` 打进 NSIS。Tauri 壳可通过 `MODEL_HUB_GATEWAY_IMPL=rust` **可选**拉起实验网关；缺省路径与内嵌 octopus 完全一致。`gateway-rust` README 必须明确实验状态与「勿混用 data.db」警告。
+- 发布边界：安装包默认仍启动 octopus，并**额外内嵌** `model-hub-gateway`（`tauri.release.conf.json` 映射到 `sidecar/model-hub-gateway.exe`）。Tauri 壳可通过 `MODEL_HUB_GATEWAY_IMPL=rust` **可选**拉起实验网关；缺省路径与内嵌 octopus 完全一致，**不**移除 AGPL 侧车。`gateway-rust` README 必须明确实验状态与「勿混用 data.db」警告。
 
 ### 验证
 

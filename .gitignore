@@ -45,8 +45,9 @@ tmp/
 temp/
 .cache/
 
-# 本地下载的侧车二进制（AGPL，勿提交）
+# 本地下载/构建的侧车二进制（勿提交）
 tools/octopus/
+tools/gateway-rust/
 *.exe
 !src-tauri/icons/**
 
