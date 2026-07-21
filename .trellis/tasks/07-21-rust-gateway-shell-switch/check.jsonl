@@ -1,0 +1,4 @@
+{"path":"src-tauri/src/gateway/process.rs","reason":"默认 octopus 与 rust 分支"}
+{"path":"src-tauri/src/gateway/binary.rs","reason":"解析优先级"}
+{"path":"gateway/README.md","reason":"文档与混用警告"}
+{"path":".trellis/spec/backend/quality-guidelines.md","reason":"进程与安全"}

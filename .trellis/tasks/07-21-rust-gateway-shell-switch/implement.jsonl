@@ -1,0 +1,8 @@
+{"path":"src-tauri/src/gateway/process.rs","reason":"启动命令分支"}
+{"path":"src-tauri/src/gateway/binary.rs","reason":"二进制解析"}
+{"path":"src-tauri/src/gateway/state.rs","reason":"状态字段"}
+{"path":"src-tauri/src/gateway/config.rs","reason":"配置写入复用"}
+{"path":"src/api/tauri.ts","reason":"GatewayStatus 类型"}
+{"path":"gateway/README.md","reason":"侧车与切换文档"}
+{"path":"gateway-rust/README.md","reason":"实验接入说明"}
+{"path":".trellis/tasks/07-18-rust-native-gateway/prd.md","reason":"父任务迁移策略"}

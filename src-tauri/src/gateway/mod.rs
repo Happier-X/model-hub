@@ -1,6 +1,7 @@
 mod binary;
 mod config;
 mod health;
+mod impl_kind;
 mod process;
 mod settings;
 mod state;

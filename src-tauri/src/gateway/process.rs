@@ -5,9 +5,10 @@ use std::{
 };
 
 use super::{
-    binary::{resolve_binary_path, resolve_binary_path_with_resource},
+    binary::resolve_binary_for_impl,
     config::{env_overrides, write_config_file, GatewayRuntimeConfig},
     health::wait_until_reachable,
+    impl_kind::{command_args, resolve_gateway_impl, GatewayImpl},
     state::{GatewayPhase, GatewayStatus},
 };
 use crate::error::AppError;
@@ -19,28 +20,37 @@ const POLL_INTERVAL: Duration = Duration::from_millis(250);
 pub struct GatewayRuntime {
     child: Option<Child>,
     status: GatewayStatus,
+    impl_kind: GatewayImpl,
 }
 
 impl GatewayRuntime {
     pub fn new(host: String, port: u16, data_dir: String) -> Self {
+        let impl_kind = resolve_gateway_impl();
         Self {
             child: None,
-            status: GatewayStatus::new(host, port, data_dir),
+            status: GatewayStatus::with_impl(host, port, data_dir, impl_kind),
+            impl_kind,
         }
     }
 
     pub fn status_snapshot(&mut self) -> GatewayStatus {
         self.reap_if_exited();
+        // 同步最新 env 解析结果，便于开发时切换后立刻在状态中可见（仅 idle/error 时切换实现才有意义）。
+        self.status.impl_name = self.impl_kind.as_str().to_string();
         self.status.clone()
     }
 
-    /// 启动托管侧车；`resource_dir` 存在时优先从安装资源部署内置 octopus。
+    /// 启动托管侧车；`resource_dir` 存在时优先从安装资源部署内置 octopus（仅 octopus 实现）。
     pub fn start_with_resource(
         &mut self,
         gateway_dir: &Path,
         bin_dir: &Path,
         resource_dir: Option<&Path>,
     ) -> Result<GatewayStatus, AppError> {
+        // 每次启动前重新解析实现，支持不重启壳仅改 env 后重试（开发场景）。
+        self.impl_kind = resolve_gateway_impl();
+        self.status.impl_name = self.impl_kind.as_str().to_string();
+
         self.reap_if_exited();
         if matches!(
             self.status.state,
@@ -49,10 +59,7 @@ impl GatewayRuntime {
             return Ok(self.status.clone());
         }
 
-        let binary = match resource_dir {
-            Some(root) => resolve_binary_path_with_resource(bin_dir, Some(root))?,
-            None => resolve_binary_path(bin_dir)?,
-        };
+        let binary = resolve_binary_for_impl(self.impl_kind, bin_dir, resource_dir)?;
         let config = GatewayRuntimeConfig {
             host: self.status.host.clone(),
             port: self.status.port,
@@ -75,17 +82,20 @@ impl GatewayRuntime {
         write_config_file(gateway_dir, &config)?;
 
         let mut command = Command::new(&binary);
+        for arg in command_args(self.impl_kind, &config.config_relative) {
+            command.arg(arg);
+        }
         command
-            .arg("start")
-            .arg("--config")
-            .arg(&config.config_relative)
             .current_dir(gateway_dir)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::piped());
 
-        for (key, value) in env_overrides(&config) {
-            command.env(key, value);
+        // octopus 依赖 OCTOPUS_* 覆盖；rust 网关读 config.json，无需注入。
+        if self.impl_kind == GatewayImpl::Octopus {
+            for (key, value) in env_overrides(&config) {
+                command.env(key, value);
+            }
         }
 
         let mut child = command.spawn().map_err(|source| AppError::SpawnFailed {
@@ -244,7 +254,13 @@ fn is_port_busy(host: &str, port: u16) -> bool {
 #[cfg(test)]
 mod tests {
     use super::GatewayRuntime;
-    use crate::{error::AppError, gateway::state::GatewayPhase};
+    use crate::{
+        error::AppError,
+        gateway::{
+            impl_kind::{command_args, GatewayImpl},
+            state::GatewayPhase,
+        },
+    };
 
     #[test]
     fn set_port_updates_status_and_base_url_when_stopped() {
@@ -279,5 +295,35 @@ mod tests {
             ));
             assert_eq!(runtime.status.port, 8080);
         }
+    }
+
+    #[test]
+    fn default_runtime_exposes_impl_name() {
+        let mut runtime = GatewayRuntime::new("127.0.0.1".into(), 8080, "gateway".into());
+        let status = runtime.status_snapshot();
+        assert!(status.impl_name == "octopus" || status.impl_name == "rust");
+        // 单测进程通常未设置 IMPL env，期望默认 octopus。
+        // 若 CI 注入了 rust，也不应 panic，仅校验字段非空。
+        assert!(!status.impl_name.is_empty());
+    }
+
+    #[test]
+    fn octopus_start_args_remain_unchanged() {
+        assert_eq!(
+            command_args(GatewayImpl::Octopus, "data/config.json"),
+            vec![
+                "start".to_string(),
+                "--config".to_string(),
+                "data/config.json".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn rust_start_args_skip_start_subcommand() {
+        assert_eq!(
+            command_args(GatewayImpl::Rust, "data/config.json"),
+            vec!["--config".to_string(), "data/config.json".to_string()]
+        );
     }
 }

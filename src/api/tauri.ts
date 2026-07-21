@@ -23,6 +23,8 @@ export interface GatewayStatus {
   base_url: string;
   data_dir: string;
   binary_path: string | null;
+  /** 网关实现：`octopus` | `rust`；旧壳可能缺省 */
+  impl_name?: string;
 }
 
 const browserPreviewPaths: Readonly<AppPaths> = {

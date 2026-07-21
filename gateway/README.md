@@ -38,7 +38,41 @@ $env:MODEL_HUB_GATEWAY_BIN = "$PWD\tools\octopus\octopus.exe"
 
 兼容旧脚本名：`scripts/fetch-octopus-windows.ps1`（转发到 prepare 脚本）。
 
+## 实现切换（实验）
+
+默认仍启动 **octopus**。可选通过环境变量切换到实验性 Rust 网关（`gateway-rust` / `model-hub-gateway`）：
+
+| 变量 | 说明 |
+|------|------|
+| `MODEL_HUB_GATEWAY_IMPL` | 缺省 / `octopus` / 未知值 → octopus；`rust`（大小写不敏感）→ Rust 网关 |
+| `MODEL_HUB_GATEWAY_BIN` | 任意实现下的最高优先级二进制覆盖（文件必须存在） |
+| `MODEL_HUB_GATEWAY_RUST_BIN` | 仅 `impl=rust` 时使用；次于 `MODEL_HUB_GATEWAY_BIN` |
+
+```powershell
+# 默认：与现网一致（octopus）
+# 实验：使用 Rust 网关
+$env:MODEL_HUB_GATEWAY_IMPL = "rust"
+cargo build --manifest-path gateway-rust/Cargo.toml --release
+$env:MODEL_HUB_GATEWAY_RUST_BIN = "$PWD\gateway-rust\target\release\model-hub-gateway.exe"
+# 或复制到 app data bin_dir 下的 model-hub-gateway.exe
+```
+
+启动参数差异：
+
+| 实现 | 命令（cwd=`gateway_dir`） |
+|------|---------------------------|
+| octopus | `{bin} start --config data/config.json` + `OCTOPUS_*` |
+| rust | `{bin} --config data/config.json`（不注入 `OCTOPUS_*`） |
+
+两种实现共用壳写入的 `data/config.json`（host/port/sqlite 路径）以及端口占用、健康检查、停止托管子进程逻辑。
+
+> **警告：勿混用同一 SQLite。** octopus 与 `gateway-rust` 的数据库 schema **不兼容**。在同一 `gateway_dir` 下切换实现可能导致启动失败或数据损坏。切换前请备份/清空 `data/data.db`，或使用独立数据目录。生产用户请保持默认 octopus。
+
+发布安装包 **默认仍内嵌 octopus**；本仓库当前 **不会** 把 `model-hub-gateway` 打进 NSIS。
+
 ## 二进制解析优先级
+
+### octopus（默认）
 
 1. 环境变量 `MODEL_HUB_GATEWAY_BIN`（开发/高级覆盖；须指向存在的文件）
 2. 若安装资源存在 `resource_dir/sidecar/octopus.exe`：以内嵌为准，**原子部署**到 `bin_dir/octopus.exe`（目标不存在或 SHA-256 不同则覆盖；相同则跳过复制），然后使用 `bin_dir` 副本
@@ -46,6 +80,13 @@ $env:MODEL_HUB_GATEWAY_BIN = "$PWD\tools\octopus\octopus.exe"
 4. 仍缺失 → 设置页可行动错误；窗口仍可打开
 
 说明：安装态下内嵌资源是版本真源；`bin_dir` 是运行时部署目标（非独立于内嵌的更高优先项）。
+
+### rust（`MODEL_HUB_GATEWAY_IMPL=rust`）
+
+1. `MODEL_HUB_GATEWAY_BIN`（与上相同，两种实现通用覆盖）
+2. `MODEL_HUB_GATEWAY_RUST_BIN`（须指向存在的文件）
+3. `bin_dir/model-hub-gateway.exe`
+4. 仍缺失 → 可行动错误（提示 `cargo build --manifest-path gateway-rust/Cargo.toml`）；窗口仍可打开，壳不崩溃
 
 ## 配置约定（壳侧写入）
 
