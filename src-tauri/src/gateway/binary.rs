@@ -61,8 +61,7 @@ pub fn resolve_binary_path_with_resource(
     if let Some(resource_root) = resource_dir {
         let source = resource_root.join(BUNDLED_GATEWAY_SIDECAR_RELATIVE);
         if source.is_file() {
-            ensure_bundled_deployed(&source, &target)?;
-            return Ok(target);
+            return ensure_bundled_deployed(&source, &target);
         }
     }
 
@@ -80,7 +79,8 @@ pub fn resolve_binary_path_with_resource(
 }
 
 /// 若目标不存在或与源哈希不同，则原子复制。
-pub fn ensure_bundled_deployed(source: &Path, target: &Path) -> Result<(), AppError> {
+/// 返回实际应启动的路径（目标被占用时回退到按哈希命名的旁路文件）。
+pub fn ensure_bundled_deployed(source: &Path, target: &Path) -> Result<PathBuf, AppError> {
     if !source.is_file() {
         return Err(AppError::BinaryMissing {
             path: source.display().to_string(),
@@ -91,10 +91,16 @@ pub fn ensure_bundled_deployed(source: &Path, target: &Path) -> Result<(), AppEr
         });
     }
 
+    let src_hash = file_sha256(source).map_err(|source_err| AppError::BinaryDeployFailed {
+        path: source.display().to_string(),
+        source: source_err,
+    })?;
+
     if target.is_file() {
-        match (file_sha256(source), file_sha256(target)) {
-            (Ok(src_hash), Ok(dst_hash)) if src_hash == dst_hash => return Ok(()),
-            _ => {}
+        if let Ok(dst_hash) = file_sha256(target) {
+            if src_hash == dst_hash {
+                return Ok(target.to_path_buf());
+            }
         }
     }
 
@@ -105,35 +111,61 @@ pub fn ensure_bundled_deployed(source: &Path, target: &Path) -> Result<(), AppEr
         })?;
     }
 
+    match atomic_copy(source, target) {
+        Ok(()) => Ok(target.to_path_buf()),
+        Err(source_err) if is_sharing_violation(&source_err) => {
+            // 旧网关仍在运行时无法覆盖默认文件名：写到旁路路径并启动新副本。
+            let short = hex8(&src_hash);
+            let alt = target.with_file_name(format!("model-hub-gateway-{short}.exe"));
+            if alt.is_file() {
+                if let Ok(alt_hash) = file_sha256(&alt) {
+                    if alt_hash == src_hash {
+                        return Ok(alt);
+                    }
+                }
+            }
+            atomic_copy(source, &alt).map_err(|err| AppError::BinaryDeployFailed {
+                path: alt.display().to_string(),
+                source: err,
+            })?;
+            Ok(alt)
+        }
+        Err(source_err) => Err(AppError::BinaryDeployFailed {
+            path: target.display().to_string(),
+            source: source_err,
+        }),
+    }
+}
+
+fn atomic_copy(source: &Path, target: &Path) -> Result<(), std::io::Error> {
     let tmp = target.with_extension("exe.deploying");
     if tmp.exists() {
         let _ = fs::remove_file(&tmp);
     }
-
-    fs::copy(source, &tmp).map_err(|source_err| AppError::BinaryDeployFailed {
-        path: target.display().to_string(),
-        source: source_err,
-    })?;
-
+    fs::copy(source, &tmp)?;
     if target.exists() {
-        if let Err(source_err) = fs::remove_file(target) {
+        fs::remove_file(target).map_err(|err| {
             let _ = fs::remove_file(&tmp);
-            return Err(AppError::BinaryDeployFailed {
-                path: target.display().to_string(),
-                source: source_err,
-            });
-        }
+            err
+        })?;
     }
-
-    fs::rename(&tmp, target).map_err(|source_err| {
+    fs::rename(&tmp, target).map_err(|err| {
         let _ = fs::remove_file(&tmp);
-        AppError::BinaryDeployFailed {
-            path: target.display().to_string(),
-            source: source_err,
-        }
+        err
     })?;
-
     Ok(())
+}
+
+fn is_sharing_violation(err: &std::io::Error) -> bool {
+    matches!(
+        err.kind(),
+        std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::ResourceBusy
+    ) || err.raw_os_error() == Some(5) // ERROR_ACCESS_DENIED
+        || err.raw_os_error() == Some(32) // ERROR_SHARING_VIOLATION
+}
+
+fn hex8(hash: &[u8; 32]) -> String {
+    hash[..4].iter().map(|b| format!("{b:02x}")).collect()
 }
 
 fn file_sha256(path: &Path) -> Result<[u8; 32], std::io::Error> {
@@ -262,7 +294,8 @@ mod tests {
             write_fake_binary(&source, b"same-bytes");
             write_fake_binary(&target, b"same-bytes");
             let before = file_sha256(&target).unwrap();
-            ensure_bundled_deployed(&source, &target).unwrap();
+            let path = ensure_bundled_deployed(&source, &target).unwrap();
+            assert_eq!(path, target);
             assert_eq!(file_sha256(&target).unwrap(), before);
             let _ = std::fs::remove_dir_all(root);
         });
@@ -278,7 +311,8 @@ mod tests {
             let target = bin_dir.join(DEFAULT_GATEWAY_BINARY_NAME);
             write_fake_binary(&source, b"new-version");
             write_fake_binary(&target, b"old-version");
-            ensure_bundled_deployed(&source, &target).unwrap();
+            let path = ensure_bundled_deployed(&source, &target).unwrap();
+            assert_eq!(path, target);
             assert_eq!(std::fs::read(&target).unwrap(), b"new-version");
             let _ = std::fs::remove_dir_all(root);
         });

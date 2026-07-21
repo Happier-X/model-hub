@@ -136,10 +136,13 @@ impl GatewayRuntime {
         }
     }
 
+    #[allow(dead_code)] // 单测与将来回滚路径保留
     pub fn restore_status(&mut self, status: GatewayStatus) {
         self.status = status;
     }
 
+    /// 仅在 idle/error 时改端口（内存）。运行中请用 [`Self::apply_port_and_restart`]。
+    #[allow(dead_code)] // 单测覆盖 idle/error 路径；生产走 apply_port_and_restart
     pub fn set_port(&mut self, port: u16) -> Result<GatewayStatus, AppError> {
         if !matches!(self.status.state, GatewayPhase::Idle | GatewayPhase::Error) {
             return Err(AppError::PortChangeWhileActive);
@@ -148,6 +151,33 @@ impl GatewayRuntime {
         self.status.base_url = format!("http://{}:{}", self.status.host, port);
         self.status.last_error = None;
         Ok(self.status.clone())
+    }
+
+    /// 停止（若在运行）→ 更新端口 → 立即按新端口重新启动。
+    pub fn apply_port_and_restart(
+        &mut self,
+        port: u16,
+        gateway_dir: &Path,
+        bin_dir: &Path,
+        resource_dir: Option<&Path>,
+    ) -> Result<GatewayStatus, AppError> {
+        self.reap_if_exited();
+        // 端口未变且已在运行：无需重启。
+        if self.status.port == port && self.status.state == GatewayPhase::Running {
+            return Ok(self.status.clone());
+        }
+        if matches!(
+            self.status.state,
+            GatewayPhase::Running | GatewayPhase::Starting | GatewayPhase::Stopping
+        ) {
+            let _ = self.stop();
+        }
+        // stop 后可能仍为 error（外部占用等）；端口仍应更新，再尝试 start。
+        self.status.port = port;
+        self.status.base_url = format!("http://{}:{}", self.status.host, port);
+        self.status.last_error = None;
+        self.status.state = GatewayPhase::Idle;
+        self.start_with_resource(gateway_dir, bin_dir, resource_dir)
     }
 
     pub fn stop(&mut self) -> Result<GatewayStatus, AppError> {
@@ -267,6 +297,32 @@ mod tests {
             ));
             assert_eq!(runtime.status.port, 8080);
         }
+    }
+
+    #[test]
+    fn apply_port_and_restart_updates_port_even_when_start_fails() {
+        let root = std::env::temp_dir().join(format!(
+            "model-hub-port-restart-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+
+        let mut runtime = GatewayRuntime::new("127.0.0.1".into(), 8080, root.display().to_string());
+        runtime.status.state = GatewayPhase::Running;
+
+        let err = runtime
+            .apply_port_and_restart(18080, &root, &root, None)
+            .unwrap_err();
+        assert!(matches!(err, AppError::BinaryMissing { .. }));
+        assert_eq!(runtime.status.port, 18080);
+        assert_eq!(runtime.status.base_url, "http://127.0.0.1:18080");
+
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

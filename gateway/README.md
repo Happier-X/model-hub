@@ -53,7 +53,7 @@ model-hub-gateway --config data/config.json
 | 项 | 约定 |
 |----|------|
 | 监听地址 | 默认 **`127.0.0.1`** |
-| 端口 | 默认 **8080**（可在设置页停止网关后修改） |
+| 端口 | 默认 **8080**（设置页保存后自动重启生效） |
 | 管理 UI | **无登录页**；静默 `POST /api/v1/user/login`（默认 admin/admin） |
 | 客户端网关 Key | 前缀 **`sk-modelhub-...`**；与管理 JWT 分离 |
 

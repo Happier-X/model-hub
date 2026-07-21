@@ -33,7 +33,7 @@ pub fn run() {
 
             tray::setup_tray(app)?;
 
-            // 自动尝试启动侧车：二进制缺失时保持 error/idle 语义，不阻止窗口打开。
+            // 打开应用即默认启动网关；失败时写入 last_error，不阻止窗口打开。
             gateway::try_autostart(app.handle());
             Ok(())
         })

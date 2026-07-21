@@ -227,27 +227,37 @@ function GatewayPortPanel({
       onSaved(status);
       setDraft(String(value));
       setDirty(false);
-      setMessage(`已保存，下次启动使用端口 ${value}。`);
+      if (status.state === "running") {
+        setMessage(`已保存并按端口 ${value} 自动重启网关。`);
+      } else {
+        setMessage(`已保存端口 ${value}。若网关未运行，请查看状态条错误后重试启动。`);
+      }
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
   };
 
-  const active = gateway?.state === "running" || gateway?.state === "starting" || gateway?.state === "stopping";
+  // 启动/停止过渡中禁用，避免并发切换；运行中允许直接改端口并自动重启。
+  const transitioning =
+    gateway?.state === "starting" || gateway?.state === "stopping";
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <h3 className="text-lg font-semibold">网关监听端口</h3>
-      <p className="mt-1 text-sm text-slate-500">默认绑定 127.0.0.1。请先停止网关，再保存端口；保存后下次手动启动生效。</p>
+      <p className="mt-1 text-sm text-slate-500">
+        默认绑定 127.0.0.1。保存后会自动停止并按新端口重启网关；打开应用时也会默认启动网关。
+      </p>
       <form onSubmit={(event) => void save(event)} className="mt-4 flex max-w-md items-end gap-3">
         <label className="flex-1 text-sm">
           <span className="font-medium text-slate-700">端口（当前 {port}）</span>
           <input type="number" min="1" max="65535" step="1" inputMode="numeric" required
             value={draft} onChange={(event) => { setDraft(event.target.value); setDirty(true); setError(null); setMessage(null); }}
-            disabled={busy || active} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono" />
+            disabled={busy || transitioning} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono" />
         </label>
-        <button type="submit" disabled={busy || active} className="rounded-lg bg-cyan-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">保存端口</button>
+        <button type="submit" disabled={busy || transitioning} className="rounded-lg bg-cyan-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">保存端口</button>
       </form>
-      {active ? <p className="mt-3 text-sm text-amber-700">网关运行中，请先点击“停止网关”后修改端口。</p> : null}
+      {transitioning ? (
+        <p className="mt-3 text-sm text-amber-700">网关正在切换状态，请稍候再修改端口。</p>
+      ) : null}
       {error ? <p role="alert" className="mt-3 text-sm text-red-700">{error}</p> : null}
       {message ? <p className="mt-3 text-sm text-emerald-700" aria-live="polite">{message}</p> : null}
     </section>

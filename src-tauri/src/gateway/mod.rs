@@ -90,18 +90,28 @@ pub fn gateway_set_port(
         return Err(AppError::InvalidPort.into());
     }
     let paths = paths::resolve_paths(&app).map_err(InvokeError::from)?;
+    let gateway_dir = std::path::PathBuf::from(&paths.gateway_dir);
+    let bin_dir = std::path::PathBuf::from(&paths.bin_dir);
+    let resource_dir = app.path().resource_dir().ok().filter(|p| p.exists());
     with_runtime(&gateway, |runtime| {
-        // 先验证运行态，再持久化；保存失败时恢复原端口，避免内存与磁盘分裂。
+        // 先持久化端口，再 stop→start；保存失败时不改运行态。
         let previous = runtime.status_snapshot();
-        let status = runtime.set_port(port)?;
         if let Err(error) = save_shell_config(
             std::path::Path::new(&paths.config_dir),
             &ShellConfig { gateway_port: port },
         ) {
-            runtime.restore_status(previous);
             return Err(error);
         }
-        Ok(status)
+        match runtime.apply_port_and_restart(port, &gateway_dir, &bin_dir, resource_dir.as_deref())
+        {
+            Ok(status) => Ok(status),
+            Err(error) => {
+                // 端口已写入 shell.json；内存尽量保持新端口与错误态，便于 UI 展示。
+                // 若 stop/start 中途失败，restore 旧状态会与磁盘不一致，故不回滚端口。
+                let _ = previous;
+                Err(error)
+            }
+        }
     })
     .map_err(InvokeError::from)
 }

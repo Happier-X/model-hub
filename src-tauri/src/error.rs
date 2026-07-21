@@ -34,7 +34,7 @@ pub enum AppError {
         #[source]
         source: std::io::Error,
     },
-    #[error("网关正在运行或切换状态，请先停止网关后再修改监听端口")]
+    #[error("网关正在切换状态，请稍候再修改监听端口")]
     PortChangeWhileActive,
     #[error("无法序列化网关配置“{path}”：{source}")]
     SerializeConfig {
@@ -50,7 +50,7 @@ pub enum AppError {
         #[source]
         source: std::io::Error,
     },
-    #[error("端口 {port} 已被占用。请到设置页修改“网关监听端口”，停止网关后重试；应用不会自动结束占用端口的进程。")]
+    #[error("端口 {port} 已被占用。请到设置页修改“网关监听端口”后保存（将自动重启）；应用不会自动结束占用端口的进程。")]
     PortInUse { port: u16 },
     #[error("端口必须是 1 到 65535 之间的整数")]
     InvalidPort,
