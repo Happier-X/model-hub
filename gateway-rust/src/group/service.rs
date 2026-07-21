@@ -21,6 +21,14 @@ impl GroupService {
         self.store.list()
     }
 
+    pub fn get(&self, id: i64) -> Result<Group, GroupError> {
+        self.store.get(id)
+    }
+
+    pub fn find_by_name(&self, name: &str) -> Result<Group, GroupError> {
+        self.store.find_by_name(name)
+    }
+
     pub fn create(&self, req: CreateGroupRequest) -> Result<Group, GroupError> {
         self.store.create(req)
     }

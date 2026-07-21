@@ -1,0 +1,9 @@
+{"path":".trellis/spec/backend/directory-structure.md","reason":"gateway-rust 模块边界"}
+{"path":".trellis/spec/backend/quality-guidelines.md","reason":"密钥与转发安全"}
+{"path":".trellis/spec/backend/error-handling.md","reason":"错误 JSON"}
+{"path":"docs/chat-onboarding.md","reason":"model=分组名约定"}
+{"path":"scripts/e2e-octopus-smoke.py","reason":"chat 鉴权期望"}
+{"path":"gateway-rust/src/group/service.rs","reason":"分组查询"}
+{"path":"gateway-rust/src/channel/service.rs","reason":"渠道查询"}
+{"path":"gateway-rust/src/routes/v1_models.rs","reason":"扩展模型列表"}
+{"path":"gateway-rust/src/http.rs","reason":"AppState 与路由"}

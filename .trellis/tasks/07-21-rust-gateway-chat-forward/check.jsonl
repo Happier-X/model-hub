@@ -1,0 +1,4 @@
+{"path":"docs/chat-onboarding.md","reason":"分组名作为 model"}
+{"path":".trellis/spec/backend/quality-guidelines.md","reason":"密钥与进程安全"}
+{"path":"gateway-rust/src/http.rs","reason":"路由组装"}
+{"path":"scripts/e2e-octopus-smoke.py","reason":"chat 非 401 期望"}

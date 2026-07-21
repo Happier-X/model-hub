@@ -285,6 +285,13 @@ async fn channel_group_apikey_full_flow() {
     let models = http_json("GET", &base, "/v1/models", None, Some(&raw_key)).await;
     assert_eq!(models.status, 200);
     assert_eq!(models.body["object"], "list");
+    let model_ids: Vec<&str> = models.body["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["id"].as_str().unwrap())
+        .collect();
+    assert!(model_ids.contains(&"group-renamed"));
 
     // 删除分组与渠道
     let del_g = http_json(

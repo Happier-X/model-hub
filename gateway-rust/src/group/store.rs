@@ -75,6 +75,40 @@ impl GroupStore {
         })
     }
 
+    /// 按分组名精确匹配（客户端 model 字段）。
+    pub fn find_by_name(&self, name: &str) -> Result<Group, GroupError> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(GroupError::NotFound);
+        }
+        let conn = self.db.lock().map_err(|_| GroupError::Internal)?;
+        let row = conn
+            .query_row(
+                "SELECT id, name, mode, match_regex FROM groups WHERE name = ?1",
+                [name],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, String>(3)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|_| GroupError::Internal)?
+            .ok_or(GroupError::NotFound)?;
+        let (id, name, mode, match_regex) = row;
+        let items = load_items(&conn, id)?;
+        Ok(Group {
+            id,
+            name,
+            mode,
+            match_regex,
+            items,
+        })
+    }
+
     pub fn create(&self, req: CreateGroupRequest) -> Result<Group, GroupError> {
         let name = req.name.trim().to_string();
         if name.is_empty() {
@@ -264,5 +298,23 @@ mod tests {
 
         store.delete(g.id).unwrap();
         assert!(store.list().unwrap().is_empty());
+    }
+
+    #[test]
+    fn find_by_name_exact() {
+        let (db, _dir) = open_tempfile_db();
+        let store = GroupStore::new(db);
+        store
+            .create(CreateGroupRequest {
+                name: "by-name".into(),
+                mode: 1,
+                match_regex: "".into(),
+                items: vec![],
+            })
+            .unwrap();
+        let found = store.find_by_name("by-name").unwrap();
+        assert_eq!(found.name, "by-name");
+        assert_eq!(store.find_by_name("missing"), Err(GroupError::NotFound));
+        assert_eq!(store.find_by_name("  "), Err(GroupError::NotFound));
     }
 }

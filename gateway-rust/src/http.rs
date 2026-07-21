@@ -13,7 +13,9 @@ use crate::config::GatewayConfig;
 use crate::db::{open_from_config, open_path, DbConn};
 use crate::error::GatewayError;
 use crate::group::{GroupService, GroupStore};
+use crate::router::RouterService;
 use crate::routes;
+use crate::upstream::UpstreamClient;
 
 /// 应用共享状态。
 #[derive(Clone)]
@@ -23,6 +25,8 @@ pub struct AppState {
     pub api_keys: Arc<dyn ApiKeyStore>,
     pub channels: Arc<ChannelService>,
     pub groups: Arc<GroupService>,
+    pub router: Arc<RouterService>,
+    pub upstream: Arc<UpstreamClient>,
 }
 
 impl AppState {
@@ -37,12 +41,16 @@ impl AppState {
         let api_keys: Arc<dyn ApiKeyStore> = Arc::new(SqliteApiKeyStore::new(db.clone()));
         let channels = Arc::new(ChannelService::new(ChannelStore::new(db.clone())));
         let groups = Arc::new(GroupService::new(GroupStore::new(db)));
+        let router = Arc::new(RouterService::new(groups.clone(), channels.clone()));
+        let upstream = Arc::new(UpstreamClient::with_default_timeout());
         Self {
             config: Arc::new(config),
             auth: Arc::new(auth),
             api_keys,
             channels,
             groups,
+            router,
+            upstream,
         }
     }
 
@@ -70,12 +78,18 @@ impl AppState {
         config.auth.jwt_secret = Some("test-jwt-secret-do-not-use-prod".into());
         let db = open_path(":memory:").expect("open memory db");
         let auth = AuthService::from_config(&config.auth);
+        let channels = Arc::new(ChannelService::new(ChannelStore::new(db.clone())));
+        let groups = Arc::new(GroupService::new(GroupStore::new(db)));
+        let router = Arc::new(RouterService::new(groups.clone(), channels.clone()));
+        let upstream = Arc::new(UpstreamClient::with_default_timeout());
         Self {
             config: Arc::new(config),
             auth: Arc::new(auth),
             api_keys: Arc::new(MemoryApiKeyStore::new()),
-            channels: Arc::new(ChannelService::new(ChannelStore::new(db.clone()))),
-            groups: Arc::new(GroupService::new(GroupStore::new(db))),
+            channels,
+            groups,
+            router,
+            upstream,
         }
     }
 }
@@ -94,6 +108,8 @@ impl std::fmt::Debug for AppState {
             .field("api_keys", &"<store>")
             .field("channels", &"<service>")
             .field("groups", &"<service>")
+            .field("router", &"<service>")
+            .field("upstream", &"<client>")
             .finish()
     }
 }
@@ -155,7 +171,12 @@ pub fn build_router(state: AppState) -> Router {
             delete(routes::delete_group_handler),
         );
 
-    let client = Router::new().route("/v1/models", get(routes::models_handler));
+    let client = Router::new()
+        .route("/v1/models", get(routes::models_handler))
+        .route(
+            "/v1/chat/completions",
+            post(routes::chat_completions_handler),
+        );
 
     public
         .merge(admin)

@@ -23,6 +23,10 @@ impl ChannelService {
         self.store.list()
     }
 
+    pub fn get(&self, id: i64) -> Result<Channel, ChannelError> {
+        self.store.get(id)
+    }
+
     pub fn create(&self, req: CreateChannelRequest) -> Result<Channel, ChannelError> {
         self.store.create(req)
     }

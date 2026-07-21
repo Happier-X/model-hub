@@ -1,6 +1,6 @@
 # model-hub-gateway（实验）
 
-> **状态：实验性。** 本 crate 是 Rust 原生网关，当前实现 **HTTP 骨架 + SQLite 持久化 + 渠道/分组 CRUD + 管理 JWT / 客户端 API Key 鉴权闭环**，供后续 Chat 转发切片开发。  
+> **状态：实验性。** 本 crate 是 Rust 原生网关，当前实现 **HTTP 骨架 + SQLite 持久化 + 渠道/分组 CRUD + 管理 JWT / 客户端 API Key 鉴权 + 非流式 Chat 转发**，供后续流式与发布接入切片开发。  
 > **不能**替代当前 Model Hub 发布版内嵌的 **octopus v0.9.28** 侧车，也 **不会** 被 Tauri 壳默认拉起。
 
 ## 目标
@@ -14,6 +14,8 @@
   - 客户端 `/v1/*`：`Bearer sk-octopus-...` 或 `x-api-key`
 - 客户端 API Key 仅 create 返回完整明文；存储只保留哈希 + 脱敏
 - 渠道上游 Key 可明文存于本机 SQLite；日志禁止打印完整 Key
+- **客户端 `model` = 分组名**；上游 `model` = group item 的 `model_name`
+- 非流式 `POST /v1/chat/completions` 转发；`stream=true` 返回 400（本版本不支持 SSE）
 - Ctrl-C 优雅退出；测试使用随机端口 + 临时库，不按进程名清理 octopus
 
 ## 运行
@@ -54,7 +56,8 @@ cargo run --manifest-path gateway-rust/Cargo.toml -- --config gateway-rust/testd
 - `database.path` 相对路径相对进程 cwd；启动时创建父目录并 migrate v1。
 - `auth` 缺省：用户名/密码 `admin`/`admin`；`jwt_secret` 未配置时进程启动生成随机密钥并 warning（重启后 Token 失效）。
 - 校验：`host` 合法 IP、`port != 0`；默认绑定 `127.0.0.1:8080`。
-- 日志禁止打印完整 JWT / 客户端 Key / 上游 channel_key。
+- 上游 HTTP 超时默认 **60s**（`reqwest` + rustls）。
+- 日志禁止打印完整 JWT / 客户端 Key / 上游 channel_key / 用户 messages 全文。
 
 ## HTTP 契约
 
@@ -122,12 +125,35 @@ Key 前缀固定 **`sk-octopus-`**。SQLite 只存 SHA-256 哈希，不落明文
 
 成功响应一律 `{ "data": ... }`。
 
-### 客户端占位
+### 客户端 OpenAI 兼容
 
-`GET /v1/models`（OpenAI 风格，**不**包管理信封）：
+#### `GET /v1/models`
 
-- 有效 Key → `200` `{ "object": "list", "data": [] }`
+- 有效 Key → `200` OpenAI list 格式，`data[].id` = **分组名**
+- 无分组时 `data` 可为 `[]`
 - 无凭证 / 坏 Key / 禁用 Key / **管理 JWT** → `401`（含顶层 `message`）
+
+```json
+{
+  "object": "list",
+  "data": [
+    { "id": "my-group", "object": "model", "owned_by": "model-hub" }
+  ]
+}
+```
+
+#### `POST /v1/chat/completions`（非流式）
+
+- 客户端 Key 鉴权；管理 JWT → 401
+- 请求体至少含 `model`（**分组名**）+ `messages`
+- 路由：`mode=1` 轮询 items；其它 mode 暂取首个可用 item
+- 加载 item 绑定渠道：需 enabled；取首个 base_url + 首个 enabled key
+- 上游 URL：`{base_url 去尾斜杠}/chat/completions`
+- 上游 Header：`Authorization: Bearer {channel_key}`；尽力合并 `custom_header`
+- 改写上游 body：`model` → item.`model_name`
+- 上游状态码与 body **透传**；网络失败 → 502
+- `stream: true` → **400** `STREAM_NOT_SUPPORTED`（不半吊子代理 SSE）
+- 未知分组 → 404；无 items / 无可用渠道 → 400
 
 ### 未知路径
 
@@ -156,6 +182,11 @@ curl.exe -s -X POST http://127.0.0.1:18081/api/v1/channel/create `
   -H "Authorization: Bearer TOKEN" -H "Content-Type: application/json" `
   -d "{\"name\":\"demo\",\"type\":0,\"enabled\":true,\"base_urls\":[{\"url\":\"https://api.openai.com/v1\",\"delay\":0}],\"keys\":[{\"enabled\":true,\"channel_key\":\"sk-test\",\"remark\":\"\"}],\"model\":\"gpt-4o-mini\",\"custom_model\":\"\",\"proxy\":false,\"auto_sync\":false,\"auto_group\":0,\"custom_header\":[]}"
 
+# 创建分组（name = 客户端 model）
+curl.exe -s -X POST http://127.0.0.1:18081/api/v1/group/create `
+  -H "Authorization: Bearer TOKEN" -H "Content-Type: application/json" `
+  -d "{\"name\":\"my-group\",\"mode\":1,\"match_regex\":\"\",\"items\":[{\"channel_id\":1,\"model_name\":\"gpt-4o-mini\",\"priority\":1,\"weight\":1}]}"
+
 # 创建客户端 Key
 curl.exe -s -X POST http://127.0.0.1:18081/api/v1/apikey/create `
   -H "Authorization: Bearer TOKEN" -H "Content-Type: application/json" `
@@ -163,6 +194,11 @@ curl.exe -s -X POST http://127.0.0.1:18081/api/v1/apikey/create `
 
 # 客户端 models（替换 SK）
 curl.exe -s http://127.0.0.1:18081/v1/models -H "Authorization: Bearer SK"
+
+# 非流式 chat（model = 分组名）
+curl.exe -s -X POST http://127.0.0.1:18081/v1/chat/completions `
+  -H "Authorization: Bearer SK" -H "Content-Type: application/json" `
+  -d "{\"model\":\"my-group\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
 ```
 
 ## 鉴权矩阵
@@ -176,6 +212,7 @@ curl.exe -s http://127.0.0.1:18081/v1/models -H "Authorization: Bearer SK"
 | `/api/v1/channel/*` | 401 | 按业务 | 401 | 401 |
 | `/api/v1/group/*` | 401 | 按业务 | 401 | 401 |
 | `/v1/models` | 401 | 401 | 200 | 401 |
+| `/v1/chat/completions` | 401 | 401 | 按业务 | 401 |
 
 ## 与 octopus / Tauri 边界
 
@@ -198,8 +235,9 @@ cargo clippy --manifest-path gateway-rust/Cargo.toml --all-targets -- -D warning
 集成测试绑定 `127.0.0.1:0` 随机端口 + 临时 SQLite，覆盖：
 
 - 登录 → 建 Key → `/v1/models` 鉴权矩阵
-- 登录 → 渠道 CRUD（keys_to_*）→ 分组 CRUD（items_to_*）→ apikey → models
+- 登录 → 渠道 CRUD（keys_to_*）→ 分组 CRUD（items_to_*）→ apikey → models（分组名列表）
 - API Key 跨进程实例持久化
+- wiremock 上游 200 转发、stream 拒绝、未知分组、轮询切换 model_name
 
 ## 目录
 
@@ -221,9 +259,12 @@ gateway-rust/
 │   ├── apikey/        # model / memory + sqlite store / hash
 │   ├── channel/       # model / store / service
 │   ├── group/         # model / store / service
-│   └── routes/        # login / apikey / channel / group / v1 models
+│   ├── router/        # 分组 → 渠道 + model_name；轮询
+│   ├── upstream/      # reqwest 非流式转发
+│   └── routes/        # login / apikey / channel / group / v1 models / chat
 └── tests/
     ├── http_server.rs
     ├── auth_matrix.rs
-    └── channel_group_matrix.rs
+    ├── channel_group_matrix.rs
+    └── chat_forward.rs
 ```
