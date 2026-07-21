@@ -1,6 +1,10 @@
 # NOTICE — octopus 上游组件
 
-Model Hub 在 Windows 安装包中**内嵌**了 [bestruirui/octopus](https://github.com/bestruirui/octopus) 的预编译 Windows x64 二进制，作为阶段 1 的本地 LLM 网关侧车。
+> **重要：当前 Windows 发布包不再内嵌 octopus 二进制，也不再随包分发本目录合规材料。**  
+> 本目录仅作历史参考与开发/高级用户**可选回退**（自备二进制 + `MODEL_HUB_GATEWAY_IMPL=octopus`）时的许可证说明。  
+> 默认网关实现为仓库内 `gateway-rust`（`model-hub-gateway`）。
+
+Model Hub 历史上在 Windows 安装包中曾内嵌 [bestruirui/octopus](https://github.com/bestruirui/octopus) 的预编译 Windows x64 二进制，作为阶段 1 的本地 LLM 网关侧车。
 
 ## 上游信息
 
@@ -18,8 +22,8 @@ Model Hub 在 Windows 安装包中**内嵌**了 [bestruirui/octopus](https://git
 ## 与 Model Hub 的关系
 
 - Model Hub 桌面壳（Tauri / Rust + 管理 UI）负责进程启停、数据目录与管理界面。
-- 渠道/分组/转发/SQLite 等业务由内嵌的 octopus 进程提供。
-- 分发内嵌二进制时，须遵守 AGPL-3.0 对**对应源码**的提供义务；对应源码获取方式见 `SOURCE.md`。
+- **默认**渠道/分组/转发/SQLite 等业务由内嵌的 **gateway-rust** 提供。
+- 若开发/高级用户**自行**下载并运行 octopus，须自行遵守 AGPL-3.0；对应源码获取方式见 `SOURCE.md`。
 - 本 NOTICE **不是法律意见**；公开分发前请自行评估合规要求。
 
 ## 致谢

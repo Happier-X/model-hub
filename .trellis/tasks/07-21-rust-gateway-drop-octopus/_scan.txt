@@ -1,0 +1,8 @@
+README.md
+3718: '## 致谢与许可证提示\n\n- **默认网���**为仓库内 `gateway-r'
+3719: '# 致谢与许可证提示\n\n- **默认网���**为仓库内 `gateway-ru'
+3720: ' 致谢与许可证提示\n\n- **默认网���**为仓库内 `gateway-rus'
+gateway/README.md
+2866: '。\n>\n> 从旧版 octopus 升级���默认 rust：请使用 **`mo'
+2867: '\n>\n> 从旧版 octopus 升级���默认 rust：请使用 **`mod'
+2868: '>\n> 从旧版 octopus 升级���默认 rust：请使用 **`mode'

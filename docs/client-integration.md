@@ -4,7 +4,7 @@
 
 ## 前提
 
-1. **安装版**无需自备 `octopus.exe`（内嵌 v0.9.28，启动时自动部署）。**开发**请见 [gateway/README.md](../gateway/README.md)：`pnpm prepare:octopus` 或设置 `MODEL_HUB_GATEWAY_BIN`。
+1. **安装版**无需自备网关二进制（内嵌 **model-hub-gateway**，启动时自动部署）。**开发**请见 [gateway/README.md](../gateway/README.md)：`pnpm prepare:gateway-rust` 或设置 `MODEL_HUB_GATEWAY_BIN`。
 2. 运行发行版或 `pnpm tauri dev`，在应用内确认网关状态为 **运行中**。
 3. 在 **渠道** 页创建 OpenAI Chat 兼容上游（Base URL + 上游 API Key + 模型名）。
 4. 在 **分组** 页创建分组，**分组名** 将作为客户端的 `model`；负载默认 **轮询**。
@@ -30,11 +30,11 @@
 
 监听地址默认 **仅本机** `127.0.0.1`。
 
-**注意（octopus v0.9.28）**：
+**注意**：
 
 - 管理台 JWT 与客户端网关 Key **不是同一套**。
-- `/v1/*` **必须**使用侧车签发的网关 API Key（前缀 `sk-octopus-`）。
-- 渠道类型字段在该版本为数字；Model Hub 创建 OpenAI Chat 时使用 `type: 0`。
+- `/v1/*` **必须**使用网关签发的客户端 API Key（前缀仍为历史兼容名 `sk-octopus-`）。
+- 渠道 `type` 为数字；Model Hub 创建 OpenAI Chat 时使用 `type: 0`。
 
 ## curl 示例
 
@@ -78,7 +78,7 @@ print(completion.choices[0].message.content)
 
 `POST /api/v1/user/login`（默认 `admin` / `admin`）
 
-业务管理接口形如 `/api/v1/channel/*`、`/api/v1/group/*`、`/api/v1/apikey/*`、`/api/v1/log/*`，需要 Bearer **管理 Token**。若你修改了侧车默认密码，请在应用 **设置** 中粘贴有效管理 Token。
+业务管理接口形如 `/api/v1/channel/*`、`/api/v1/group/*`、`/api/v1/apikey/*`、`/api/v1/log/*`，需要 Bearer **管理 Token**。若你修改了默认管理密码，请在应用 **设置** 中粘贴有效管理 Token。
 
 创建网关客户端 Key：
 
@@ -86,4 +86,4 @@ print(completion.choices[0].message.content)
 
 ## 许可证
 
-侧车 octopus 为 AGPL-3.0。分发或修改时请遵守其许可证并保留致谢。详见 `gateway/README.md` 与根 `README.md`。
+当前发布包**默认内嵌 Rust 原生网关**，不再分发 octopus 二进制。历史/可选兼容侧车说明见 [gateway/README.md](../gateway/README.md) 与根 `README.md`；仓库内 `third-party/octopus/` 仅作参考。

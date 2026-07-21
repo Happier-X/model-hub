@@ -59,7 +59,7 @@ git push origin master
    - NSIS `.sig`
    - `latest.json`
    - `SHA256SUMS.txt`
-   - AGPL/NOTICE/SOURCE 材料
+   - 发布说明（若有）
 6. 在 Release 页面确认 `latest.json` 中的版本、下载 URL、签名与公开资产名称一致。
 
 ## 失败处理

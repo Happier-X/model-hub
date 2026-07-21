@@ -1,0 +1,8 @@
+{"path":"src-tauri/src/gateway/impl_kind.rs","reason":"默认实现切换"}
+{"path":"src-tauri/src/gateway/binary.rs","reason":"错误文案与解析"}
+{"path":"src-tauri/tauri.release.conf.json","reason":"移除 octopus 资源"}
+{"path":".github/workflows/release-windows.yml","reason":"CI 去 octopus"}
+{"path":"package.json","reason":"release 脚本"}
+{"path":"third-party/octopus/NOTICE.md","reason":"合规叙事"}
+{"path":"README.md","reason":"产品说明"}
+{"path":"gateway/README.md","reason":"网关说明"}

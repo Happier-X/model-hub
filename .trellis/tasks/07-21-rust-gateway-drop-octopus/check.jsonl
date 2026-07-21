@@ -1,0 +1,5 @@
+{"path":"src-tauri/src/gateway/impl_kind.rs","reason":"默认 rust"}
+{"path":"src-tauri/tauri.release.conf.json","reason":"无 octopus 资源"}
+{"path":".github/workflows/release-windows.yml","reason":"无 prepare octopus"}
+{"path":"third-party/octopus/NOTICE.md","reason":"不再内嵌声明"}
+{"path":"README.md","reason":"文档一致"}

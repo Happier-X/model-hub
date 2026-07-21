@@ -1,15 +1,15 @@
 # Chat 上手与故障排查
 
-从零把 **OpenAI 兼容客户端** 接到本机 Model Hub（octopus v0.9.28 侧车）并跑通 Chat。
+从零把 **OpenAI 兼容客户端** 接到本机 Model Hub（默认 **Rust 原生网关**）并跑通 Chat。
 
 ## 你需要准备
 
 | 项 | 说明 |
 |----|------|
 | Windows + Model Hub | 安装版或 `pnpm tauri dev` |
-| 内置网关 | 安装版已内嵌 octopus **v0.9.28**；开发见 [gateway/README.md](../gateway/README.md) |
+| 内置网关 | 安装版已内嵌 **model-hub-gateway**；开发见 [gateway/README.md](../gateway/README.md) |
 | **真实上游 API Key** | 渠道里的供应商 Key（假 Key 只能测鉴权，Chat 通常业务失败） |
-| 网关客户端 Key | 应用 **API 密钥** 页创建的 `sk-octopus-...` |
+| 网关客户端 Key | 应用 **API 密钥** 页创建的 `sk-octopus-...`（历史前缀，兼容命名） |
 
 ## 五分钟配置
 

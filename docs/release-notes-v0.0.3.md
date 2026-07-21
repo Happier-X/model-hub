@@ -6,7 +6,8 @@
 - 更新包通过 Tauri 签名校验后，用户确认才下载、安装和重启。
 - 下载过程中显示进度；取消或失败不会影响当前版本。
 - Windows Release 增加 Updater `latest.json`、`.sig` 和 SHA-256。
-- 保留网关端口设置、内嵌 octopus v0.9.28、用户配置和 SQLite 数据。
+- **默认网关切换为 gateway-rust**（`model-hub-gateway`）；发布包**不再内嵌** octopus 二进制与 AGPL 合规附件。
+- 保留网关端口设置、用户配置；从旧版 octopus 升级请 `migrate-octopus` 或新建 SQLite，勿混用旧库。
 
 ## 首次使用更新功能
 
@@ -21,14 +22,13 @@ v0.0.1/v0.0.2 没有 Updater 配置，不能直接应用内升级。请先手动
 ## 鉴权与网关
 
 - 管理 UI 使用管理 JWT。
-- 外部客户端 `/v1/*` 必须使用 API 密钥页创建的完整 `sk-octopus-...` Key。
+- 外部客户端 `/v1/*` 必须使用 API 密钥页创建的完整 `sk-octopus-...` Key（历史前缀兼容）。
 - 默认监听 `127.0.0.1:8080`；端口可在设置页停止网关后修改。
+- 默认实现为 rust；高级用户可设 `MODEL_HUB_GATEWAY_IMPL=octopus` 并自备二进制回退（发布包不提供）。
 
-## AGPL 合规
+## 合规说明
 
-- 内嵌组件：[bestruirui/octopus](https://github.com/bestruirui/octopus) v0.9.28（AGPL-3.0）。
-- 对应 commit：`b7b053e7fd81911e2062359e93f9dcbd58114bb0`。
-- 对应源码：https://github.com/bestruirui/octopus/archive/refs/tags/v0.9.28.tar.gz
-- 许可证、NOTICE、SOURCE 随仓库与 Release 附件提供。
+- 默认网关为仓库内 `gateway-rust`，发布包**不再**分发 octopus 二进制。
+- 可选自备的历史组件 [bestruirui/octopus](https://github.com/bestruirui/octopus) 为 AGPL-3.0；仓库 `third-party/octopus/` 仅作历史/开发回退参考。
 
 本说明不构成法律意见。

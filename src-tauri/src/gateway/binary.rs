@@ -13,14 +13,14 @@ pub const DEFAULT_WINDOWS_BINARY_NAME: &str = "octopus.exe";
 pub const DEFAULT_RUST_BINARY_NAME: &str = "model-hub-gateway.exe";
 pub const BINARY_ENV_OVERRIDE: &str = "MODEL_HUB_GATEWAY_BIN";
 pub const RUST_BINARY_ENV: &str = "MODEL_HUB_GATEWAY_RUST_BIN";
-/// 安装包内嵌 octopus 侧车相对 resource_dir 的路径。
+/// 历史/开发兼容：若本地仍存在 octopus 资源时的相对路径（发布包不再内嵌）。
 pub const BUNDLED_SIDECAR_RELATIVE: &str = "sidecar/octopus.exe";
-/// 安装包内嵌实验 Rust 网关相对 resource_dir 的路径。
+/// 安装包内嵌默认 Rust 网关相对 resource_dir 的路径。
 pub const BUNDLED_RUST_SIDECAR_RELATIVE: &str = "sidecar/model-hub-gateway.exe";
-/// 产品文档用的内置网关版本钉扎。
+/// 历史钉扎：可选回退 octopus 的参考版本（发布包不再内嵌）。
 pub const BUNDLED_GATEWAY_VERSION: &str = "v0.9.28";
 
-/// 解析 octopus 侧车二进制：开发覆盖 → app data 已部署副本 → 资源内嵌并部署。
+/// 解析 octopus 侧车二进制：开发覆盖 → 可选本地资源 → bin_dir 副本。
 /// 通用入口请用 [`resolve_binary_for_impl`]。
 #[allow(dead_code)] // 对外兼容入口；生产路径走 resolve_binary_for_impl
 pub fn resolve_binary_path(bin_dir: &Path) -> Result<PathBuf, AppError> {
@@ -56,10 +56,10 @@ pub fn resolve_binary_for_impl(
             path: path.display().to_string(),
             hint: match impl_kind {
                 GatewayImpl::Octopus => format!(
-                    "环境变量 {BINARY_ENV_OVERRIDE} 指向的文件不存在。请检查路径，或依赖安装包内置网关 {BUNDLED_GATEWAY_VERSION}。"
+                    "环境变量 {BINARY_ENV_OVERRIDE} 指向的文件不存在。默认网关已改为 rust；若需 octopus 请提供有效路径，或取消 {BINARY_ENV_OVERRIDE} 后使用默认 rust。"
                 ),
                 GatewayImpl::Rust => format!(
-                    "环境变量 {BINARY_ENV_OVERRIDE} 指向的文件不存在。Rust 网关请先 `cargo build --manifest-path gateway-rust/Cargo.toml --release`，或依赖安装包内嵌实验网关 / 设置 {RUST_BINARY_ENV} / 将 {DEFAULT_RUST_BINARY_NAME} 放到 bin_dir。"
+                    "环境变量 {BINARY_ENV_OVERRIDE} 指向的文件不存在。请先 `cargo build --manifest-path gateway-rust/Cargo.toml --release`，或依赖安装包内嵌网关 / 设置 {RUST_BINARY_ENV} / 将 {DEFAULT_RUST_BINARY_NAME} 放到 bin_dir。"
                 ),
             },
         });
@@ -92,7 +92,7 @@ fn resolve_octopus_binary(
     Err(AppError::BinaryMissing {
         path: target.display().to_string(),
         hint: format!(
-            "未找到内置网关 {BUNDLED_GATEWAY_VERSION}。正式安装包应自带侧车；开发环境请运行 scripts/prepare-bundled-octopus.ps1，将 {DEFAULT_WINDOWS_BINARY_NAME} 放到「{path}」，或设置 {BINARY_ENV_OVERRIDE}。详见 gateway/README.md。",
+            "未找到 octopus 二进制。默认网关已改为 rust（无需设置 MODEL_HUB_GATEWAY_IMPL，或显式 =rust）。若仍需 octopus，请设置 MODEL_HUB_GATEWAY_IMPL=octopus，并自备 {DEFAULT_WINDOWS_BINARY_NAME}（可运行 scripts/prepare-bundled-octopus.ps1）放到「{path}」，或设置 {BINARY_ENV_OVERRIDE}。参考版本 {BUNDLED_GATEWAY_VERSION}。详见 gateway/README.md。",
             path = target.display()
         ),
     })
@@ -129,7 +129,7 @@ fn resolve_rust_binary(bin_dir: &Path, resource_dir: Option<&Path>) -> Result<Pa
     Err(AppError::BinaryMissing {
         path: target.display().to_string(),
         hint: format!(
-            "未找到 Rust 实验网关。正式安装包应自带 sidecar/{DEFAULT_RUST_BINARY_NAME}；开发环境请运行 scripts/prepare-bundled-gateway-rust.ps1，将 {DEFAULT_RUST_BINARY_NAME} 复制到「{path}」，或设置 {RUST_BINARY_ENV}/{BINARY_ENV_OVERRIDE}。注意：勿与 octopus 混用同一 data/data.db。详见 gateway-rust/README.md。",
+            "未找到默认 Rust 网关。正式安装包应自带 sidecar/{DEFAULT_RUST_BINARY_NAME}；开发环境请运行 scripts/prepare-bundled-gateway-rust.ps1，将 {DEFAULT_RUST_BINARY_NAME} 复制到「{path}」，或设置 {RUST_BINARY_ENV}/{BINARY_ENV_OVERRIDE}。从 octopus 升级请 migrate-octopus 或新建库，勿混用同一 data/data.db。详见 gateway-rust/README.md。",
             path = target.display()
         ),
     })
@@ -141,7 +141,8 @@ pub fn ensure_bundled_deployed(source: &Path, target: &Path) -> Result<(), AppEr
         return Err(AppError::BinaryMissing {
             path: source.display().to_string(),
             hint: format!(
-                "安装资源中缺少内置网关 {BUNDLED_GATEWAY_VERSION}（期望路径 sidecar/octopus.exe）。请重新安装应用。"
+                "安装资源中缺少网关二进制（源路径：{src}）。请重新安装应用，或开发环境运行 prepare 脚本。",
+                src = source.display()
             ),
         });
     }
@@ -279,6 +280,12 @@ mod tests {
             let dir = unique_dir("missing");
             let err = super::resolve_binary_path(&dir).unwrap_err().to_string();
             assert!(err.contains(DEFAULT_WINDOWS_BINARY_NAME) || err.contains("未找到"));
+            assert!(
+                err.contains("默认网关已改为 rust")
+                    || err.contains("MODEL_HUB_GATEWAY_IMPL=octopus")
+                    || err.contains("自备")
+            );
+            assert!(!err.contains("正式安装包应自带侧车"));
             let _ = std::fs::remove_dir_all(&dir);
         });
     }

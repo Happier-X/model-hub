@@ -1,8 +1,8 @@
-# model-hub-gateway（实验）
+# model-hub-gateway（默认网关）
 
-> **状态：实验性。** 本 crate 是 Rust 原生网关，当前实现 **HTTP 骨架 + SQLite 持久化 + 渠道/分组 CRUD + 请求日志 list/clear + 管理 JWT / 客户端 API Key 鉴权 + 非流式/SSE 流式 Chat 转发**。  
-> 安装包**默认仍启动** **octopus v0.9.28**，并**额外内嵌**本二进制（`sidecar/model-hub-gateway.exe`），可通过 `MODEL_HUB_GATEWAY_IMPL=rust` 试用；**不**替代默认路径，**不**移除 AGPL 侧车与合规材料。  
-> Tauri 壳可通过环境变量 **可选** 拉起本网关（见下文「壳接入」）；未设置时行为与现网一致。
+> **状态：默认网关实现。** 本 crate 是 Rust 原生网关，当前实现 **HTTP 骨架 + SQLite 持久化 + 渠道/分组 CRUD + 请求日志 list/clear + 管理 JWT / 客户端 API Key 鉴权 + 非流式/SSE 流式 Chat 转发**。  
+> Windows 安装包**默认启动**本二进制（`sidecar/model-hub-gateway.exe`），**不再内嵌** octopus 与 AGPL 侧车材料。  
+> 客户端 API Key 前缀仍为 `sk-octopus-...`（历史命名兼容）。从 octopus 升级请使用 `migrate-octopus` 或新建库，**勿混用**同一 `data/data.db`。
 
 ## 目标
 
@@ -30,9 +30,9 @@ cargo run --manifest-path gateway-rust/Cargo.toml -- --config gateway-rust/testd
 
 默认配置路径为 `data/config.json`（相对当前工作目录）。**文件不存在会启动失败**，不会静默使用内存默认值。
 
-## 壳接入（可选）
+## 壳接入（默认）
 
-桌面壳支持 `MODEL_HUB_GATEWAY_IMPL=rust` 启动本二进制，命令行为：
+桌面壳**默认**启动本二进制（`MODEL_HUB_GATEWAY_IMPL` 缺省 / 未知 / `rust` → rust；仅显式 `octopus` 回退自备二进制），命令行为：
 
 ```text
 model-hub-gateway.exe --config data/config.json
@@ -41,8 +41,9 @@ model-hub-gateway.exe --config data/config.json
 （工作目录 = `gateway_dir`，**没有** octopus 的 `start` 子命令。）
 
 ```powershell
-$env:MODEL_HUB_GATEWAY_IMPL = "rust"
-# 安装态：可直接试用内嵌资源（无需手工放置）
+# 默认即为 rust，一般无需设置 IMPL
+# $env:MODEL_HUB_GATEWAY_IMPL = "rust"
+# 安装态：自动从内嵌资源部署（无需手工放置）
 # 开发态：
 cargo build --manifest-path gateway-rust/Cargo.toml --release
 $env:MODEL_HUB_GATEWAY_RUST_BIN = "$PWD\gateway-rust\target\release\model-hub-gateway.exe"
@@ -51,11 +52,11 @@ $env:MODEL_HUB_GATEWAY_RUST_BIN = "$PWD\gateway-rust\target\release\model-hub-ga
 pnpm tauri dev
 ```
 
-二进制解析（`impl=rust`）：`MODEL_HUB_GATEWAY_BIN` → `MODEL_HUB_GATEWAY_RUST_BIN` → 安装资源 `sidecar/model-hub-gateway.exe`（按哈希部署到 `bin_dir`）→ `bin_dir/model-hub-gateway.exe`。
+二进制解析（默认 rust）：`MODEL_HUB_GATEWAY_BIN` → `MODEL_HUB_GATEWAY_RUST_BIN` → 安装资源 `sidecar/model-hub-gateway.exe`（按哈希部署到 `bin_dir`）→ `bin_dir/model-hub-gateway.exe`。
 
 状态字段 `GatewayStatus.impl_name` 会报告 `"rust"` 或 `"octopus"`。
 
-> **严重警告：勿与 octopus 混用同一 `data/data.db`。** 两套 schema 不兼容；切换实现前请备份/删除库文件，或使用独立 `gateway_dir`。生产路径请保持默认 octopus。
+> **严重警告：勿与 octopus 混用同一 `data/data.db`。** 两套 schema 不兼容；切换实现前请备份/删除库文件，或使用独立 `gateway_dir`。发布包默认已是 rust。
 
 ### 从 octopus 迁移数据（尽力而为）
 
@@ -86,7 +87,7 @@ cargo run --manifest-path gateway-rust/Cargo.toml -- migrate-octopus `
 
 **不迁移**：`users` / `settings` / 各类 `stats_*`；管理账号仍用 `config.auth`（默认 admin/admin）。统计需在 rust 侧重新积累。
 
-**失败回退**：继续使用 octopus + 备份的源库；不要把未迁移完成的目标库当生产。
+**失败回退**：保留 octopus 源库备份；不要把未迁移完成的目标库当生产。默认路径请用新建库或成功迁移后的目标库。
 
 兼容启动：无 subcommand 时仍为 serve（`model-hub-gateway --config data/config.json`），与壳侧契约一致。
 
@@ -303,10 +304,11 @@ curl.exe -s -N -X POST http://127.0.0.1:18081/v1/chat/completions `
 
 | 项 | 约定 |
 |----|------|
-| 当前发布链路 | 仍使用内嵌 octopus；见 `gateway/README.md` |
-| Tauri `GatewayRuntime` | **不修改** 默认侧车启动路径 |
+| 当前发布链路 | **默认**内嵌本二进制；**不再**内嵌 octopus；见 `gateway/README.md` |
+| Tauri `GatewayRuntime` | 默认 `resolve_gateway_impl() → rust`；显式 `IMPL=octopus` 可回退自备二进制 |
 | 数据目录 | SQLite 默认 `data/data.db`（相对 cwd）；schema 自有，非 1:1 复制 octopus |
 | 进程清理 | 不按 `octopus` 进程名结束任何进程 |
+| Key 前缀 | 仍为 `sk-octopus-...`（历史兼容，非仍依赖 AGPL 二进制） |
 
 ## 测试
 

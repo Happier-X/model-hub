@@ -6,9 +6,7 @@
     "targets": ["nsis"],
     "createUpdaterArtifacts": "v1Compatible",
     "resources": {
-      "../tools/octopus/octopus.exe": "sidecar/octopus.exe",
-      "../tools/gateway-rust/model-hub-gateway.exe": "sidecar/model-hub-gateway.exe",
-      "../third-party/octopus/": "third-party/octopus/"
+      "../tools/gateway-rust/model-hub-gateway.exe": "sidecar/model-hub-gateway.exe"
     }
   },
   "plugins": {

@@ -302,8 +302,8 @@ mod tests {
         let mut runtime = GatewayRuntime::new("127.0.0.1".into(), 8080, "gateway".into());
         let status = runtime.status_snapshot();
         assert!(status.impl_name == "octopus" || status.impl_name == "rust");
-        // 单测进程通常未设置 IMPL env，期望默认 octopus。
-        // 若 CI 注入了 rust，也不应 panic，仅校验字段非空。
+        // 单测进程通常未设置 IMPL env，期望默认 rust。
+        // 若 CI 显式注入了 octopus，也不应 panic，仅校验字段非空。
         assert!(!status.impl_name.is_empty());
     }
 

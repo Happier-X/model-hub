@@ -1,6 +1,6 @@
 use std::env;
 
-/// 壳侧网关实现选择：默认 octopus，实验路径可选 rust。
+/// 壳侧网关实现选择：默认 rust；显式 `octopus` 可回退自备二进制。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GatewayImpl {
     Octopus,
@@ -18,11 +18,11 @@ impl GatewayImpl {
     }
 }
 
-/// 从环境变量解析实现：仅 `rust`（大小写不敏感）启用 Rust 网关，其余一律 octopus。
+/// 从环境变量解析实现：仅 `octopus`（大小写不敏感）启用 octopus，缺省/未知一律 rust。
 pub fn resolve_gateway_impl() -> GatewayImpl {
     match env::var(IMPL_ENV) {
-        Ok(value) if value.eq_ignore_ascii_case("rust") => GatewayImpl::Rust,
-        _ => GatewayImpl::Octopus,
+        Ok(value) if value.eq_ignore_ascii_case("octopus") => GatewayImpl::Octopus,
+        _ => GatewayImpl::Rust,
     }
 }
 
@@ -64,26 +64,26 @@ mod tests {
     }
 
     #[test]
-    fn default_and_unknown_resolve_to_octopus() {
+    fn default_and_unknown_resolve_to_rust() {
         with_impl_env(None, || {
-            assert_eq!(resolve_gateway_impl(), GatewayImpl::Octopus);
+            assert_eq!(resolve_gateway_impl(), GatewayImpl::Rust);
         });
-        with_impl_env(Some("octopus"), || {
-            assert_eq!(resolve_gateway_impl(), GatewayImpl::Octopus);
+        with_impl_env(Some("rust"), || {
+            assert_eq!(resolve_gateway_impl(), GatewayImpl::Rust);
         });
         with_impl_env(Some("unknown"), || {
-            assert_eq!(resolve_gateway_impl(), GatewayImpl::Octopus);
+            assert_eq!(resolve_gateway_impl(), GatewayImpl::Rust);
         });
         with_impl_env(Some(""), || {
-            assert_eq!(resolve_gateway_impl(), GatewayImpl::Octopus);
+            assert_eq!(resolve_gateway_impl(), GatewayImpl::Rust);
         });
     }
 
     #[test]
-    fn rust_is_case_insensitive() {
-        for value in ["rust", "Rust", "RUST", "rUsT"] {
+    fn explicit_octopus_is_case_insensitive() {
+        for value in ["octopus", "Octopus", "OCTOPUS", "oCtOpUs"] {
             with_impl_env(Some(value), || {
-                assert_eq!(resolve_gateway_impl(), GatewayImpl::Rust);
+                assert_eq!(resolve_gateway_impl(), GatewayImpl::Octopus);
             });
         }
     }

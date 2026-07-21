@@ -1,8 +1,8 @@
 # Model Hub
 
-Model Hub 是一个 Windows 优先的 Tauri 2 桌面应用，用于承载本地网关侧车（octopus 兼容）与管理 UI：渠道、分组、**API 密钥**、日志与设置。
+Model Hub 是一个 Windows 优先的 Tauri 2 桌面应用，用于承载本地网关侧车（**默认 gateway-rust**，兼容历史 octopus 管理契约）与管理 UI：渠道、分组、**API 密钥**、日志与设置。
 
-**当前版本：0.0.1** — Windows 安装包**内嵌** octopus **v0.9.28**，用户安装后无需自行准备 `octopus.exe`。
+**当前版本：0.0.3** — Windows 安装包**默认内嵌** `model-hub-gateway`（gateway-rust）；**不再内嵌** octopus 二进制与 AGPL 合规附件。客户端 Key 前缀仍为 `sk-octopus-...`（历史命名，兼容）。
 
 ## Windows 开发前置
 
@@ -28,25 +28,30 @@ pnpm lint
 
 ## 准备内嵌侧车（开发 / 发布）
 
-二进制**不进 Git**。构建前准备默认 octopus 与可选实验网关：
+二进制**不进 Git**。发布与默认路径只需准备 **gateway-rust**：
 
 ```powershell
-pnpm prepare:octopus
-# 或
-powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-octopus.ps1
-
-# 发布 / 试用内嵌实验网关时额外执行：
 pnpm prepare:gateway-rust
 # 或
 powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-gateway-rust.ps1
 ```
 
+可选：本地回退 octopus（**不会**打进发布包）：
+
+```powershell
+pnpm prepare:octopus
+# 或
+powershell -ExecutionPolicy Bypass -File scripts/prepare-bundled-octopus.ps1
+$env:MODEL_HUB_GATEWAY_IMPL = "octopus"
+$env:MODEL_HUB_GATEWAY_BIN = "$PWD\tools\octopus\octopus.exe"
+```
+
 开发覆盖（可选）：
 
 ```powershell
-$env:MODEL_HUB_GATEWAY_BIN = "$PWD\tools\octopus\octopus.exe"
-# 实验：默认仍为 octopus；切换时
+# 默认即为 rust，一般无需设置 IMPL
 # $env:MODEL_HUB_GATEWAY_IMPL = "rust"
+$env:MODEL_HUB_GATEWAY_BIN = "$PWD\tools\gateway-rust\model-hub-gateway.exe"
 ```
 
 ## Tauri 桌面开发
@@ -62,30 +67,30 @@ cd src-tauri
 cargo check
 ```
 
-## 实验性 Rust 网关
+## 默认 Rust 网关
 
-独立 crate [`gateway-rust/`](./gateway-rust/) 已作为**额外内嵌**实验侧车打进 Windows 安装包（与 octopus 并存）。**默认仍启动 octopus**；设置 `MODEL_HUB_GATEWAY_IMPL=rust` 可试用，**勿与 octopus 混用同一 `data/data.db`**。AGPL 侧车与合规材料**未移除**。
+独立 crate [`gateway-rust/`](./gateway-rust/) 为**默认**网关实现，Windows 安装包仅内嵌 `sidecar/model-hub-gateway.exe`。从旧版 octopus 升级时：请使用 `migrate-octopus` 导入到新库，或新建 `data/data.db`；**勿与 octopus 混用同一库文件**。
 
 ```powershell
 cargo run --manifest-path gateway-rust/Cargo.toml -- --config gateway-rust/testdata/config.json
 cargo test --manifest-path gateway-rust/Cargo.toml
 ```
 
-详见 [Rust 网关实验说明](./gateway-rust/README.md) 与 [网关侧车文档](./gateway/README.md)。
+详见 [Rust 网关说明](./gateway-rust/README.md) 与 [网关侧车文档](./gateway/README.md)。
 
-## Windows 发布构建（NSIS + 内嵌侧车）
+## Windows 发布构建（NSIS + 内嵌 gateway-rust）
 
 ```powershell
 pnpm release:windows
 ```
 
-等价于 prepare **octopus + gateway-rust** 后执行：
+等价于 prepare **gateway-rust** 后执行：
 
 ```text
 tauri build --bundles nsis -c src-tauri/tauri.release.conf.json
 ```
 
-推送 `v*.*.*` tag 将触发 GitHub Actions：`.github/workflows/release-windows.yml`，产出 NSIS、Updater `.sig`、`latest.json`、SHA-256 与合规附件并创建 Release。发布前必须配置 `TAURI_SIGNING_PRIVATE_KEY` Secret。
+推送 `v*.*.*` tag 将触发 GitHub Actions：`.github/workflows/release-windows.yml`，产出 NSIS、Updater `.sig`、`latest.json`、SHA-256 与发布说明并创建 Release。发布前必须配置 `TAURI_SIGNING_PRIVATE_KEY` Secret。**发布包不再下载/上传 octopus 与 AGPL 附件。**
 
 ## 应用内更新
 
@@ -98,7 +103,7 @@ Rust 侧提供 `get_paths` 命令，首次调用会确保以下目录存在：
 - `app_data_dir`：应用数据根目录
 - `config_dir`：配置目录
 - `gateway_dir`：网关数据目录（配置、SQLite）
-- `bin_dir`：侧车二进制目录（运行时从内嵌资源部署 `octopus.exe`；`IMPL=rust` 时部署 `model-hub-gateway.exe`）
+- `bin_dir`：侧车二进制目录（运行时从内嵌资源部署 `model-hub-gateway.exe`；显式 `IMPL=octopus` 时使用自备 `octopus.exe`）
 
 前端设置区会展示这些路径，用于验证桌面壳与 UI 的基础通信。
 
@@ -106,14 +111,14 @@ Rust 侧提供 `get_paths` 命令，首次调用会确保以下目录存在：
 
 桌面壳已集成侧车启停（`gateway_start` / `gateway_stop` / `gateway_status`）：
 
-1. **安装版**：无需手工放置 exe；默认自动部署内置 octopus v0.9.28；实验网关亦已内嵌，设 `MODEL_HUB_GATEWAY_IMPL=rust` 即可试用。
-2. **开发版**：运行 `pnpm prepare:octopus`（及可选 `pnpm prepare:gateway-rust`），或设置 `MODEL_HUB_GATEWAY_BIN`。
+1. **安装版**：无需手工放置 exe；默认自动部署内置 `model-hub-gateway`。
+2. **开发版**：运行 `pnpm prepare:gateway-rust`，或设置 `MODEL_HUB_GATEWAY_BIN` / `MODEL_HUB_GATEWAY_RUST_BIN`。
 3. 运行 `pnpm tauri dev`，在应用内查看状态条或设置页启动/停止。
 4. 默认监听 `http://127.0.0.1:8080`（本机绑定）；可在设置页停止网关后修改监听端口，配置保存于应用配置目录的 `shell.json`，下次手动启动生效。
 5. 在 **渠道 / 分组 / API 密钥 / 日志** 完成配置（无登录页；静默管理鉴权）。
-6. 客户端调用 `/v1/*` 时须使用 **网关 API Key**（`sk-octopus-...`），与管理 JWT 不同。详见 [客户端对接](./docs/client-integration.md)。
+6. 客户端调用 `/v1/*` 时须使用 **网关 API Key**（`sk-octopus-...`，历史前缀兼容），与管理 JWT 不同。详见 [客户端对接](./docs/client-integration.md)。
 
-解析优先级：`MODEL_HUB_GATEWAY_BIN` → 安装资源内嵌按哈希部署到 `bin_dir` → （开发无内嵌时）已有 `bin_dir` 副本。
+解析优先级（默认 rust）：`MODEL_HUB_GATEWAY_BIN` → `MODEL_HUB_GATEWAY_RUST_BIN` → 安装资源内嵌按哈希部署到 `bin_dir` → （开发无内嵌时）已有 `bin_dir` 副本。
 
 ## 文档
 
@@ -124,10 +129,11 @@ Rust 侧提供 `get_paths` 命令，首次调用会确保以下目录存在：
 - [客户端对接](./docs/client-integration.md)
 - [M1 验收清单](./docs/mvp-acceptance.md)
 - [网关侧车说明](./gateway/README.md)
-- [Rust 网关实验骨架](./gateway-rust/README.md)
-- [第三方 octopus NOTICE / 源码](./third-party/octopus/)
+- [Rust 网关说明](./gateway-rust/README.md)
+- [第三方 octopus NOTICE / 源码（历史/可选回退）](./third-party/octopus/)
 
 ## 致谢与许可证提示
 
-- 内嵌网关来自 [bestruirui/octopus](https://github.com/bestruirui/octopus)（**AGPL-3.0**）。分发时请保留致谢，并提供对应源码链接（见 `third-party/octopus/`）。
-- Model Hub 桌面壳与管理 UI 源码以本仓库为准；与 AGPL 组件的关系见 `third-party/octopus/NOTICE.md`。**本文不构成法律意见。**
+- **默认网关**为仓库内 `gateway-rust`，发布包**不再**分发 octopus 二进制。
+- 可选自备的 octopus 来自 [bestruirui/octopus](https://github.com/bestruirui/octopus)（**AGPL-3.0**）。仓库 `third-party/octopus/` 仅作历史与开发回退参考；自行分发该二进制时请遵守 AGPL。
+- Model Hub 桌面壳与管理 UI 源码以本仓库为准。**本文不构成法律意见。**
