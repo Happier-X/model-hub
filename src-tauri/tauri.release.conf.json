@@ -1,9 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "createUpdaterArtifacts": "v1Compatible",
     "resources": {
       "../tools/gateway-rust/model-hub-gateway.exe": "sidecar/model-hub-gateway.exe"
