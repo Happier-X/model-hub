@@ -224,6 +224,39 @@ pub fn get_request_stats(
 }
 
 #[derive(Debug, Serialize)]
+pub struct ExportToPiResult {
+    pub path: String,
+    pub provider_id: String,
+    pub model_count: usize,
+    pub base_url: String,
+    pub used_placeholder_key: bool,
+}
+
+/// 将当前分组写入 `~/.pi/agent/models.json` 的 model-hub 供应商。
+/// `api_key` 可空：空则写入占位 key。
+#[tauri::command]
+pub fn export_to_pi_agent(
+    proxy: State<'_, ProxyHandle>,
+    api_key: Option<String>,
+) -> Result<ExportToPiResult, InvokeError> {
+    let status = proxy.status_snapshot().map_err(InvokeError::from)?;
+    let groups = stores(&proxy)?.list_groups().map_err(InvokeError::from)?;
+    let names: Vec<String> = groups.into_iter().map(|g| g.name).collect();
+    let key = api_key.unwrap_or_default();
+    let used_placeholder = key.trim().is_empty();
+    let path = crate::pi_export::default_pi_models_path().map_err(InvokeError::from)?;
+    crate::pi_export::export_model_hub_to_path(&path, &status.base_url, &key, &names)
+        .map_err(InvokeError::from)?;
+    Ok(ExportToPiResult {
+        path: path.display().to_string(),
+        provider_id: crate::pi_export::PI_PROVIDER_ID.to_string(),
+        model_count: names.len(),
+        base_url: crate::pi_export::normalize_openai_base_url(&status.base_url),
+        used_placeholder_key: used_placeholder,
+    })
+}
+
+#[derive(Debug, Serialize)]
 pub struct HealthSnapshot {
     pub provider_id: i64,
     pub provider_name: String,

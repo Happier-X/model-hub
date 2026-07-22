@@ -3,6 +3,7 @@ pub mod db;
 pub mod domain;
 mod error;
 mod paths;
+mod pi_export;
 pub mod proxy;
 mod settings;
 mod tray;
@@ -86,6 +87,7 @@ pub fn run() {
             commands::list_logs,
             commands::clear_logs,
             commands::get_request_stats,
+            commands::export_to_pi_agent,
             commands::list_health,
         ])
         .build(tauri::generate_context!())

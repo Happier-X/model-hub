@@ -189,6 +189,18 @@ export const listLogs = (query: LogQuery = {}) =>
   });
 export const clearLogs = () => invoke<void>("clear_logs");
 export const getRequestStats = () => invoke<RequestStats>("get_request_stats");
+
+export interface ExportToPiResult {
+  path: string;
+  provider_id: string;
+  model_count: number;
+  base_url: string;
+  used_placeholder_key: boolean;
+}
+
+/** 将分组写入 ~/.pi/agent/models.json；api_key 可空 */
+export const exportToPiAgent = (apiKey?: string) =>
+  invoke<ExportToPiResult>("export_to_pi_agent", { api_key: apiKey ?? null });
 export const listHealth = () => invoke<HealthSnapshot[]>("list_health");
 
 /** 浏览器 / 非 Tauri 壳内无法使用更新与进程插件 */
