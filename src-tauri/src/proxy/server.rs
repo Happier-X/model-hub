@@ -54,10 +54,14 @@ fn extract_client_key(headers: &HeaderMap) -> Option<String> {
 
 /// 本机默认：可不带客户端 Key。
 /// 若请求携带了 Key，则必须有效且启用。
+/// 一键导出到 Pi 时的占位 `model-hub` 视为未提供 Key（避免假 Key 被校验拒绝）。
 async fn require_key(state: &AppState, headers: &HeaderMap) -> Result<(), Response> {
     let Some(raw) = extract_client_key(headers) else {
         return Ok(());
     };
+    if raw == crate::pi_export::DEFAULT_PLACEHOLDER_KEY || raw.eq_ignore_ascii_case("none") {
+        return Ok(());
+    }
     match state.stores.validate_raw_key(&raw) {
         Ok(true) => Ok(()),
         Ok(false) => Err((

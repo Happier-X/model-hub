@@ -98,6 +98,30 @@ async fn rejects_invalid_api_key() {
 }
 
 #[tokio::test]
+async fn allows_pi_placeholder_api_key() {
+    let env = setup();
+    env.stores
+        .create_group(CreateGroupPayload {
+            name: "pi-open".into(),
+            auto_failover: true,
+            items: vec![],
+        })
+        .unwrap();
+    let res = env
+        .router
+        .oneshot(
+            Request::builder()
+                .uri("/v1/models")
+                .header("Authorization", "Bearer model-hub")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+}
+
+#[tokio::test]
 async fn models_lists_groups() {
     let env = setup();
     env.stores
