@@ -25,6 +25,10 @@ pub fn open_db(db_path: &Path) -> Result<DbConn, AppError> {
     let conn = Connection::open(db_path).map_err(|e| AppError::Database(e.to_string()))?;
     conn.execute_batch("PRAGMA foreign_keys = ON;")
         .map_err(|e| AppError::Database(e.to_string()))?;
+    // 代理写日志与 UI 读库并发时减少 SQLITE_BUSY 静默失败。
+    conn.busy_timeout(std::time::Duration::from_secs(5))
+        .map_err(|e| AppError::Database(e.to_string()))?;
+    let _ = conn.pragma_update(None, "journal_mode", "WAL");
     migrate(&conn)?;
     Ok(Arc::new(Mutex::new(conn)))
 }

@@ -81,6 +81,7 @@
 | 旧 `group_items` 只有 `channel_id/model_name/priority` | 补 `provider_id/upstream_model/sort_order` 并条件回填；旧列保留。应用写新条目时检测旧列并同步双写，满足旧 NOT NULL 约束 |
 | 旧 `api_keys` 只有 `api_key_masked` 无 `masked/created_at` | 补 `masked/created_at`；`masked` 从 `api_key_masked` 条件回填；`key_hash` 不覆盖。创建 Key 时若仍有 `api_key_masked` 则同步双写 |
 | `request_logs` 缺少 `status_code` 等业务列 | `ensure_request_logs_columns` 逐列 `ALTER TABLE ... ADD COLUMN`，默认值与 schema v1 一致；既有行保留 |
+| 旧 `request_logs` 仍有 `request_model_name` / `channel_name` / `actual_model_name` / `use_time` | 条件回填到 `group_name` / `provider_name` / `upstream_model` / `use_time_ms`；`insert_log` 检测旧列并双写，避免 NOT NULL 失败 |
 | 字段已经存在 | 跳过添加，保留所有值 |
 | `PRAGMA table_info` 或读取字段失败 | 返回 `AppError::Database` |
 | `ALTER TABLE` 失败 | 返回 `AppError::Database` |
@@ -101,6 +102,8 @@
 - 迁移单测：旧 `api_keys` 补齐 `masked/created_at`，从 `api_key_masked` 回填；已有值与 `key_hash` 不覆盖。
 - 领域测试：迁移后的兼容表可 `list_api_keys` / 创建 Key，且双写 `masked` 与 `api_key_masked`。
 - 迁移单测：残缺 `request_logs` 缺 `status_code` 等列时补齐，保留既有行；重复迁移成功。
+- 迁移单测：旧 `request_model_name/channel_name/actual_model_name/use_time` 回填到当前列；重复迁移不覆盖。
+- 领域测试：兼容表 `insert_log` 双写旧列，list/stats 可读。
 - 数据库集成单测：通过 `open_db` 升级旧库后，`list_groups` 与 `get_group_by_name` 均可读，且 `group_items` 数量、供应商关联与上游模型保持不变。
 
 ### 7. 错误与正确做法

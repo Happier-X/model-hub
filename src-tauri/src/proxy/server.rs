@@ -187,7 +187,7 @@ async fn chat_completions(
             // 流式：最终日志由 body 正常结束 / 静默超时 / 读错误回调写入，避免 prime 成功时误记 200。
             if !outcome.defer_request_log {
                 let status = outcome.response.status().as_u16() as i64;
-                let _ = state.stores.insert_log(NewRequestLog {
+                state.stores.insert_log_best_effort(NewRequestLog {
                     group_name: group_name.clone(),
                     provider_name: outcome.final_provider_name.clone(),
                     upstream_model: outcome.final_model.clone(),
@@ -202,7 +202,7 @@ async fn chat_completions(
             outcome.response
         }
         Err((status, message)) => {
-            let _ = state.stores.insert_log(NewRequestLog {
+            state.stores.insert_log_best_effort(NewRequestLog {
                 group_name,
                 provider_name: String::new(),
                 upstream_model: String::new(),

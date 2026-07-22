@@ -137,30 +137,116 @@ fn build_filters(query: &LogQuery) -> Result<(String, Option<String>), AppError>
     Ok((where_sql, group_like))
 }
 
+fn request_logs_has_column(conn: &rusqlite::Connection, name: &str) -> Result<bool, AppError> {
+    conn.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM pragma_table_info('request_logs') WHERE name = ?1
+        )",
+        params![name],
+        |row| row.get(0),
+    )
+    .map_err(|e| AppError::Database(format!("检查 request_logs.{name} 失败: {e}")))
+}
+
 impl Stores {
     pub fn insert_log(&self, log: NewRequestLog) -> Result<(), AppError> {
         let time = chrono::Utc::now().timestamp();
         self.with_conn(|conn| {
-            conn.execute(
-                "INSERT INTO request_logs
-                 (time, group_name, provider_name, upstream_model, status_code, use_time_ms, error, failover_from, failover_to, failover_reason)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-                params![
-                    time,
-                    log.group_name,
-                    log.provider_name,
-                    log.upstream_model,
-                    log.status_code,
-                    log.use_time_ms,
-                    log.error,
-                    log.failover_from,
-                    log.failover_to,
-                    log.failover_reason
-                ],
-            )
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            // 旧 gateway-rust request_logs 含 request_model_name / channel_name /
+            // actual_model_name / use_time 等 NOT NULL 列；CREATE IF NOT EXISTS 与
+            // ensure_* 加新列后旧列仍在，必须双写否则 INSERT 失败 → UI 无日志。
+            let has_request_model_name = request_logs_has_column(conn, "request_model_name")?;
+            let has_channel_name = request_logs_has_column(conn, "channel_name")?;
+            let has_actual_model_name = request_logs_has_column(conn, "actual_model_name")?;
+            let has_use_time = request_logs_has_column(conn, "use_time")?;
+
+            if has_request_model_name || has_channel_name || has_actual_model_name || has_use_time {
+                let mut cols = vec![
+                    "time",
+                    "group_name",
+                    "provider_name",
+                    "upstream_model",
+                    "status_code",
+                    "use_time_ms",
+                    "error",
+                    "failover_from",
+                    "failover_to",
+                    "failover_reason",
+                ];
+                let mut placeholders = vec![
+                    "?1", "?2", "?3", "?4", "?5", "?6", "?7", "?8", "?9", "?10",
+                ];
+                // 旧列与当前语义映射：
+                // request_model_name ← group_name（客户端 model）
+                // channel_name ← provider_name
+                // actual_model_name ← upstream_model
+                // use_time ← use_time_ms
+                if has_request_model_name {
+                    cols.push("request_model_name");
+                    placeholders.push("?2");
+                }
+                if has_channel_name {
+                    cols.push("channel_name");
+                    placeholders.push("?3");
+                }
+                if has_actual_model_name {
+                    cols.push("actual_model_name");
+                    placeholders.push("?4");
+                }
+                if has_use_time {
+                    cols.push("use_time");
+                    placeholders.push("?6");
+                }
+                let sql = format!(
+                    "INSERT INTO request_logs ({}) VALUES ({})",
+                    cols.join(", "),
+                    placeholders.join(", ")
+                );
+                conn.execute(
+                    &sql,
+                    params![
+                        time,
+                        log.group_name,
+                        log.provider_name,
+                        log.upstream_model,
+                        log.status_code,
+                        log.use_time_ms,
+                        log.error,
+                        log.failover_from,
+                        log.failover_to,
+                        log.failover_reason
+                    ],
+                )
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            } else {
+                conn.execute(
+                    "INSERT INTO request_logs
+                     (time, group_name, provider_name, upstream_model, status_code, use_time_ms, error, failover_from, failover_to, failover_reason)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                    params![
+                        time,
+                        log.group_name,
+                        log.provider_name,
+                        log.upstream_model,
+                        log.status_code,
+                        log.use_time_ms,
+                        log.error,
+                        log.failover_from,
+                        log.failover_to,
+                        log.failover_reason
+                    ],
+                )
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            }
             Ok(())
         })
+    }
+
+    /// 写库失败只记 tracing，避免吞掉错误后 UI 完全无日志却无法排查。
+    pub fn insert_log_best_effort(&self, log: NewRequestLog) {
+        if let Err(error) = self.insert_log(log) {
+            tracing::warn!(%error, "写入请求日志失败");
+        }
     }
 
     pub fn list_logs(&self, query: LogQuery) -> Result<LogPage, AppError> {
@@ -426,6 +512,66 @@ mod tests {
                     params![time, status, err, fo_from, fo_to],
                 )
                 .map_err(|e| AppError::Database(e.to_string()))?;
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn insert_log_dual_writes_legacy_request_model_name_columns() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("legacy-logs.db");
+        {
+            let conn = rusqlite::Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE request_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    time INTEGER NOT NULL,
+                    request_model_name TEXT NOT NULL,
+                    channel_name TEXT NOT NULL DEFAULT '',
+                    actual_model_name TEXT NOT NULL DEFAULT '',
+                    input_tokens INTEGER NOT NULL DEFAULT 0,
+                    output_tokens INTEGER NOT NULL DEFAULT 0,
+                    use_time INTEGER NOT NULL DEFAULT 0,
+                    cost REAL NOT NULL DEFAULT 0,
+                    error TEXT NOT NULL DEFAULT ''
+                );",
+            )
+            .unwrap();
+        }
+        let stores = Stores::new(open_db(&path).unwrap());
+        stores
+            .insert_log(NewRequestLog {
+                group_name: "g1".into(),
+                provider_name: "p1".into(),
+                upstream_model: "m1".into(),
+                status_code: 200,
+                use_time_ms: 12,
+                error: String::new(),
+                failover_from: String::new(),
+                failover_to: String::new(),
+                failover_reason: String::new(),
+            })
+            .expect("legacy NOT NULL 列应被双写");
+
+        let page = stores.list_logs(LogQuery::default()).unwrap();
+        assert_eq!(page.total, 1);
+        assert_eq!(page.items[0].group_name, "g1");
+        assert_eq!(page.items[0].provider_name, "p1");
+        assert_eq!(page.items[0].upstream_model, "m1");
+        assert_eq!(page.items[0].status_code, 200);
+
+        stores
+            .with_conn(|conn| {
+                let legacy: (String, String, String, i64) = conn
+                    .query_row(
+                        "SELECT request_model_name, channel_name, actual_model_name, use_time
+                         FROM request_logs WHERE id = 1",
+                        [],
+                        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                    )
+                    .map_err(|e| AppError::Database(e.to_string()))?;
+                assert_eq!(legacy, ("g1".into(), "p1".into(), "m1".into(), 12));
                 Ok(())
             })
             .unwrap();

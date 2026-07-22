@@ -237,6 +237,44 @@ fn ensure_request_logs_columns(conn: &Connection) -> Result<(), AppError> {
         })?;
     }
 
+    // 旧 gateway-rust 列 → 当前列条件回填（仅当新列仍为默认空/0）。
+    let columns = table_column_names(conn, "request_logs")?;
+    if columns.contains("request_model_name") && columns.contains("group_name") {
+        conn.execute(
+            "UPDATE request_logs SET group_name = request_model_name
+             WHERE (group_name IS NULL OR group_name = '')
+               AND request_model_name IS NOT NULL AND length(request_model_name) > 0",
+            [],
+        )
+        .map_err(|e| AppError::Database(format!("回填 request_logs.group_name 失败: {e}")))?;
+    }
+    if columns.contains("channel_name") && columns.contains("provider_name") {
+        conn.execute(
+            "UPDATE request_logs SET provider_name = channel_name
+             WHERE (provider_name IS NULL OR provider_name = '')
+               AND channel_name IS NOT NULL AND length(channel_name) > 0",
+            [],
+        )
+        .map_err(|e| AppError::Database(format!("回填 request_logs.provider_name 失败: {e}")))?;
+    }
+    if columns.contains("actual_model_name") && columns.contains("upstream_model") {
+        conn.execute(
+            "UPDATE request_logs SET upstream_model = actual_model_name
+             WHERE (upstream_model IS NULL OR upstream_model = '')
+               AND actual_model_name IS NOT NULL AND length(actual_model_name) > 0",
+            [],
+        )
+        .map_err(|e| AppError::Database(format!("回填 request_logs.upstream_model 失败: {e}")))?;
+    }
+    if columns.contains("use_time") && columns.contains("use_time_ms") {
+        conn.execute(
+            "UPDATE request_logs SET use_time_ms = use_time
+             WHERE use_time_ms = 0 AND use_time IS NOT NULL AND use_time != 0",
+            [],
+        )
+        .map_err(|e| AppError::Database(format!("回填 request_logs.use_time_ms 失败: {e}")))?;
+    }
+
     conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_request_logs_time ON request_logs(time DESC);")
         .map_err(|e| AppError::Database(format!("创建 request_logs 时间索引失败: {e}")))?;
     Ok(())
@@ -564,6 +602,56 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM request_logs", [], |r| r.get(0))
             .unwrap();
         assert_eq!(n, 1);
+    }
+
+    #[test]
+    fn migrate_backfills_legacy_request_logs_names_into_current_columns() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE request_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                time INTEGER NOT NULL,
+                request_model_name TEXT NOT NULL,
+                channel_name TEXT NOT NULL DEFAULT '',
+                actual_model_name TEXT NOT NULL DEFAULT '',
+                input_tokens INTEGER NOT NULL DEFAULT 0,
+                output_tokens INTEGER NOT NULL DEFAULT 0,
+                use_time INTEGER NOT NULL DEFAULT 0,
+                cost REAL NOT NULL DEFAULT 0,
+                error TEXT NOT NULL DEFAULT ''
+            );
+            INSERT INTO request_logs
+                (time, request_model_name, channel_name, actual_model_name, use_time, error)
+            VALUES
+                (1700000001, 'legacy-group', 'legacy-channel', 'legacy-upstream', 42, 'boom');",
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let row: (String, String, String, i64, String) = conn
+            .query_row(
+                "SELECT group_name, provider_name, upstream_model, use_time_ms, error
+                 FROM request_logs WHERE id = 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            )
+            .unwrap();
+        assert_eq!(row.0, "legacy-group");
+        assert_eq!(row.1, "legacy-channel");
+        assert_eq!(row.2, "legacy-upstream");
+        assert_eq!(row.3, 42);
+        assert_eq!(row.4, "boom");
+
+        migrate(&conn).unwrap();
+        let again: (String, i64) = conn
+            .query_row(
+                "SELECT group_name, use_time_ms FROM request_logs WHERE id = 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(again, ("legacy-group".into(), 42));
     }
 
     #[test]

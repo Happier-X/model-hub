@@ -247,15 +247,45 @@ struct StreamState {
     first: Option<Bytes>,
     response: Option<reqwest::Response>,
     done: bool,
+    /// 已调用任一终态回调（成功/超时/读错误/drop 中断）。
+    finalized: bool,
     idle: Duration,
     on_idle_timeout: Option<Box<dyn FnOnce() + Send>>,
     on_success: Option<Box<dyn FnOnce() + Send>>,
     on_error: Option<Box<dyn FnOnce(String) + Send>>,
+    /// 客户端提前断开：写日志但不记熔断失败（上游未必有问题）。
+    on_abort: Option<Box<dyn FnOnce() + Send>>,
+}
+
+impl StreamState {
+    fn mark_finalized(&mut self) {
+        self.finalized = true;
+        self.on_idle_timeout.take();
+        self.on_success.take();
+        self.on_error.take();
+        self.on_abort.take();
+    }
+}
+
+impl Drop for StreamState {
+    fn drop(&mut self) {
+        if self.finalized {
+            return;
+        }
+        // 客户端提前断开 / 未完整消费 body 时，unfold 可能永不进入终态分支。
+        if let Some(cb) = self.on_abort.take() {
+            cb();
+        }
+        self.on_idle_timeout.take();
+        self.on_success.take();
+        self.on_error.take();
+        self.finalized = true;
+    }
 }
 
 /// 从已成功 prime 的流构造 body；后续 chunk 使用 `idle` 静默超时。
 /// 超时后结束流并调用 `on_idle_timeout`（记失败/日志）；**不会**回到换源循环。
-/// 正常结束调用 `on_success`；中途读错误调用 `on_error`（最终日志均在此写入，避免 server 侧提前记 200）。
+/// 正常结束调用 `on_success`；中途读错误调用 `on_error`；body 被 drop 且未终态调用 `on_abort`。
 fn stream_body_from_prime(
     first: Bytes,
     response: reqwest::Response,
@@ -263,16 +293,19 @@ fn stream_body_from_prime(
     on_idle_timeout: impl FnOnce() + Send + 'static,
     on_success: impl FnOnce() + Send + 'static,
     on_error: impl FnOnce(String) + Send + 'static,
+    on_abort: impl FnOnce() + Send + 'static,
 ) -> Body {
     let stream = futures_util::stream::unfold(
         StreamState {
             first: Some(first),
             response: Some(response),
             done: false,
+            finalized: false,
             idle,
             on_idle_timeout: Some(Box::new(on_idle_timeout)),
             on_success: Some(Box::new(on_success)),
             on_error: Some(Box::new(on_error)),
+            on_abort: Some(Box::new(on_abort)),
         },
         |mut state| async move {
             if state.done {
@@ -288,6 +321,7 @@ fn stream_body_from_prime(
                 if let Some(cb) = state.on_success.take() {
                     cb();
                 }
+                state.mark_finalized();
                 return None;
             };
             match tokio::time::timeout(state.idle, resp.chunk()).await {
@@ -295,9 +329,7 @@ fn stream_body_from_prime(
                     if let Some(cb) = state.on_idle_timeout.take() {
                         cb();
                     }
-                    // 丢弃其余终态回调，避免双写。
-                    state.on_success.take();
-                    state.on_error.take();
+                    state.mark_finalized();
                     state.done = true;
                     state.response = None;
                     Some((
@@ -313,9 +345,7 @@ fn stream_body_from_prime(
                     if let Some(cb) = state.on_success.take() {
                         cb();
                     }
-                    // 终态结束，不再进入下一轮 unfold。
-                    state.on_idle_timeout.take();
-                    state.on_error.take();
+                    state.mark_finalized();
                     None
                 }
                 Ok(Err(e)) => {
@@ -323,8 +353,7 @@ fn stream_body_from_prime(
                     if let Some(cb) = state.on_error.take() {
                         cb(msg.clone());
                     }
-                    state.on_idle_timeout.take();
-                    state.on_success.take();
+                    state.mark_finalized();
                     state.done = true;
                     state.response = None;
                     Some((Err(std::io::Error::other(msg)), state))
@@ -453,7 +482,7 @@ pub async fn forward_with_failover(
                         move || {
                             // 响应已提交：仅记失败与日志，不得换源拼接。
                             circuits.record_failure(provider_id);
-                            let _ = stores.insert_log(NewRequestLog {
+                            stores.insert_log_best_effort(NewRequestLog {
                                 group_name: group,
                                 provider_name: name,
                                 upstream_model: model,
@@ -479,7 +508,7 @@ pub async fn forward_with_failover(
                         let fo_to = fo_to.clone();
                         let fo_reason = fo_reason.clone();
                         move || {
-                            let _ = stores.insert_log(NewRequestLog {
+                            stores.insert_log_best_effort(NewRequestLog {
                                 group_name: group,
                                 provider_name: name,
                                 upstream_model: model,
@@ -495,16 +524,39 @@ pub async fn forward_with_failover(
                     let on_error = {
                         let circuits = circuits.clone();
                         let stores = stores.clone();
+                        let group = group.clone();
+                        let name = provider_name.clone();
+                        let model = upstream_model.clone();
+                        let fo_from = fo_from.clone();
+                        let fo_to = fo_to.clone();
+                        let fo_reason = fo_reason.clone();
                         move |message: String| {
                             circuits.record_failure(provider_id);
                             let summary: String = message.chars().take(200).collect();
-                            let _ = stores.insert_log(NewRequestLog {
+                            stores.insert_log_best_effort(NewRequestLog {
                                 group_name: group,
-                                provider_name: provider_name,
-                                upstream_model: upstream_model,
+                                provider_name: name,
+                                upstream_model: model,
                                 status_code: 502,
                                 use_time_ms: elapsed_ms(started),
                                 error: format!("流式中断: {summary}"),
+                                failover_from: fo_from,
+                                failover_to: fo_to,
+                                failover_reason: fo_reason,
+                            });
+                        }
+                    };
+                    let on_abort = {
+                        let stores = stores.clone();
+                        move || {
+                            stores.insert_log_best_effort(NewRequestLog {
+                                group_name: group,
+                                provider_name: provider_name,
+                                upstream_model: upstream_model,
+                                // 499：客户端关闭请求（nginx 惯例）；不记熔断失败。
+                                status_code: 499,
+                                use_time_ms: elapsed_ms(started),
+                                error: "流式响应未完整结束（客户端断开或中止）".into(),
                                 failover_from: fo_from,
                                 failover_to: fo_to,
                                 failover_reason: fo_reason,
@@ -519,6 +571,7 @@ pub async fn forward_with_failover(
                         on_idle,
                         on_success,
                         on_error,
+                        on_abort,
                     );
                     let mut builder = Response::builder().status(ok.status);
                     for (k, v) in ok.headers.iter() {
@@ -607,7 +660,7 @@ pub async fn forward_with_failover(
                 if previous_name.is_some() || auto_failover {
                     failover_reason = message.clone();
                 }
-                let _ = stores.insert_log(NewRequestLog {
+                stores.insert_log_best_effort(NewRequestLog {
                     group_name: group_name.into(),
                     provider_name: candidate.provider.name.clone(),
                     upstream_model: candidate.upstream_model.clone(),

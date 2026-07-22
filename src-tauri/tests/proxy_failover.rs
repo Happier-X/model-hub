@@ -425,3 +425,141 @@ async fn stream_success_single_ok_log() {
     assert!(logs.items[0].error.is_empty());
     assert_eq!(logs.items[0].provider_name, "ok-stream");
 }
+
+/// 非流式成功：server 侧立即写一条日志，统计 total 同步增加。
+#[tokio::test]
+async fn non_stream_success_writes_log_and_stats() {
+    let upstream = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id":"chatcmpl-1",
+            "object":"chat.completion",
+            "choices":[{"message":{"role":"assistant","content":"ok"}}]
+        })))
+        .mount(&upstream)
+        .await;
+
+    let env = setup();
+    let provider = env
+        .stores
+        .create_provider(CreateProviderPayload {
+            name: "p-ok".into(),
+            base_url: format!("{}/v1", upstream.uri()),
+            api_key: "k".into(),
+            enabled: true,
+        })
+        .unwrap();
+    env.stores
+        .create_group(CreateGroupPayload {
+            name: "g-nonstream".into(),
+            auto_failover: false,
+            items: vec![GroupItemInput {
+                provider_id: provider.id,
+                upstream_model: "m".into(),
+            }],
+        })
+        .unwrap();
+
+    let body = json!({
+        "model": "g-nonstream",
+        "messages": [{"role":"user","content":"hi"}],
+        "stream": false
+    });
+    let res = env
+        .router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/chat/completions")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_vec(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let logs = env
+        .stores
+        .list_logs(model_hub_lib::domain::log::LogQuery {
+            page: 1,
+            page_size: 50,
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(logs.total, 1, "非流式成功应有日志: {:?}", logs);
+    assert_eq!(logs.items[0].status_code, 200);
+    assert_eq!(logs.items[0].group_name, "g-nonstream");
+
+    let stats = env.stores.request_stats_today().unwrap();
+    assert_eq!(stats.total, 1);
+    assert_eq!(stats.success, 1);
+}
+
+/// 流式 body 被 drop（模拟客户端提前断开）：仍写入中断日志，供 UI 统计。
+#[tokio::test]
+async fn stream_abort_on_drop_writes_log() {
+    let base = spawn_hanging_after_first_chunk_upstream().await;
+
+    let env = setup_with_policy(ForwardPolicy {
+        stream_idle_timeout: Duration::from_secs(30),
+    });
+    let provider = env
+        .stores
+        .create_provider(CreateProviderPayload {
+            name: "hang".into(),
+            base_url: format!("{base}/v1"),
+            api_key: "k".into(),
+            enabled: true,
+        })
+        .unwrap();
+    env.stores
+        .create_group(CreateGroupPayload {
+            name: "g-abort".into(),
+            auto_failover: false,
+            items: vec![GroupItemInput {
+                provider_id: provider.id,
+                upstream_model: "m".into(),
+            }],
+        })
+        .unwrap();
+
+    let body = json!({
+        "model": "g-abort",
+        "messages": [{"role":"user","content":"hi"}],
+        "stream": true
+    });
+    let res = env
+        .router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/chat/completions")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_vec(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    // 不读 body，直接 drop → 触发 StreamState::Drop 写 abort 日志
+    drop(res);
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let logs = env
+        .stores
+        .list_logs(model_hub_lib::domain::log::LogQuery {
+            page: 1,
+            page_size: 50,
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(logs.items.len(), 1, "drop 中断应有日志: {:?}", logs);
+    assert_eq!(logs.items[0].status_code, 499);
+    assert!(logs.items[0].error.contains("断开"));
+    assert_eq!(logs.items[0].provider_name, "hang");
+    // 不记熔断失败
+    assert_eq!(env.circuits.consecutive_failures(provider.id), 0);
+}
