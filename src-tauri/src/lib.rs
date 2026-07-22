@@ -86,6 +86,7 @@ pub fn run() {
             commands::delete_api_key,
             commands::list_logs,
             commands::clear_logs,
+            commands::purge_expired_logs,
             commands::get_request_stats,
             commands::export_to_pi_agent,
             commands::list_health,

@@ -98,6 +98,8 @@ impl ProxyHandle {
             let path = default_db_path(&inner.data_dir);
             let db = open_db(&path)?;
             let stores = Stores::new(db);
+            // 启动打开库时清理过期请求日志，控制体积。
+            stores.purge_expired_logs_best_effort();
             inner.stores = Some(stores.clone());
             Ok(stores)
         })

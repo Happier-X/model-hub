@@ -217,6 +217,13 @@ pub fn clear_logs(proxy: State<'_, ProxyHandle>) -> Result<(), InvokeError> {
 }
 
 #[tauri::command]
+pub fn purge_expired_logs(
+    proxy: State<'_, ProxyHandle>,
+) -> Result<crate::domain::log::LogPurgeResult, InvokeError> {
+    stores(&proxy)?.purge_expired_logs().map_err(Into::into)
+}
+
+#[tauri::command]
 pub fn get_request_stats(
     proxy: State<'_, ProxyHandle>,
 ) -> Result<crate::domain::log::RequestStats, InvokeError> {

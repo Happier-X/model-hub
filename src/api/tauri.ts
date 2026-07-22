@@ -84,9 +84,21 @@ export interface LogQuery {
 
 export interface LogPage {
   items: RequestLog[];
+  /** 当前筛选条件下的条数 */
   total: number;
   page: number;
   page_size: number;
+  /** 库内总条数（未筛选） */
+  stored_total: number;
+  /** 保留天数 */
+  retention_days: number;
+}
+
+export interface LogPurgeResult {
+  deleted: number;
+  retained: number;
+  retention_days: number;
+  cutoff_unix: number;
 }
 
 export interface RequestStats {
@@ -188,6 +200,7 @@ export const listLogs = (query: LogQuery = {}) =>
     },
   });
 export const clearLogs = () => invoke<void>("clear_logs");
+export const purgeExpiredLogs = () => invoke<LogPurgeResult>("purge_expired_logs");
 export const getRequestStats = () => invoke<RequestStats>("get_request_stats");
 
 export interface ExportToPiResult {

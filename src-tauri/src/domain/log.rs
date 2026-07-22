@@ -56,12 +56,28 @@ impl Default for LogQuery {
     }
 }
 
+/// 默认保留天数（删除更早的 `time`）。
+pub const LOG_RETENTION_DAYS: i64 = 30;
+
 #[derive(Debug, Clone, Serialize)]
 pub struct LogPage {
     pub items: Vec<RequestLog>,
+    /// 当前筛选条件下的条数
     pub total: i64,
     pub page: i64,
     pub page_size: i64,
+    /// 库内日志总条数（未筛选）
+    pub stored_total: i64,
+    /// 当前保留策略天数
+    pub retention_days: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LogPurgeResult {
+    pub deleted: i64,
+    pub retained: i64,
+    pub retention_days: i64,
+    pub cutoff_unix: i64,
 }
 
 fn map_log_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RequestLog> {
@@ -246,10 +262,16 @@ impl Stores {
     pub fn insert_log_best_effort(&self, log: NewRequestLog) {
         if let Err(error) = self.insert_log(log) {
             tracing::warn!(%error, "写入请求日志失败");
+        } else {
+            // 写入成功后偶尔清理过期，避免仅读库时库无限涨。
+            // 每条都 purge 成本低（有索引时 DELETE 很快）；失败忽略。
+            self.purge_expired_logs_best_effort();
         }
     }
 
     pub fn list_logs(&self, query: LogQuery) -> Result<LogPage, AppError> {
+        // 列表前尽力清理，保证页上「库内总量」贴近保留策略。
+        self.purge_expired_logs_best_effort();
         let page = query.page.max(1);
         let page_size = query.page_size.clamp(1, 100);
         let offset = (page - 1) * page_size;
@@ -302,11 +324,17 @@ impl Stores {
                 }
             }
 
+            let stored_total: i64 = conn
+                .query_row("SELECT COUNT(*) FROM request_logs", [], |row| row.get(0))
+                .map_err(|e| AppError::Database(e.to_string()))?;
+
             Ok(LogPage {
                 items,
                 total,
                 page,
                 page_size,
+                stored_total,
+                retention_days: LOG_RETENTION_DAYS,
             })
         })
     }
@@ -317,6 +345,41 @@ impl Stores {
                 .map_err(|e| AppError::Database(e.to_string()))?;
             Ok(())
         })
+    }
+
+    /// 删除 `time < now - retention_days` 的行。
+    pub fn purge_expired_logs(&self) -> Result<LogPurgeResult, AppError> {
+        self.purge_logs_older_than_days(LOG_RETENTION_DAYS)
+    }
+
+    pub fn purge_logs_older_than_days(&self, retention_days: i64) -> Result<LogPurgeResult, AppError> {
+        let days = retention_days.max(1);
+        let now = chrono::Utc::now().timestamp();
+        let cutoff = now.saturating_sub(days.saturating_mul(86_400));
+        self.with_conn(|conn| {
+            let deleted = conn
+                .execute(
+                    "DELETE FROM request_logs WHERE time < ?1",
+                    params![cutoff],
+                )
+                .map_err(|e| AppError::Database(e.to_string()))? as i64;
+            let retained: i64 = conn
+                .query_row("SELECT COUNT(*) FROM request_logs", [], |row| row.get(0))
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            Ok(LogPurgeResult {
+                deleted,
+                retained,
+                retention_days: days,
+                cutoff_unix: cutoff,
+            })
+        })
+    }
+
+    /// 自动清理失败不阻断主路径。
+    pub fn purge_expired_logs_best_effort(&self) {
+        if let Err(error) = self.purge_expired_logs() {
+            tracing::warn!(%error, "自动清理过期请求日志失败");
+        }
     }
 
     /// 本地自然日 00:00（含）至次日 00:00（不含）的请求聚合。
@@ -575,6 +638,31 @@ mod tests {
                 Ok(())
             })
             .unwrap();
+    }
+
+    #[test]
+    fn purge_expired_keeps_recent_deletes_old() {
+        let (_dir, stores) = setup();
+        let now = chrono::Utc::now().timestamp();
+        let old = now - 40 * 86_400;
+        let recent = now - 2 * 86_400;
+        insert_at(&stores, old, 200, "", "", "");
+        insert_at(&stores, recent, 200, "", "", "");
+
+        let result = stores.purge_logs_older_than_days(30).unwrap();
+        assert_eq!(result.deleted, 1);
+        assert_eq!(result.retained, 1);
+        assert_eq!(result.retention_days, 30);
+        assert!(result.cutoff_unix <= now - 30 * 86_400 + 5);
+
+        // 再 purge 不应再删
+        let again = stores.purge_logs_older_than_days(30).unwrap();
+        assert_eq!(again.deleted, 0);
+        assert_eq!(again.retained, 1);
+
+        let page = stores.list_logs(LogQuery::default()).unwrap();
+        assert_eq!(page.stored_total, 1);
+        assert_eq!(page.retention_days, LOG_RETENTION_DAYS);
     }
 
     #[test]

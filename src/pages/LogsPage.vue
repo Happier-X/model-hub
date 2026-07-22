@@ -4,6 +4,7 @@ import {
   clearLogs,
   extractInvokeError,
   listLogs,
+  purgeExpiredLogs,
   type LogStatusClass,
   type RequestLog,
 } from "../api/tauri";
@@ -11,6 +12,8 @@ import { statusCodeClass } from "../utils/health";
 
 const items = ref<RequestLog[]>([]);
 const total = ref(0);
+const storedTotal = ref(0);
+const retentionDays = ref(30);
 const page = ref(1);
 const pageSize = ref(50);
 const groupName = ref("");
@@ -18,6 +21,7 @@ const statusClass = ref<LogStatusClass>("all");
 const failoverOnly = ref(false);
 const loading = ref(false);
 const error = ref("");
+const message = ref("");
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value) || 1));
 
@@ -38,6 +42,8 @@ async function refresh() {
     });
     items.value = result.items;
     total.value = result.total;
+    storedTotal.value = result.stored_total ?? result.total;
+    retentionDays.value = result.retention_days ?? 30;
     page.value = result.page;
     pageSize.value = result.page_size;
     error.value = "";
@@ -71,6 +77,18 @@ async function clear() {
   if (!confirm("确认清空全部日志？")) return;
   try {
     await clearLogs();
+    page.value = 1;
+    message.value = "已清空全部日志";
+    await refresh();
+  } catch (e) {
+    error.value = extractInvokeError(e);
+  }
+}
+
+async function purgeExpired() {
+  try {
+    const result = await purgeExpiredLogs();
+    message.value = `已清理 ${result.deleted} 条超过 ${result.retention_days} 天的日志，库内剩余 ${result.retained} 条`;
     page.value = 1;
     await refresh();
   } catch (e) {
@@ -137,17 +155,32 @@ onMounted(refresh);
         >
           刷新
         </button>
+        <button
+          type="button"
+          class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 hover:bg-amber-100"
+          :disabled="loading"
+          @click="purgeExpired"
+        >
+          清理过期
+        </button>
         <button type="button" class="rounded-lg bg-rose-600 px-4 py-2 text-sm text-white" @click="clear">
-          清空
+          清空全部
         </button>
       </div>
+      <p class="mt-3 text-xs text-slate-500">
+        默认保留 {{ retentionDays }} 天；打开列表/写入日志时会自动清理更早记录。库内现有
+        {{ storedTotal }} 条。
+      </p>
     </section>
 
+    <p v-if="message" class="text-sm text-emerald-700">{{ message }}</p>
     <p v-if="error" class="text-sm text-rose-600">{{ error }}</p>
 
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <div class="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
-        <span>共 {{ total }} 条 · 第 {{ page }} / {{ totalPages }} 页</span>
+        <span
+          >筛选 {{ total }} 条 · 库内 {{ storedTotal }} 条 · 第 {{ page }} / {{ totalPages }} 页</span
+        >
         <div class="flex gap-2">
           <button
             type="button"

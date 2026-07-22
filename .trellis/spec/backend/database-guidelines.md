@@ -24,7 +24,7 @@
 | `groups` | 对外模型名；`auto_failover` |
 | `group_items` | 有序队列；`sort_order` 越小越优先 |
 | `api_keys` | 客户端 Key：`key_hash` + `masked`，无明文 |
-| `request_logs` | 请求/故障转移摘要；不存 messages/完整密钥 |
+| `request_logs` | 请求/故障转移摘要；不存 messages/完整密钥；**默认保留 30 天**（`LOG_RETENTION_DAYS`），启动/写日志/列表时 best-effort 清理过期 |
 
 ---
 
