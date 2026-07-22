@@ -32,6 +32,7 @@
 | [State Management](./state-management.md) | 本地状态约定 |
 | [Type Safety](./type-safety.md) | TS 与 invoke 类型 |
 | [Quality Guidelines](./quality-guidelines.md) | 质量底线 |
+| [分组队列模型排序](./model-queue-sort.md) | 本地/外部混合排序与匹配 | |
 
 ---
 

@@ -1,5 +1,6 @@
 pub mod apikey;
 pub mod group;
+pub mod leaderboard;
 pub mod log;
 pub mod provider;
 pub mod upstream_models;

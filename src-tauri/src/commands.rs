@@ -5,6 +5,7 @@ use tauri::{AppHandle, State};
 
 use crate::domain::apikey::{CreateApiKeyPayload, UpdateApiKeyPayload};
 use crate::domain::group::{CreateGroupPayload, Group, UpdateGroupPayload};
+use crate::domain::leaderboard::ModelLeaderboardSnapshot;
 use crate::domain::provider::{CreateProviderPayload, Provider, UpdateProviderPayload};
 use crate::domain::upstream_models::{fetch_upstream_model_ids, FetchProviderModelsPayload};
 use crate::error::{AppError, InvokeError};
@@ -269,6 +270,19 @@ pub struct HealthSnapshot {
     pub provider_name: String,
     pub state: String,
     pub consecutive_failures: u32,
+}
+
+/// 获取 OpenRouter 公共模型榜单（24h 缓存；可强制刷新；网络失败时 stale 回退）。
+#[tauri::command]
+pub async fn get_model_leaderboard(
+    app: AppHandle,
+    force_refresh: Option<bool>,
+) -> Result<ModelLeaderboardSnapshot, InvokeError> {
+    let paths = paths::resolve_paths(&app).map_err(InvokeError::from)?;
+    let config_dir = std::path::Path::new(&paths.config_dir);
+    crate::domain::leaderboard::get_model_leaderboard(config_dir, force_refresh.unwrap_or(false))
+        .await
+        .map_err(Into::into)
 }
 
 #[tauri::command]

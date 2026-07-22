@@ -93,6 +93,7 @@ pub fn run() {
             commands::purge_expired_logs,
             commands::get_request_stats,
             commands::export_to_pi_agent,
+            commands::get_model_leaderboard,
             commands::list_health,
         ])
         .build(tauri::generate_context!())

@@ -31,6 +31,7 @@
 | [Error Handling](./error-handling.md) | 壳错误与 HTTP 错误 | Current |
 | [Logging Guidelines](./logging-guidelines.md) | 日志与脱敏 | Current |
 | [Quality Guidelines](./quality-guidelines.md) | 质量门禁 | Current |
+| [Model Leaderboard](./model-leaderboard.md) | OpenRouter 榜单 IPC / 缓存 / 白名单 | Current |
 
 ---
 

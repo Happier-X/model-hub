@@ -6,6 +6,31 @@ export interface ModelCapability {
   recognized: boolean;
 }
 
+/** 外部榜单一条模型记录（与 IPC 白名单字段对齐）。 */
+export interface ExternalLeaderboardEntry {
+  id: string;
+  canonical_slug?: string | null;
+  name?: string | null;
+  intelligence_score?: number | null;
+  coding_score?: number | null;
+  agentic_score?: number | null;
+}
+
+export type ExternalSortMetric = "intelligence" | "coding";
+
+export type QueueSortMode = "local" | "external_intelligence" | "external_coding";
+
+export interface MatchedExternalScore {
+  /** 用于展示的分数（对应指标）。 */
+  score: number;
+  /** 榜单条目 id。 */
+  leaderboardId: string;
+  sourceLabel: string;
+}
+
+/** 外部命中后的排序 key 基数，确保高于本地启发式（本地通常 < 1000）。 */
+export const EXTERNAL_SORT_BASE = 1_000_000;
+
 function includesAny(name: string, values: string[]): boolean {
   return values.some((value) => name.includes(value));
 }
@@ -123,5 +148,182 @@ export function sortByModelCapability<T>(
   return items
     .map((item, index) => ({ item, index, score: scoreModelCapability(getModelId(item)).score }))
     .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map(({ item }) => item);
+}
+
+/** 常见厂商前缀（匹配时剥离，便于跨供应商 id 对齐）。 */
+const VENDOR_PREFIXES = [
+  "anthropic",
+  "openai",
+  "google",
+  "google-ai-studio",
+  "meta-llama",
+  "meta",
+  "mistralai",
+  "mistral",
+  "deepseek",
+  "qwen",
+  "alibaba",
+  "x-ai",
+  "xai",
+  "cohere",
+  "perplexity",
+  "nvidia",
+  "microsoft",
+  "amazon",
+  "ai21",
+  "01-ai",
+  "together",
+  "fireworks",
+  "groq",
+  "openrouter",
+  "vendor",
+] as const;
+
+/**
+ * 高置信模型名归一化：小写、去厂商前缀、去日期/版本杂音后缀、统一分隔符。
+ * 仅用于匹配，不用于展示。
+ */
+export function normalizeModelIdForMatch(raw: string): string {
+  let s = raw.trim().toLowerCase();
+  if (!s) return "";
+
+  // 路径/命名空间：保留最后一段为主，同时记录全路径去前缀后的形式。
+  s = s.replace(/\\/g, "/");
+  // 统一分隔符为 `-`
+  s = s.replace(/[_.\s]+/g, "-");
+  s = s.replace(/\/+/g, "/");
+
+  // 反复剥离已知厂商前缀（`openai/gpt-4o` → `gpt-4o`）
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const vendor of VENDOR_PREFIXES) {
+      const withSlash = `${vendor}/`;
+      if (s.startsWith(withSlash)) {
+        s = s.slice(withSlash.length);
+        changed = true;
+        break;
+      }
+    }
+  }
+
+  // 去掉路径中仍残留的段前缀，只保留最后一段再归一化一次
+  if (s.includes("/")) {
+    const parts = s.split("/").filter(Boolean);
+    s = parts[parts.length - 1] ?? s;
+  }
+
+  // 去常见部署/渠道后缀
+  s = s.replace(
+    /-(?:latest|prod|production|stable|beta|alpha|chat|instruct|it|hf|gguf|fp8|fp16|bf16|int4|int8|awq|gptq)$/g,
+    "",
+  );
+
+  // 去日期后缀：-20241022 / -2024-10-22 / -202410
+  s = s.replace(/-\d{4}-\d{2}-\d{2}$/g, "");
+  s = s.replace(/-\d{8}$/g, "");
+  s = s.replace(/-\d{6}$/g, "");
+
+  // 压缩连续分隔符
+  s = s.replace(/-+/g, "-").replace(/^-|-$/g, "");
+  return s;
+}
+
+function metricScore(
+  entry: ExternalLeaderboardEntry,
+  metric: ExternalSortMetric,
+): number | null {
+  const raw = metric === "coding" ? entry.coding_score : entry.intelligence_score;
+  if (raw == null || !Number.isFinite(raw)) return null;
+  return raw;
+}
+
+/**
+ * 构建外部榜单查找表：归一化 key → 最佳条目（同 key 取更高分）。
+ * 仅索引有对应指标分数的条目。
+ */
+export function buildExternalScoreIndex(
+  models: readonly ExternalLeaderboardEntry[],
+  metric: ExternalSortMetric,
+): Map<string, MatchedExternalScore> {
+  const index = new Map<string, MatchedExternalScore>();
+
+  const consider = (key: string, entry: ExternalLeaderboardEntry, score: number) => {
+    if (!key) return;
+    const prev = index.get(key);
+    if (!prev || score > prev.score) {
+      index.set(key, {
+        score,
+        leaderboardId: entry.id,
+        sourceLabel: "OpenRouter",
+      });
+    }
+  };
+
+  for (const entry of models) {
+    const score = metricScore(entry, metric);
+    if (score == null) continue;
+
+    const keys = new Set<string>();
+    keys.add(normalizeModelIdForMatch(entry.id));
+    if (entry.canonical_slug) keys.add(normalizeModelIdForMatch(entry.canonical_slug));
+    if (entry.name) keys.add(normalizeModelIdForMatch(entry.name));
+    // 也索引「去掉厂商后的 id 最后一段」已由 normalize 完成
+
+    for (const key of keys) {
+      consider(key, entry, score);
+    }
+  }
+  return index;
+}
+
+/**
+ * 高置信匹配：仅当本地模型归一化 key 与榜单某 key **完全相等** 时命中。
+ * 不做子串/模糊匹配，避免错配。
+ */
+export function matchExternalScore(
+  modelId: string,
+  index: Map<string, MatchedExternalScore>,
+): MatchedExternalScore | null {
+  const key = normalizeModelIdForMatch(modelId);
+  if (!key) return null;
+  return index.get(key) ?? null;
+}
+
+/** 混合排序 key：外部分命中 → `1_000_000 + score * 1000`；否则本地启发式。 */
+export function hybridSortKey(
+  modelId: string,
+  index: Map<string, MatchedExternalScore> | null,
+): { key: number; external: MatchedExternalScore | null; local: ModelCapability } {
+  const local = scoreModelCapability(modelId);
+  if (index) {
+    const external = matchExternalScore(modelId, index);
+    if (external) {
+      return {
+        key: EXTERNAL_SORT_BASE + external.score * 1_000,
+        external,
+        local,
+      };
+    }
+  }
+  return { key: local.score, external: null, local };
+}
+
+/**
+ * 稳定混合排序：外部命中按外部分；未命中/无分回退本地启发式；同 key 保持原序。
+ */
+export function sortByHybridCapability<T>(
+  items: readonly T[],
+  getModelId: (item: T) => string,
+  index: Map<string, MatchedExternalScore> | null,
+): T[] {
+  return items
+    .map((item, indexIn) => ({
+      item,
+      indexIn,
+      key: hybridSortKey(getModelId(item), index).key,
+    }))
+    .sort((a, b) => b.key - a.key || a.indexIn - b.indexIn)
     .map(({ item }) => item);
 }

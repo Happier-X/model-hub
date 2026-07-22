@@ -5,19 +5,27 @@ import {
   deleteGroup,
   extractInvokeError,
   fetchProviderModels,
+  getModelLeaderboard,
   listGroups,
   listHealth,
   listProviders,
   updateGroup,
   type Group,
   type HealthSnapshot,
+  type ModelLeaderboardSnapshot,
   type Provider,
 } from "../api/tauri";
 import HealthBadge from "../components/HealthBadge.vue";
 import { findHealth } from "../utils/health";
 import {
+  buildExternalScoreIndex,
+  hybridSortKey,
   scoreModelCapability,
+  sortByHybridCapability,
   sortByModelCapability,
+  type ExternalSortMetric,
+  type MatchedExternalScore,
+  type QueueSortMode,
 } from "../utils/modelCapability";
 
 const groups = ref<Group[]>([]);
@@ -34,6 +42,10 @@ const bulkAddingModels = ref(false);
 const bulkMessage = ref("");
 const dragFromIndex = ref<number | null>(null);
 const dragOverIndex = ref<number | null>(null);
+const sortMode = ref<QueueSortMode>("local");
+const leaderboard = ref<ModelLeaderboardSnapshot | null>(null);
+const leaderboardLoading = ref(false);
+const leaderboardError = ref("");
 let nextItemUid = 1;
 
 type QueueItemDraft = {
@@ -57,6 +69,69 @@ function createQueueItem(providerId: number, upstreamModel: string): QueueItemDr
 }
 
 const providerMap = computed(() => new Map(providers.value.map((p) => [p.id, p])));
+
+const externalIndex = computed(() => {
+  if (sortMode.value === "local" || !leaderboard.value) return null;
+  const metric: ExternalSortMetric =
+    sortMode.value === "external_coding" ? "coding" : "intelligence";
+  return buildExternalScoreIndex(leaderboard.value.models, metric);
+});
+
+const leaderboardStatusText = computed(() => {
+  if (leaderboardLoading.value) return "榜单加载中…";
+  if (!leaderboard.value) {
+    return leaderboardError.value || "尚未加载外部榜单（使用外部排序时将自动拉取）";
+  }
+  const t = formatUnix(leaderboard.value.fetched_at_unix);
+  const parts = [
+    `来源 ${leaderboard.value.source === "openrouter" ? "OpenRouter" : leaderboard.value.source}`,
+    `${leaderboard.value.models.length} 条`,
+    `更新于 ${t}`,
+  ];
+  if (leaderboard.value.cache_hit) parts.push("缓存命中");
+  if (leaderboard.value.stale) parts.push("陈旧缓存（网络失败已回退）");
+  // 强制刷新失败但仍有旧快照时，补充错误提示
+  if (leaderboardError.value) parts.push(`刷新失败：${leaderboardError.value}`);
+  return parts.join(" · ");
+});
+
+/** 每条队列的展示分（按 index 缓存，避免模板内多次调用 displayScoreOf）。 */
+const queueDisplayScores = computed(() =>
+  form.items.map((item) => displayScoreOf(item.upstream_model)),
+);
+
+function formatUnix(unix: number): string {
+  if (!unix || unix <= 0) return "未知时间";
+  try {
+    return new Date(unix * 1000).toLocaleString("zh-CN", { hour12: false });
+  } catch {
+    return String(unix);
+  }
+}
+
+async function loadLeaderboard(forceRefresh = false) {
+  leaderboardLoading.value = true;
+  leaderboardError.value = "";
+  try {
+    leaderboard.value = await getModelLeaderboard(forceRefresh);
+    if (leaderboard.value.stale) {
+      // stale 状态由结构化快照展示；它仍是可用的成功结果。
+      leaderboardError.value = "";
+    }
+  } catch (e) {
+    leaderboardError.value = extractInvokeError(e);
+    // 失败不影响本地排序；保留旧快照（若有）
+  } finally {
+    leaderboardLoading.value = false;
+  }
+}
+
+async function ensureLeaderboardForExternalSort() {
+  if (sortMode.value === "local") return true;
+  if (leaderboard.value && !leaderboardLoading.value) return true;
+  await loadLeaderboard(false);
+  return !!leaderboard.value;
+}
 
 async function refresh() {
   try {
@@ -207,20 +282,36 @@ function capabilityOf(modelId: string) {
   return scoreModelCapability(modelId);
 }
 
-function sortQueueByCapability() {
-  if (form.items.length < 2) {
-    bulkMessage.value = "队列条目少于 2 条，无需排序";
-    return;
+function displayScoreOf(modelId: string): {
+  label: string;
+  score: number;
+  source: "local" | "openrouter";
+  recognized: boolean;
+  external: MatchedExternalScore | null;
+} {
+  const local = scoreModelCapability(modelId);
+  if (sortMode.value !== "local" && externalIndex.value) {
+    const { external } = hybridSortKey(modelId, externalIndex.value);
+    if (external) {
+      return {
+        label: local.recognized ? local.label : "外部榜单",
+        score: external.score,
+        source: "openrouter",
+        recognized: true,
+        external,
+      };
+    }
   }
-  const before = form.items.map((item) => item.uid);
-  const sorted = sortByModelCapability(form.items, (item) => item.upstream_model);
-  const after = sorted.map((item) => item.uid);
-  if (before.every((uid, index) => uid === after[index])) {
-    bulkMessage.value = "当前顺序已符合模型能力启发式排序";
-    return;
-  }
+  return {
+    label: local.label,
+    score: local.score,
+    source: "local",
+    recognized: local.recognized,
+    external: null,
+  };
+}
 
-  // 同步 modelOptions / fetchingModels 到新下标，避免拉取缓存错位。
+function applySortedItems(sorted: typeof form.items, message: string) {
   const oldIndexByUid = new Map(form.items.map((item, index) => [item.uid, index]));
   const nextOptions: Record<number, string[]> = {};
   const nextFetching: Record<number, boolean> = {};
@@ -236,8 +327,46 @@ function sortQueueByCapability() {
   fetchingModels.value = nextFetching;
   dragFromIndex.value = null;
   dragOverIndex.value = null;
-  bulkMessage.value =
-    "已按模型能力启发式排序（分数越高越优先）；未识别模型排后。点击“保存”后生效，仍可拖拽微调。";
+  bulkMessage.value = message;
+}
+
+async function sortQueueByCapability() {
+  if (form.items.length < 2) {
+    bulkMessage.value = "队列条目少于 2 条，无需排序";
+    return;
+  }
+
+  if (sortMode.value !== "local") {
+    const ok = await ensureLeaderboardForExternalSort();
+    if (!ok) {
+      bulkMessage.value =
+        "外部榜单不可用，已保持当前顺序。可改用「本地启发式」排序，或检查网络后强制刷新榜单。";
+      return;
+    }
+  }
+
+  const before = form.items.map((item) => item.uid);
+  const sorted =
+    sortMode.value === "local"
+      ? sortByModelCapability(form.items, (item) => item.upstream_model)
+      : sortByHybridCapability(form.items, (item) => item.upstream_model, externalIndex.value);
+
+  const after = sorted.map((item) => item.uid);
+  if (before.every((uid, index) => uid === after[index])) {
+    bulkMessage.value =
+      sortMode.value === "local"
+        ? "当前顺序已符合本地启发式排序"
+        : "当前顺序已符合所选外部榜单排序（未匹配项已回退本地）";
+    return;
+  }
+
+  const modeHint =
+    sortMode.value === "local"
+      ? "已按本地模型名启发式排序（分数越高越优先）；未识别模型排后。"
+      : sortMode.value === "external_coding"
+        ? "已按 OpenRouter 编码能力排序；未匹配或无分模型回退本地启发式。"
+        : "已按 OpenRouter 通用能力排序；未匹配或无分模型回退本地启发式。";
+  applySortedItems(sorted, `${modeHint}点击“保存”后生效，仍可拖拽微调。`);
 }
 
 async function pullModels(index: number) {
@@ -340,7 +469,9 @@ async function remove(id: number) {
   }
 }
 
-onMounted(refresh);
+onMounted(async () => {
+  await refresh();
+});
 </script>
 
 <template>
@@ -362,18 +493,38 @@ onMounted(refresh);
       <div class="mt-4 space-y-2">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h3 class="text-sm font-medium">故障转移队列</h3>
-          <div class="flex flex-wrap gap-3">
+          <div class="flex flex-wrap items-center gap-3">
+            <label class="flex items-center gap-1.5 text-sm text-slate-600">
+              <span class="text-slate-500">排序方式</span>
+              <select
+                v-model="sortMode"
+                class="rounded border border-slate-300 bg-white px-2 py-1 text-sm"
+              >
+                <option value="local">本地启发式</option>
+                <option value="external_intelligence">外部通用能力</option>
+                <option value="external_coding">外部编码能力</option>
+              </select>
+            </label>
             <button
               type="button"
               class="text-sm text-cyan-700 hover:underline disabled:opacity-40"
-              :disabled="form.items.length < 2"
+              :disabled="form.items.length < 2 || leaderboardLoading"
               @click="sortQueueByCapability"
             >
               按模型能力排序
             </button>
+            <button
+              type="button"
+              class="text-sm text-cyan-700 hover:underline disabled:opacity-40"
+              :disabled="leaderboardLoading"
+              @click="loadLeaderboard(true)"
+            >
+              {{ leaderboardLoading ? "刷新榜单中…" : "强制刷新榜单" }}
+            </button>
             <button type="button" class="text-sm text-cyan-700 hover:underline" @click="addItem">添加条目</button>
           </div>
         </div>
+        <p class="text-xs text-slate-500">{{ leaderboardStatusText }}</p>
         <div class="flex flex-wrap items-end gap-2 rounded-lg border border-cyan-100 bg-cyan-50/60 p-3">
           <label class="text-sm">
             <span class="mb-1 block text-slate-600">批量添加供应商全部模型</span>
@@ -397,7 +548,7 @@ onMounted(refresh);
         </div>
         <p v-if="bulkMessage" class="text-sm text-emerald-700">{{ bulkMessage }}</p>
         <p class="text-xs text-slate-500">
-          可拖动左侧手柄调整故障转移优先级；上移/下移与「按模型能力排序」仅作用于当前表单，需点保存写入。能力分来自模型名启发式，不是官方基准。
+          可拖动左侧手柄调整故障转移优先级；上移/下移与「按模型能力排序」仅作用于当前表单，需点保存写入。本地分来自模型名启发式；外部分为 OpenRouter 公开指标，未匹配回退本地。
         </p>
         <div
           v-for="(item, index) in form.items"
@@ -427,15 +578,23 @@ onMounted(refresh);
           <span
             class="rounded-full px-2 py-0.5 text-[11px] tabular-nums"
             :class="
-              capabilityOf(item.upstream_model).recognized
-                ? 'bg-violet-50 text-violet-700'
-                : 'bg-slate-100 text-slate-500'
+              queueDisplayScores[index]?.source === 'openrouter'
+                ? 'bg-emerald-50 text-emerald-800'
+                : queueDisplayScores[index]?.recognized
+                  ? 'bg-violet-50 text-violet-700'
+                  : 'bg-slate-100 text-slate-500'
             "
-            :title="`启发式能力分 ${capabilityOf(item.upstream_model).score}`"
+            :title="
+              queueDisplayScores[index]?.source === 'openrouter'
+                ? `OpenRouter 分数 ${queueDisplayScores[index]?.score}（本地启发式 ${capabilityOf(item.upstream_model).score}）`
+                : `本地启发式能力分 ${queueDisplayScores[index]?.score}`
+            "
           >
-            {{ capabilityOf(item.upstream_model).label }}
+            {{ queueDisplayScores[index]?.source === "openrouter" ? "OpenRouter" : "本地" }}
             ·
-            {{ capabilityOf(item.upstream_model).score }}
+            {{ queueDisplayScores[index]?.label }}
+            ·
+            {{ queueDisplayScores[index]?.score }}
           </span>
           <select v-model.number="item.provider_id" class="rounded border border-slate-300 px-2 py-1 text-sm">
             <option :value="0">选择供应商</option>

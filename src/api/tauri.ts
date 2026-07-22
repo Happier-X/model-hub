@@ -218,6 +218,30 @@ export const exportToPiAgent = (apiKey?: string) =>
   invoke<ExportToPiResult>("export_to_pi_agent", { api_key: apiKey ?? null });
 export const listHealth = () => invoke<HealthSnapshot[]>("list_health");
 
+/** OpenRouter 公共榜单模型（白名单字段）。 */
+export interface LeaderboardModel {
+  id: string;
+  canonical_slug?: string | null;
+  name?: string | null;
+  intelligence_score?: number | null;
+  coding_score?: number | null;
+  agentic_score?: number | null;
+}
+
+export interface ModelLeaderboardSnapshot {
+  source: string;
+  fetched_at_unix: number;
+  stale: boolean;
+  cache_hit: boolean;
+  models: LeaderboardModel[];
+}
+
+/** 获取 OpenRouter 模型榜单；默认用 24h 缓存，force_refresh 时尝试网络。 */
+export const getModelLeaderboard = (forceRefresh = false) =>
+  invoke<ModelLeaderboardSnapshot>("get_model_leaderboard", {
+    force_refresh: forceRefresh,
+  });
+
 /** 浏览器 / 非 Tauri 壳内无法使用更新与进程插件 */
 export const DESKTOP_ONLY_UPDATE_HINT = "请在桌面应用内检查更新";
 
