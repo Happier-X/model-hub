@@ -54,7 +54,7 @@
 
 ### 1. 范围 / 触发条件
 
-当新版本查询依赖既有表中的新字段，而 `CREATE TABLE IF NOT EXISTS` 不会修改已存在的表时，必须在启动迁移中补充字段。当前示例是 `groups.auto_failover`。
+当新版本查询依赖既有表中的新字段，而 `CREATE TABLE IF NOT EXISTS` 不会修改已存在的表时，必须在启动迁移中补充字段。已覆盖示例：`groups.auto_failover` / `groups.created_at`，以及 `request_logs` 的 `status_code`、`use_time_ms`、failover 等列。
 
 ### 2. 签名
 
@@ -78,6 +78,7 @@
 |------|------|
 | `groups` 缺少 `auto_failover` | 添加列，既有行读取为 `1` |
 | `groups` 缺少 `created_at` | 添加列，既有行为非空有效 RFC3339 迁移时间 |
+| `request_logs` 缺少 `status_code` 等业务列 | `ensure_request_logs_columns` 逐列 `ALTER TABLE ... ADD COLUMN`，默认值与 schema v1 一致；既有行保留 |
 | 字段已经存在 | 跳过添加，保留所有值 |
 | `PRAGMA table_info` 或读取字段失败 | 返回 `AppError::Database` |
 | `ALTER TABLE` 失败 | 返回 `AppError::Database` |
@@ -93,6 +94,7 @@
 
 - 迁移单测：旧 `groups` 同时缺少 `auto_failover`、`created_at` 时添加列，保留分组；默认值为 `1`，时间可按 RFC3339 解析，重复迁移不改变迁移时间。
 - 迁移单测：已有 `auto_failover=0`、原始 `created_at` 时重复迁移不改变值。
+- 迁移单测：残缺 `request_logs` 缺 `status_code` 等列时补齐，保留既有行；重复迁移成功。
 - 数据库集成单测：通过 `open_db` 升级旧库后，`list_groups` 与 `get_group_by_name` 均可读，且 `group_items` 数量、供应商关联与上游模型保持不变。
 
 ### 7. 错误与正确做法

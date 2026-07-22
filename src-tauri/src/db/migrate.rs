@@ -59,30 +59,31 @@ CREATE TABLE IF NOT EXISTS request_logs (
 CREATE INDEX IF NOT EXISTS idx_request_logs_time ON request_logs(time DESC);
 "#;
 
-fn ensure_group_columns(conn: &Connection) -> Result<(), AppError> {
+fn table_column_names(conn: &Connection, table: &str) -> Result<std::collections::HashSet<String>, AppError> {
+    // PRAGMA table_info 不支持绑定参数表名；table 仅内部常量调用。
     let mut stmt = conn
-        .prepare("PRAGMA table_info(groups)")
-        .map_err(|e| AppError::Database(format!("检查 groups 表结构失败: {e}")))?;
-    let mut columns = stmt
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .map_err(|e| AppError::Database(format!("检查 {table} 表结构失败: {e}")))?;
+    let mut rows = stmt
         .query([])
-        .map_err(|e| AppError::Database(format!("读取 groups 表结构失败: {e}")))?;
-    let mut has_auto_failover = false;
-    let mut has_created_at = false;
-    while let Some(row) = columns
+        .map_err(|e| AppError::Database(format!("读取 {table} 表结构失败: {e}")))?;
+    let mut names = std::collections::HashSet::new();
+    while let Some(row) = rows
         .next()
-        .map_err(|e| AppError::Database(format!("读取 groups 表字段失败: {e}")))?
+        .map_err(|e| AppError::Database(format!("读取 {table} 表字段失败: {e}")))?
     {
         let name: String = row
             .get(1)
-            .map_err(|e| AppError::Database(format!("读取 groups 表字段名失败: {e}")))?;
-        match name.as_str() {
-            "auto_failover" => has_auto_failover = true,
-            "created_at" => has_created_at = true,
-            _ => {}
-        }
+            .map_err(|e| AppError::Database(format!("读取 {table} 表字段名失败: {e}")))?;
+        names.insert(name);
     }
-    drop(columns);
-    drop(stmt);
+    Ok(names)
+}
+
+fn ensure_group_columns(conn: &Connection) -> Result<(), AppError> {
+    let columns = table_column_names(conn, "groups")?;
+    let has_auto_failover = columns.contains("auto_failover");
+    let has_created_at = columns.contains("created_at");
 
     if !has_auto_failover {
         conn.execute(
@@ -103,6 +104,53 @@ fn ensure_group_columns(conn: &Connection) -> Result<(), AppError> {
         )
         .map_err(|e| AppError::Database(format!("添加 groups.created_at 字段失败: {e}")))?;
     }
+    Ok(())
+}
+
+/// 为残缺的既有 `request_logs` 表补齐当前 schema 列（CREATE IF NOT EXISTS 不会改旧表）。
+fn ensure_request_logs_columns(conn: &Connection) -> Result<(), AppError> {
+    // 表尚不存在时由 MIGRATION_V1 创建完整表，此处无需处理。
+    let exists: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='request_logs')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| AppError::Database(format!("检查 request_logs 是否存在失败: {e}")))?;
+    if !exists {
+        return Ok(());
+    }
+
+    let columns = table_column_names(conn, "request_logs")?;
+    // (列名, 完整 ADD COLUMN 子句)
+    let required: &[(&str, &str)] = &[
+        ("time", "time INTEGER NOT NULL DEFAULT 0"),
+        ("group_name", "group_name TEXT NOT NULL DEFAULT ''"),
+        ("provider_name", "provider_name TEXT NOT NULL DEFAULT ''"),
+        ("upstream_model", "upstream_model TEXT NOT NULL DEFAULT ''"),
+        ("status_code", "status_code INTEGER NOT NULL DEFAULT 0"),
+        ("use_time_ms", "use_time_ms INTEGER NOT NULL DEFAULT 0"),
+        ("error", "error TEXT NOT NULL DEFAULT ''"),
+        ("failover_from", "failover_from TEXT NOT NULL DEFAULT ''"),
+        ("failover_to", "failover_to TEXT NOT NULL DEFAULT ''"),
+        ("failover_reason", "failover_reason TEXT NOT NULL DEFAULT ''"),
+    ];
+
+    for (name, ddl) in required {
+        if columns.contains(*name) {
+            continue;
+        }
+        conn.execute(
+            &format!("ALTER TABLE request_logs ADD COLUMN {ddl}"),
+            [],
+        )
+        .map_err(|e| {
+            AppError::Database(format!("添加 request_logs.{name} 字段失败: {e}"))
+        })?;
+    }
+
+    conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_request_logs_time ON request_logs(time DESC);")
+        .map_err(|e| AppError::Database(format!("创建 request_logs 时间索引失败: {e}")))?;
     Ok(())
 }
 
@@ -130,6 +178,7 @@ pub fn migrate(conn: &Connection) -> Result<(), AppError> {
     conn.execute_batch(MIGRATION_V1)
         .map_err(|e| AppError::Database(format!("执行 schema v1 失败: {e}")))?;
     ensure_group_columns(conn)?;
+    ensure_request_logs_columns(conn)?;
     apply_version(conn, 1)?;
     Ok(())
 }
@@ -198,6 +247,66 @@ mod tests {
             .unwrap();
         assert_eq!(value, 1);
         assert_eq!(created_at, group.2);
+    }
+
+    #[test]
+    fn migrate_adds_missing_request_logs_columns_without_losing_rows() {
+        let conn = Connection::open_in_memory().unwrap();
+        // 残缺旧表：仅有 id/time/message 风格字段，缺 status_code 等
+        conn.execute_batch(
+            "CREATE TABLE request_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                time INTEGER NOT NULL,
+                message TEXT NOT NULL DEFAULT ''
+            );
+            INSERT INTO request_logs (time, message) VALUES (1700000000, 'legacy row');",
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let cols = super::table_column_names(&conn, "request_logs").unwrap();
+        for name in [
+            "status_code",
+            "use_time_ms",
+            "error",
+            "group_name",
+            "provider_name",
+            "upstream_model",
+            "failover_from",
+            "failover_to",
+            "failover_reason",
+        ] {
+            assert!(cols.contains(name), "missing column {name}");
+        }
+
+        let row: (i64, i64, i64, String) = conn
+            .query_row(
+                "SELECT id, time, status_code, message FROM request_logs WHERE id = 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(row.0, 1);
+        assert_eq!(row.1, 1700000000);
+        assert_eq!(row.2, 0); // 新列默认 0
+        assert_eq!(row.3, "legacy row");
+
+        // 迁移后可做与概览统计相同的聚合
+        let total: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM request_logs WHERE status_code >= 0",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(total, 1);
+
+        migrate(&conn).unwrap();
+        let n: i64 = conn
+            .query_row("SELECT COUNT(*) FROM request_logs", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 1);
     }
 
     #[test]

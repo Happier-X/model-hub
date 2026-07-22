@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "缺列迁移约定"}
+{"file": "src-tauri/src/db/migrate.rs", "reason": "迁移实现位置"}
