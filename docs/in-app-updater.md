@@ -2,7 +2,7 @@
 
 ## 当前能力
 
-项目已配置 Tauri Updater 的签名、公钥与 Windows 发布资产生成。当前 Vue 管理台尚未提供手动检查更新入口；用户通过 GitHub Release 获取新安装包。后续接入界面时，应直接调用已注册的 Tauri Updater 插件，并保持用户确认后再下载与安装。
+项目已配置 Tauri Updater 的签名、公钥与 Windows 发布资产生成。应用本体为 **Vue 3 + 进程内 Rust 代理**，发布包**不含**侧车 `model-hub-gateway.exe`。当前 Vue 管理台尚未提供手动检查更新入口；用户通过 GitHub Release 获取新安装包。后续接入界面时，应直接调用已注册的 Tauri Updater 插件，并保持用户确认后再下载与安装。
 
 更新清单地址：
 
@@ -38,22 +38,29 @@ TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 ## 发布步骤
 
 1. 同步修改 `package.json`、`src-tauri/Cargo.toml` 与 Tauri 配置中的版本号。
-2. 新增对应的 `docs/release-notes-vX.Y.Z.md`。
+2. 新增对应的 `docs/release-notes-vX.Y.Z.md`（例如 [v0.1.0](./release-notes-v0.1.0.md)）。
 3. 完成质量检查并推送代码。
-4. 推送版本标签，例如：
+4. （可选）本机验证安装包构建：
+
+```powershell
+pnpm release:windows
+```
+
+该命令与 CI 一致：`tauri build --bundles nsis -c src-tauri/tauri.release.conf.json`。正式上传仍以 tag 触发的 Actions 为准。
+5. 推送版本标签，例如：
 
 ```bash
 git tag v0.1.0
 git push origin v0.1.0
 ```
 
-5. Windows 工作流只构建 `src-tauri` 中的 Tauri 应用，并发布：
+6. Windows 工作流只构建 `src-tauri` 中的 Tauri 应用（进程内代理，无需 `prepare:gateway-rust`），并发布：
    - NSIS 安装包；
    - NSIS 签名；
    - `latest.json`；
    - `SHA256SUMS.txt`；
    - 对应版本发布说明。
-6. 在 Release 页面确认 `latest.json` 的版本、URL、签名和资产名称一致。
+7. 在 Release 页面确认 `latest.json` 的版本、URL、签名和资产名称一致。
 
 ## 失败处理
 

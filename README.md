@@ -52,5 +52,43 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 - 管理面：Tauri commands（IPC）
 - 客户端面：本机 HTTP `/v1/*`
 - 数据：应用数据目录下 SQLite（新 schema，不兼容旧版）
+- **无**外部 `model-hub-gateway` / octopus 侧车进程
 
 详细组件边界、路由与安全设计见 [当前架构](docs/current-architecture.md)。
+
+## 文档
+
+| 文档 | 说明 |
+|------|------|
+| [当前架构](docs/current-architecture.md) | 组件与安全边界 |
+| [客户端对接](docs/client-integration.md) | Base URL、Key、SDK |
+| [Chat 上手](docs/chat-onboarding.md) | 联调与排错 |
+| [本机验收](docs/local-acceptance.md) | 可勾选联调清单 |
+| [MVP 验收](docs/mvp-acceptance.md) | 自动化 + 手工 AC |
+| [v0.1.0 发布说明](docs/release-notes-v0.1.0.md) | 能力与升级注意 |
+| [应用更新](docs/in-app-updater.md) | 签名、Secrets、tag 发布 |
+
+历史 0.0.x 说明仍保留在 `docs/release-notes-v0.0.*.md`，**勿**再按其中的侧车部署步骤操作当前版本。
+
+## 发布（Windows）
+
+版本号请同步：`package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`、`src-tauri/tauri.release.conf.json`（当前 **0.1.0**）。
+
+1. 撰写/更新 `docs/release-notes-vX.Y.Z.md`
+2. 推送代码后打 tag：
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+3. GitHub Actions `release-windows` 构建 NSIS、Updater 签名资产与 `latest.json`
+4. 仓库需配置 Secrets：`TAURI_SIGNING_PRIVATE_KEY`、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+
+本地仅构建安装包（不上传 Release）：
+
+```powershell
+pnpm release:windows
+```
+
+完整步骤见 [应用更新与发布说明](docs/in-app-updater.md)。
