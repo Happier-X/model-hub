@@ -1,4 +1,7 @@
-import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 
 export type ProxyState = "idle" | "starting" | "running" | "stopping" | "error";
 
@@ -137,3 +140,37 @@ export const listLogs = (page = 1, pageSize = 50) =>
   invoke<RequestLog[]>("list_logs", { page, page_size: pageSize });
 export const clearLogs = () => invoke<void>("clear_logs");
 export const listHealth = () => invoke<HealthSnapshot[]>("list_health");
+
+/** 浏览器 / 非 Tauri 壳内无法使用更新与进程插件 */
+export const DESKTOP_ONLY_UPDATE_HINT = "请在桌面应用内检查更新";
+
+export function ensureDesktopShell(): void {
+  if (!isTauri()) {
+    throw new Error(DESKTOP_ONLY_UPDATE_HINT);
+  }
+}
+
+export async function getAppVersion(): Promise<string> {
+  ensureDesktopShell();
+  return getVersion();
+}
+
+export async function checkForUpdate(): Promise<Update | null> {
+  ensureDesktopShell();
+  return check();
+}
+
+export async function downloadAndInstallUpdate(
+  update: Update,
+  onEvent?: (progress: DownloadEvent) => void,
+): Promise<void> {
+  ensureDesktopShell();
+  await update.downloadAndInstall(onEvent);
+}
+
+export async function relaunchApp(): Promise<void> {
+  ensureDesktopShell();
+  await relaunch();
+}
+
+export type { DownloadEvent, Update };

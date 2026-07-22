@@ -33,7 +33,7 @@
 - 安装包：GitHub Release 中的 NSIS `.exe`
 - 校验：同 Release 的 `SHA256SUMS.txt`
 - 应用内更新清单：`https://github.com/Happier-X/model-hub/releases/latest/download/latest.json`（需签名校验）
-- 当前管理台**尚未**提供「检查更新」按钮；用户可从 Release 页安装新版本。详情见 [应用更新与发布说明](./in-app-updater.md)。
+- 概览页提供手动「检查更新」；用户确认后下载安装并重启。也可从 GitHub Release 安装。详情见 [应用更新与发布说明](./in-app-updater.md)。
 
 ## 架构与验收
 
@@ -69,6 +69,6 @@ TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 
 ## 已知限制
 
-- 管理台暂无手动检查更新 UI。
+- 管理台支持手动检查更新；暂无启动时自动检查。
 - 不提供从 0.0.x 侧车数据库的自动导入。
 - 默认仅监听 `127.0.0.1`；改非本机地址存在暴露风险。

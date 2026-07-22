@@ -1,14 +1,20 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import {
+  checkForUpdate,
+  downloadAndInstallUpdate,
   extractInvokeError,
+  getAppVersion,
   getPaths,
   proxySetPort,
   proxyStart,
   proxyStatus,
   proxyStop,
+  relaunchApp,
   type AppPaths,
+  type DownloadEvent,
   type ProxyStatus,
+  type Update,
 } from "../api/tauri";
 
 const status = ref<ProxyStatus | null>(null);
@@ -17,6 +23,117 @@ const portInput = ref(8080);
 const loading = ref(false);
 const message = ref("");
 const error = ref("");
+
+/** idle | checking | available | downloading | installing | error */
+type UpdatePhase = "idle" | "checking" | "available" | "downloading" | "installing" | "error";
+const updatePhase = ref<UpdatePhase>("idle");
+const updateMessage = ref("");
+const updateError = ref("");
+const currentVersion = ref("");
+const pendingUpdate = ref<Update | null>(null);
+const downloadLoaded = ref(0);
+const downloadTotal = ref<number | null>(null);
+
+const updateBusy = computed(
+  () =>
+    updatePhase.value === "checking" ||
+    updatePhase.value === "downloading" ||
+    updatePhase.value === "installing",
+);
+
+const downloadProgressText = computed(() => {
+  if (downloadTotal.value != null && downloadTotal.value > 0) {
+    const pct = Math.min(100, Math.round((downloadLoaded.value / downloadTotal.value) * 100));
+    return `已下载 ${formatBytes(downloadLoaded.value)} / ${formatBytes(downloadTotal.value)}（${pct}%）`;
+  }
+  if (downloadLoaded.value > 0) {
+    return `已下载 ${formatBytes(downloadLoaded.value)}`;
+  }
+  return "准备下载…";
+});
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function onDownloadEvent(event: DownloadEvent) {
+  if (event.event === "Started") {
+    updatePhase.value = "downloading";
+    downloadLoaded.value = 0;
+    downloadTotal.value = event.data.contentLength ?? null;
+    updateMessage.value = "开始下载更新…";
+  } else if (event.event === "Progress") {
+    downloadLoaded.value += event.data.chunkLength;
+    updateMessage.value = downloadProgressText.value;
+  } else if (event.event === "Finished") {
+    updatePhase.value = "installing";
+    updateMessage.value = "下载完成，正在安装…";
+  }
+}
+
+async function checkUpdate() {
+  if (updateBusy.value) return;
+  updatePhase.value = "checking";
+  updateMessage.value = "正在检查更新…";
+  updateError.value = "";
+  pendingUpdate.value = null;
+  downloadLoaded.value = 0;
+  downloadTotal.value = null;
+  try {
+    try {
+      currentVersion.value = await getAppVersion();
+    } catch {
+      /* 版本仅展示用，检查本身仍继续 */
+    }
+    const update = await checkForUpdate();
+    if (!update) {
+      updatePhase.value = "idle";
+      const ver = currentVersion.value ? `（当前版本 ${currentVersion.value}）` : "";
+      updateMessage.value = `当前已是最新版本${ver}`;
+      return;
+    }
+    pendingUpdate.value = update;
+    currentVersion.value = update.currentVersion || currentVersion.value;
+    updatePhase.value = "available";
+    updateMessage.value = `发现新版本 ${update.version}`;
+  } catch (e) {
+    updatePhase.value = "error";
+    updateError.value = extractInvokeError(e);
+    updateMessage.value = "";
+  }
+}
+
+async function confirmInstall() {
+  const update = pendingUpdate.value;
+  if (!update || updateBusy.value) return;
+  updateError.value = "";
+  updatePhase.value = "downloading";
+  updateMessage.value = "开始下载更新…";
+  downloadLoaded.value = 0;
+  downloadTotal.value = null;
+  try {
+    await downloadAndInstallUpdate(update, onDownloadEvent);
+    updatePhase.value = "installing";
+    updateMessage.value = "安装完成，正在重启应用…";
+    pendingUpdate.value = null;
+    await relaunchApp();
+  } catch (e) {
+    updatePhase.value = "error";
+    updateError.value = extractInvokeError(e);
+    updateMessage.value = "";
+    // 保留 pendingUpdate，便于重试下载安装
+  }
+}
+
+function cancelPendingUpdate() {
+  if (updateBusy.value) return;
+  pendingUpdate.value = null;
+  updatePhase.value = "idle";
+  updateMessage.value = "";
+  updateError.value = "";
+}
 
 async function refresh() {
   try {
@@ -178,6 +295,68 @@ onMounted(refresh);
       <p v-if="error || status?.last_error" class="mt-3 text-sm text-rose-600">
         {{ error || status?.last_error }}
       </p>
+    </section>
+
+    <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 class="mb-3 text-base font-semibold">应用更新</h2>
+      <p class="mb-3 text-sm text-slate-500">
+        手动检查 GitHub Release 上的更新清单；发现新版本后须确认才会下载安装并重启。
+      </p>
+      <div class="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          class="rounded-lg bg-cyan-700 px-4 py-2 text-sm text-white hover:bg-cyan-600 disabled:opacity-50"
+          :disabled="updateBusy"
+          @click="checkUpdate"
+        >
+          {{ updatePhase === "checking" ? "检查中…" : "检查更新" }}
+        </button>
+        <span v-if="currentVersion" class="text-xs text-slate-500">当前版本 {{ currentVersion }}</span>
+      </div>
+
+      <div
+        v-if="pendingUpdate && (updatePhase === 'available' || updatePhase === 'error')"
+        class="mt-4 rounded-lg border border-cyan-200 bg-cyan-50 p-4 text-sm"
+      >
+        <p class="font-medium text-cyan-900">
+          发现新版本 {{ pendingUpdate.version }}
+          <span v-if="pendingUpdate.currentVersion" class="font-normal text-cyan-700">
+            （当前 {{ pendingUpdate.currentVersion }}）
+          </span>
+        </p>
+        <pre
+          v-if="pendingUpdate.body"
+          class="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-white/80 p-2 text-xs text-slate-700"
+        >{{ pendingUpdate.body }}</pre>
+        <p class="mt-2 text-xs text-slate-600">确认后将下载安装包、完成安装并自动重启应用。数据目录中的配置与数据库不会被删除。</p>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="rounded-lg bg-cyan-700 px-3 py-1.5 text-sm text-white hover:bg-cyan-600 disabled:opacity-50"
+            :disabled="updateBusy"
+            @click="confirmInstall"
+          >
+            {{ updatePhase === "error" ? "重试下载安装" : "下载并安装" }}
+          </button>
+          <button
+            type="button"
+            class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
+            :disabled="updateBusy"
+            @click="cancelPendingUpdate"
+          >
+            稍后
+          </button>
+        </div>
+      </div>
+
+      <p
+        v-if="updateMessage"
+        class="mt-3 text-sm"
+        :class="updatePhase === 'available' ? 'text-cyan-800' : 'text-emerald-700'"
+      >
+        {{ updateMessage }}
+      </p>
+      <p v-if="updateError" class="mt-3 text-sm text-rose-600">{{ updateError }}</p>
     </section>
 
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
