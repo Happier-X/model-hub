@@ -54,7 +54,7 @@
 
 ### 1. 范围 / 触发条件
 
-当新版本查询依赖既有表中的新字段，而 `CREATE TABLE IF NOT EXISTS` 不会修改已存在的表时，必须在启动迁移中补充字段。已覆盖示例：`groups.auto_failover` / `groups.created_at`、`group_items` 的旧 `channel_id/model_name/priority` 到新 `provider_id/upstream_model/sort_order` 兼容，以及 `request_logs` 的 `status_code`、`use_time_ms`、failover 等列。
+当新版本查询依赖既有表中的新字段，而 `CREATE TABLE IF NOT EXISTS` 不会修改已存在的表时，必须在启动迁移中补充字段。已覆盖示例：`groups.auto_failover` / `groups.created_at`、`group_items` 的旧 `channel_id/model_name/priority` 到新 `provider_id/upstream_model/sort_order` 兼容、`api_keys` 的旧 `api_key_masked` 到新 `masked/created_at` 兼容，以及 `request_logs` 的 `status_code`、`use_time_ms`、failover 等列。
 
 ### 2. 签名
 
@@ -79,6 +79,7 @@
 | `groups` 缺少 `auto_failover` | 添加列，既有行读取为 `1` |
 | `groups` 缺少 `created_at` | 添加列，既有行为非空有效 RFC3339 迁移时间 |
 | 旧 `group_items` 只有 `channel_id/model_name/priority` | 补 `provider_id/upstream_model/sort_order` 并条件回填；旧列保留。应用写新条目时检测旧列并同步双写，满足旧 NOT NULL 约束 |
+| 旧 `api_keys` 只有 `api_key_masked` 无 `masked/created_at` | 补 `masked/created_at`；`masked` 从 `api_key_masked` 条件回填；`key_hash` 不覆盖。创建 Key 时若仍有 `api_key_masked` 则同步双写 |
 | `request_logs` 缺少 `status_code` 等业务列 | `ensure_request_logs_columns` 逐列 `ALTER TABLE ... ADD COLUMN`，默认值与 schema v1 一致；既有行保留 |
 | 字段已经存在 | 跳过添加，保留所有值 |
 | `PRAGMA table_info` 或读取字段失败 | 返回 `AppError::Database` |
@@ -97,6 +98,8 @@
 - 迁移单测：已有 `auto_failover=0`、原始 `created_at` 时重复迁移不改变值。
 - 迁移单测：旧 `group_items` 补齐并从 `channel_id/model_name/priority` 回填；已有新字段值不覆盖；重复迁移成功。
 - 领域测试：保留旧 NOT NULL 列的兼容表，应用新增/更新分组条目时同步双写新旧列。
+- 迁移单测：旧 `api_keys` 补齐 `masked/created_at`，从 `api_key_masked` 回填；已有值与 `key_hash` 不覆盖。
+- 领域测试：迁移后的兼容表可 `list_api_keys` / 创建 Key，且双写 `masked` 与 `api_key_masked`。
 - 迁移单测：残缺 `request_logs` 缺 `status_code` 等列时补齐，保留既有行；重复迁移成功。
 - 数据库集成单测：通过 `open_db` 升级旧库后，`list_groups` 与 `get_group_by_name` 均可读，且 `group_items` 数量、供应商关联与上游模型保持不变。
 

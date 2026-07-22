@@ -97,17 +97,44 @@ impl Stores {
         let masked = mask_key(&raw);
         let created_at = chrono::Utc::now().to_rfc3339();
         let id = self.with_conn(|conn| {
-            conn.execute(
-                "INSERT INTO api_keys (name, key_hash, masked, enabled, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![
-                    name,
-                    key_hash,
-                    masked,
-                    if payload.enabled { 1 } else { 0 },
-                    created_at
-                ],
-            )
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            // 旧 gateway-rust 表保留 `api_key_masked TEXT NOT NULL`，迁移采用加列；
+            // 在兼容表中同步双写，避免新建 Key 触发旧列 NOT NULL 约束。
+            let has_legacy_masked: bool = conn
+                .query_row(
+                    "SELECT EXISTS(
+                        SELECT 1 FROM pragma_table_info('api_keys') WHERE name = 'api_key_masked'
+                    )",
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(|e| AppError::Database(format!("检查 api_keys 表结构失败: {e}")))?;
+            if has_legacy_masked {
+                conn.execute(
+                    "INSERT INTO api_keys
+                     (name, key_hash, masked, api_key_masked, enabled, created_at)
+                     VALUES (?1, ?2, ?3, ?3, ?4, ?5)",
+                    params![
+                        name,
+                        key_hash,
+                        masked,
+                        if payload.enabled { 1 } else { 0 },
+                        created_at
+                    ],
+                )
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            } else {
+                conn.execute(
+                    "INSERT INTO api_keys (name, key_hash, masked, enabled, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![
+                        name,
+                        key_hash,
+                        masked,
+                        if payload.enabled { 1 } else { 0 },
+                        created_at
+                    ],
+                )
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            }
             Ok(conn.last_insert_rowid())
         })?;
         Ok(ApiKeyCreated {
@@ -202,5 +229,51 @@ mod tests {
         })
         .unwrap();
         assert!(!s.validate_raw_key(&created.raw_key).unwrap());
+    }
+
+    #[test]
+    fn create_key_on_migrated_legacy_table_dual_writes_masked_columns() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("legacy.db");
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE api_keys (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                api_key_masked TEXT NOT NULL,
+                key_hash TEXT NOT NULL UNIQUE,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                expire_at TEXT,
+                max_cost REAL,
+                supported_models_json TEXT
+            );",
+        )
+        .unwrap();
+        drop(conn);
+
+        let s = Stores::new(open_db(&path).unwrap());
+        let created = s
+            .create_api_key(CreateApiKeyPayload {
+                name: "new".into(),
+                enabled: true,
+            })
+            .unwrap();
+        let list = s.list_api_keys().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].masked, created.masked);
+        assert!(s.validate_raw_key(&created.raw_key).unwrap());
+
+        s.with_conn(|conn| {
+            let pair: (String, String) = conn
+                .query_row(
+                    "SELECT masked, api_key_masked FROM api_keys WHERE id = ?1",
+                    [created.id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            assert_eq!(pair.0, pair.1);
+            Ok(())
+        })
+        .unwrap();
     }
 }
