@@ -77,21 +77,22 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 | [Chat 上手](docs/chat-onboarding.md) | 联调与排错 |
 | [本机验收](docs/local-acceptance.md) | 可勾选联调清单 |
 | [MVP 验收](docs/mvp-acceptance.md) | 自动化 + 手工 AC |
-| [v0.1.0 发布说明](docs/release-notes-v0.1.0.md) | 能力与升级注意 |
+| [v0.1.1 发布说明](docs/release-notes-v0.1.1.md) | 当前版本能力与升级注意 |
+| [v0.1.0 发布说明](docs/release-notes-v0.1.0.md) | 内嵌代理基线 |
 | [应用更新](docs/in-app-updater.md) | 签名、Secrets、tag 发布 |
 
 历史 0.0.x 说明仍保留在 `docs/release-notes-v0.0.*.md`，**勿**再按其中的侧车部署步骤操作当前版本。
 
 ## 发布（Windows）
 
-版本号请同步：`package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`、`src-tauri/tauri.release.conf.json`（当前 **0.1.0**）。
+版本号请同步：`package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`、`src-tauri/tauri.release.conf.json`（当前 **0.1.1**）。
 
 1. 撰写/更新 `docs/release-notes-vX.Y.Z.md`
 2. 推送代码后打 tag：
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
 3. GitHub Actions `release-windows` 构建 NSIS、Updater 签名资产与 `latest.json`
