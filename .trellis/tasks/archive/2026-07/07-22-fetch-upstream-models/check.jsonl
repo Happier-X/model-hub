@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "cargo test 与安全"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端门禁"}
+{"file": ".trellis/tasks/07-22-fetch-upstream-models/prd.md", "reason": "验收标准"}

@@ -115,6 +115,13 @@ export const updateProvider = (payload: {
 }) => invoke<Provider>("update_provider", { payload });
 export const deleteProvider = (id: number) => invoke<void>("delete_provider", { id });
 
+/** 从上游 OpenAI 兼容 /models 拉取模型 id；已保存供应商或表单草稿二选一 */
+export const fetchProviderModels = (payload: {
+  provider_id?: number;
+  base_url?: string;
+  api_key?: string;
+}) => invoke<string[]>("fetch_provider_models", { payload });
+
 export const listGroups = () => invoke<Group[]>("list_groups");
 export const createGroup = (payload: {
   name: string;

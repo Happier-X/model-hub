@@ -6,7 +6,8 @@ use tauri::{AppHandle, State};
 use crate::domain::apikey::{CreateApiKeyPayload, UpdateApiKeyPayload};
 use crate::domain::group::{CreateGroupPayload, Group, UpdateGroupPayload};
 use crate::domain::provider::{CreateProviderPayload, Provider, UpdateProviderPayload};
-use crate::error::InvokeError;
+use crate::domain::upstream_models::{fetch_upstream_model_ids, FetchProviderModelsPayload};
+use crate::error::{AppError, InvokeError};
 use crate::paths;
 use crate::proxy::{ProxyHandle, ProxyStatus};
 
@@ -66,6 +67,51 @@ pub fn update_provider(
 #[tauri::command]
 pub fn delete_provider(proxy: State<'_, ProxyHandle>, id: i64) -> Result<(), InvokeError> {
     stores(&proxy)?.delete_provider(id).map_err(Into::into)
+}
+
+/// 从上游供应商 OpenAI 兼容 `/models` 拉取模型 id 列表。
+///
+/// 支持已保存 `provider_id`，或表单草稿 `base_url` + `api_key`。
+#[tauri::command]
+pub async fn fetch_provider_models(
+    proxy: State<'_, ProxyHandle>,
+    payload: FetchProviderModelsPayload,
+) -> Result<Vec<String>, InvokeError> {
+    let (base_url, api_key) = if let Some(id) = payload.provider_id {
+        let p = stores(&proxy)?
+            .get_provider(id)
+            .map_err(InvokeError::from)?
+            .ok_or_else(|| InvokeError::from(AppError::Business("供应商不存在".into())))?;
+        (p.base_url, p.api_key)
+    } else {
+        let base_url = payload
+            .base_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| {
+                InvokeError::from(AppError::Business(
+                    "请提供 provider_id，或同时提供 base_url 与 api_key".into(),
+                ))
+            })?
+            .to_string();
+        let api_key = payload
+            .api_key
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| {
+                InvokeError::from(AppError::Business(
+                    "请提供 provider_id，或同时提供 base_url 与 api_key".into(),
+                ))
+            })?
+            .to_string();
+        (base_url, api_key)
+    };
+
+    fetch_upstream_model_ids(&base_url, &api_key)
+        .await
+        .map_err(Into::into)
 }
 
 #[tauri::command]

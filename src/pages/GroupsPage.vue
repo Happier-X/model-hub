@@ -4,6 +4,7 @@ import {
   createGroup,
   deleteGroup,
   extractInvokeError,
+  fetchProviderModels,
   listGroups,
   listHealth,
   listProviders,
@@ -21,6 +22,9 @@ const health = ref<HealthSnapshot[]>([]);
 const error = ref("");
 const healthLoading = ref(false);
 const editing = ref<Group | null>(null);
+/** 每条队列条目拉取到的上游模型 id 列表 */
+const modelOptions = ref<Record<number, string[]>>({});
+const fetchingModels = ref<Record<number, boolean>>({});
 
 const form = reactive({
   name: "",
@@ -91,6 +95,35 @@ function moveItem(index: number, delta: number) {
 
 function removeItem(index: number) {
   form.items.splice(index, 1);
+  delete modelOptions.value[index];
+  delete fetchingModels.value[index];
+}
+
+async function pullModels(index: number) {
+  const item = form.items[index];
+  if (!item || !item.provider_id) {
+    error.value = "请先选择供应商，再拉取模型";
+    return;
+  }
+  fetchingModels.value = { ...fetchingModels.value, [index]: true };
+  try {
+    const ids = await fetchProviderModels({ provider_id: item.provider_id });
+    modelOptions.value = { ...modelOptions.value, [index]: ids };
+    error.value = "";
+    if (ids.length === 0) {
+      error.value = "上游返回空模型列表，请手填上游模型名";
+    }
+  } catch (e) {
+    error.value = extractInvokeError(e);
+  } finally {
+    fetchingModels.value = { ...fetchingModels.value, [index]: false };
+  }
+}
+
+function pickModel(index: number, modelId: string) {
+  const item = form.items[index];
+  if (!item) return;
+  item.upstream_model = modelId;
 }
 
 async function save() {
@@ -156,11 +189,42 @@ onMounted(refresh);
             <option :value="0">选择供应商</option>
             <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
           </select>
-          <input
-            v-model="item.upstream_model"
-            placeholder="上游模型名"
-            class="min-w-[160px] flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
-          />
+          <div class="flex min-w-[200px] flex-1 flex-col gap-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <input
+                v-model="item.upstream_model"
+                :list="`upstream-models-${index}`"
+                placeholder="上游模型名"
+                class="min-w-[160px] flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
+              />
+              <datalist :id="`upstream-models-${index}`">
+                <option v-for="mid in modelOptions[index] || []" :key="mid" :value="mid" />
+              </datalist>
+              <button
+                type="button"
+                class="shrink-0 rounded border border-cyan-600 px-2 py-1 text-xs text-cyan-700 hover:bg-cyan-50 disabled:opacity-50"
+                :disabled="!item.provider_id || fetchingModels[index]"
+                @click="pullModels(index)"
+              >
+                {{ fetchingModels[index] ? "拉取中…" : "拉取模型" }}
+              </button>
+            </div>
+            <div
+              v-if="modelOptions[index]?.length"
+              class="flex max-h-28 flex-wrap gap-1 overflow-y-auto"
+            >
+              <button
+                v-for="mid in modelOptions[index]"
+                :key="mid"
+                type="button"
+                class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-700 hover:bg-cyan-100"
+                :title="mid"
+                @click="pickModel(index, mid)"
+              >
+                {{ mid }}
+              </button>
+            </div>
+          </div>
           <button type="button" class="text-xs text-slate-600" @click="moveItem(index, -1)">上移</button>
           <button type="button" class="text-xs text-slate-600" @click="moveItem(index, 1)">下移</button>
           <button type="button" class="text-xs text-rose-600" @click="removeItem(index)">删除</button>

@@ -72,6 +72,7 @@ pub fn run() {
             commands::create_provider,
             commands::update_provider,
             commands::delete_provider,
+            commands::fetch_provider_models,
             commands::list_groups,
             commands::create_group,
             commands::update_group,

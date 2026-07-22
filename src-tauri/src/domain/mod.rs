@@ -2,6 +2,7 @@ pub mod apikey;
 pub mod group;
 pub mod log;
 pub mod provider;
+pub mod upstream_models;
 
 use crate::db::DbConn;
 use crate::error::AppError;
