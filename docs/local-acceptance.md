@@ -36,12 +36,18 @@
 ## 3. API Key 鉴权
 
 - [ ] 创建客户端 Key；**明文仅创建成功时展示一次**，列表仅脱敏
-- [ ] 无 `Authorization` 或错误 Key 调用接口 → **401**
+- [ ] 无 `Authorization` 也可调用（本机开放）：
   ```bash
   curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:<端口>/v1/models
+  # 期望 200（已有分组时）
+  ```
+- [ ] 错误 Key → **401**
+  ```bash
+  curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:<端口>/v1/models \
+    -H "Authorization: Bearer sk-modelhub-invalid"
   # 期望 401
   ```
-- [ ] 有效 Key：
+- [ ] 有效 Key 仍可用：
   ```bash
   curl -s http://127.0.0.1:<端口>/v1/models \
     -H "Authorization: Bearer <客户端Key>"

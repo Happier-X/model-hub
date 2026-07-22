@@ -7,7 +7,7 @@
 - 多供应商（OpenAI 兼容 Base URL + 上游 Key）
 - 分组 = 客户端请求中的 `model`，组内有序故障转移队列
 - 默认熔断（连续失败阈值 / 恢复等待 / 半开单探测）
-- `/v1/*` **强制**客户端 API Key（`Authorization: Bearer sk-modelhub-...`）
+- `/v1/*` 客户端 API Key **可选**（本机默认可不带；携带时须有效）
 - `GET /v1/models`、`POST /v1/chat/completions`（非流式 + SSE）
 - 管理台：概览启停与端口、供应商/分组/Key/日志、健康状态与连续失败次数
 - Windows NSIS 安装包 + Tauri Updater 签名资产（见 [应用更新](./in-app-updater.md)）
@@ -17,7 +17,7 @@
 | 项 | v0.0.8 及更早常见形态 | v0.1.0 |
 |----|----------------------|--------|
 | 代理形态 | 侧车 `model-hub-gateway.exe` / 历史 octopus | **Tauri 进程内**异步 HTTP 代理 |
-| 客户端鉴权 | 部分版本「本地开放」无 Key | **强制** `sk-modelhub-...` |
+| 客户端鉴权 | 部分版本强制 Key / 部分本地开放 | **本机默认可不带 Key**；携带错误 Key 仍 401 |
 | 管理面 | 可能依赖网关管理 HTTP | **仅** Tauri IPC commands |
 | 数据库 | 旧网关 schema | **新 schema**；**不**自动迁移旧库 |
 | 构建 | 可能需 `prepare:gateway-rust` 等 | 仅根前端 + `src-tauri` |

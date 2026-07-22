@@ -116,7 +116,7 @@ onMounted(refresh);
         <code class="rounded bg-slate-100 px-1 text-xs">~/.pi/agent/models.json</code>
         的
         <code class="rounded bg-slate-100 px-1 text-xs">model-hub</code>
-        供应商。Key 可留空（本地场景）；代理需强制鉴权时请填客户端 Key 或先上方创建。
+        供应商。Key 可留空：本机代理默认允许无 Key 访问。
       </p>
       <div class="flex flex-wrap items-end gap-3">
         <label class="text-sm">

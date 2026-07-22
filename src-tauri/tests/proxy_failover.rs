@@ -58,13 +58,37 @@ fn setup() -> Env {
 }
 
 #[tokio::test]
-async fn rejects_missing_api_key() {
+async fn allows_missing_api_key() {
+    let env = setup();
+    env.stores
+        .create_group(CreateGroupPayload {
+            name: "open-local".into(),
+            auto_failover: true,
+            items: vec![],
+        })
+        .unwrap();
+    let res = env
+        .router
+        .oneshot(
+            Request::builder()
+                .uri("/v1/models")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn rejects_invalid_api_key() {
     let env = setup();
     let res = env
         .router
         .oneshot(
             Request::builder()
                 .uri("/v1/models")
+                .header("Authorization", "Bearer sk-modelhub-invalid")
                 .body(Body::empty())
                 .unwrap(),
         )

@@ -52,13 +52,11 @@ fn extract_client_key(headers: &HeaderMap) -> Option<String> {
     None
 }
 
+/// 本机默认：可不带客户端 Key。
+/// 若请求携带了 Key，则必须有效且启用。
 async fn require_key(state: &AppState, headers: &HeaderMap) -> Result<(), Response> {
     let Some(raw) = extract_client_key(headers) else {
-        return Err((
-            StatusCode::UNAUTHORIZED,
-            Json(json!({"message":"缺少客户端 API Key","error":{"code":"UNAUTHORIZED","message":"缺少客户端 API Key"}})),
-        )
-            .into_response());
+        return Ok(());
     };
     match state.stores.validate_raw_key(&raw) {
         Ok(true) => Ok(()),

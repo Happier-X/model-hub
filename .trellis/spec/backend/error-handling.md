@@ -9,7 +9,7 @@
 | 层 | 策略 |
 |----|------|
 | Rust 壳 / IPC | `Result` + `InvokeError`；前端 toast 展示 message |
-| 内嵌代理 HTTP | JSON / 透传上游状态；401 无有效客户端 Key |
+| 内嵌代理 HTTP | JSON / 透传上游状态；携带无效客户端 Key 时 401（无 Key 本机默认可放行） |
 | 端口占用 / 绑定失败 | `last_error` 可行动文案 |
 
 ---

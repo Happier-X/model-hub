@@ -7,7 +7,7 @@
 - 多供应商（Provider）配置
 - 分组 = 客户端 `model`，组内有序故障转移队列
 - 默认熔断（连续失败阈值 / 恢复等待 / 半开）
-- 强制客户端 API Key（`Authorization: Bearer sk-modelhub-...`）
+- 客户端 API Key 可选（本机默认可不带；携带时须有效）
 - `POST /v1/chat/completions`（非流式 + SSE）、`GET /v1/models`
 
 ## 开发
