@@ -90,3 +90,36 @@
 
 - 本机完全重启应用后验证 Pi 无 Key 调用
 - 可选：打 `v0.1.0` tag / CI 发版（需 Secrets）
+
+
+## Session 2: 接入 OpenRouter 模型榜单排序
+
+**Date**: 2026-07-22
+**Task**: 接入 OpenRouter 模型榜单排序
+**Branch**: `master`
+
+### Summary
+
+实现 OpenRouter 公共榜单拉取与 24h 文件缓存、白名单解析与 stale 回退；前端混合排序（本地/外部通用/编码）、高置信匹配与 GroupsPage UI；更新 backend/frontend code-spec 并提交。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a3a2302` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
