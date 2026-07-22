@@ -66,8 +66,7 @@ mod tests {
             );
             CREATE TABLE groups (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                created_at TEXT NOT NULL
+                name TEXT NOT NULL UNIQUE
             );
             CREATE TABLE group_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,8 +77,8 @@ mod tests {
             );
             INSERT INTO providers (name, base_url, created_at)
             VALUES ('legacy-provider', 'https://example.com/v1', '2024-01-01T00:00:00Z');
-            INSERT INTO groups (name, created_at)
-            VALUES ('legacy-group', '2024-01-01T00:00:00Z');
+            INSERT INTO groups (name)
+            VALUES ('legacy-group');
             INSERT INTO group_items (group_id, provider_id, upstream_model, sort_order)
             VALUES (1, 1, 'legacy-model', 0);",
         )
@@ -92,7 +91,12 @@ mod tests {
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].name, "legacy-group");
         assert!(groups[0].auto_failover);
+        assert!(!groups[0].created_at.is_empty());
+        chrono::DateTime::parse_from_rfc3339(&groups[0].created_at).unwrap();
         assert_eq!(groups[0].items.len(), 1);
         assert_eq!(groups[0].items[0].upstream_model, "legacy-model");
+        let group = stores.get_group_by_name("legacy-group").unwrap().unwrap();
+        assert_eq!(group.items.len(), 1);
+        assert_eq!(group.items[0].provider_name.as_deref(), Some("legacy-provider"));
     }
 }

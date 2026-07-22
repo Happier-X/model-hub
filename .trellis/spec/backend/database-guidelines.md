@@ -64,8 +64,10 @@
 
 ### 3. 契约
 
-- 迁移先用 `PRAGMA table_info(groups)` 检查列名，再决定是否执行 `ALTER TABLE`。
-- 缺列时新增 `INTEGER NOT NULL DEFAULT 1`；SQLite 会为既有行提供默认值 `1`。
+- 迁移先用一次 `PRAGMA table_info(groups)` 收集列名，再分别决定是否执行 `ALTER TABLE`。
+- `auto_failover` 缺失时新增 `INTEGER NOT NULL DEFAULT 1`；SQLite 会为既有行提供默认值 `1`。
+- `created_at` 缺失时新增 `TEXT NOT NULL DEFAULT '<迁移时 UTC RFC3339>'`；历史行使用迁移时间，不能虚构原始创建时间。
+- SQLite 的 `ALTER TABLE ... ADD COLUMN ... DEFAULT` 不能参数化动态默认值；只能拼接经过 SQL 单引号转义的应用生成值。UTC RFC3339 时间仍应执行单引号转义。
 - 已有列时不得执行重复添加，也不得更新既有值。
 - 迁移不得重建或删除 `groups`、`group_items`，不得覆盖既有业务数据。
 - 迁移重复执行必须成功。
@@ -75,22 +77,23 @@
 | 条件 | 行为 |
 |------|------|
 | `groups` 缺少 `auto_failover` | 添加列，既有行读取为 `1` |
-| `groups` 已有 `auto_failover` | 跳过添加，保留所有值 |
+| `groups` 缺少 `created_at` | 添加列，既有行为非空有效 RFC3339 迁移时间 |
+| 字段已经存在 | 跳过添加，保留所有值 |
 | `PRAGMA table_info` 或读取字段失败 | 返回 `AppError::Database` |
 | `ALTER TABLE` 失败 | 返回 `AppError::Database` |
 | 重复执行迁移 | 成功且不产生重复列 |
 
 ### 5. 正常 / 基线 / 异常案例
 
-- 正常：旧表有分组和条目但缺列，`open_db` 后可查询，默认 `auto_failover=1`，条目仍存在。
+- 正常：旧表有分组和条目但同时缺少 `auto_failover`、`created_at`，`open_db` 后可通过 list/get 查询；默认 `auto_failover=1`，`created_at` 是有效 RFC3339，条目仍存在。
 - 基线：新表首次创建并重复 `migrate`，两次均成功。
-- 异常：旧表已有 `auto_failover=0`，迁移后仍为 `0`；禁止用默认值更新覆盖它。
+- 异常：旧表已有 `auto_failover=0` 和原始 `created_at`，迁移后两者都保持不变；禁止用默认值更新覆盖它们。
 
 ### 6. 必要测试
 
-- 迁移单测：旧 `groups` 缺列时添加列、保留分组、默认值为 `1`、重复迁移成功。
-- 迁移单测：已有 `auto_failover=0` 时重复迁移不改变值。
-- 数据库集成单测：通过 `open_db` 升级旧库后，`list_groups` 可读且 `group_items` 数量与内容保持不变。
+- 迁移单测：旧 `groups` 同时缺少 `auto_failover`、`created_at` 时添加列，保留分组；默认值为 `1`，时间可按 RFC3339 解析，重复迁移不改变迁移时间。
+- 迁移单测：已有 `auto_failover=0`、原始 `created_at` 时重复迁移不改变值。
+- 数据库集成单测：通过 `open_db` 升级旧库后，`list_groups` 与 `get_group_by_name` 均可读，且 `group_items` 数量、供应商关联与上游模型保持不变。
 
 ### 7. 错误与正确做法
 

@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS request_logs (
 CREATE INDEX IF NOT EXISTS idx_request_logs_time ON request_logs(time DESC);
 "#;
 
-fn ensure_group_auto_failover(conn: &Connection) -> Result<(), AppError> {
+fn ensure_group_columns(conn: &Connection) -> Result<(), AppError> {
     let mut stmt = conn
         .prepare("PRAGMA table_info(groups)")
         .map_err(|e| AppError::Database(format!("检查 groups 表结构失败: {e}")))?;
@@ -67,6 +67,7 @@ fn ensure_group_auto_failover(conn: &Connection) -> Result<(), AppError> {
         .query([])
         .map_err(|e| AppError::Database(format!("读取 groups 表结构失败: {e}")))?;
     let mut has_auto_failover = false;
+    let mut has_created_at = false;
     while let Some(row) = columns
         .next()
         .map_err(|e| AppError::Database(format!("读取 groups 表字段失败: {e}")))?
@@ -74,9 +75,10 @@ fn ensure_group_auto_failover(conn: &Connection) -> Result<(), AppError> {
         let name: String = row
             .get(1)
             .map_err(|e| AppError::Database(format!("读取 groups 表字段名失败: {e}")))?;
-        if name == "auto_failover" {
-            has_auto_failover = true;
-            break;
+        match name.as_str() {
+            "auto_failover" => has_auto_failover = true,
+            "created_at" => has_created_at = true,
+            _ => {}
         }
     }
     drop(columns);
@@ -88,6 +90,18 @@ fn ensure_group_auto_failover(conn: &Connection) -> Result<(), AppError> {
             [],
         )
         .map_err(|e| AppError::Database(format!("添加 groups.auto_failover 字段失败: {e}")))?;
+    }
+    if !has_created_at {
+        let now = chrono::Utc::now().to_rfc3339();
+        // SQLite 的 ALTER TABLE 不接受参数化 DEFAULT；RFC3339 只需转义单引号即可安全作为字面量。
+        let escaped_now = now.replace('\'', "''");
+        conn.execute(
+            &format!(
+                "ALTER TABLE groups ADD COLUMN created_at TEXT NOT NULL DEFAULT '{escaped_now}'"
+            ),
+            [],
+        )
+        .map_err(|e| AppError::Database(format!("添加 groups.created_at 字段失败: {e}")))?;
     }
     Ok(())
 }
@@ -115,7 +129,7 @@ fn apply_version(conn: &Connection, version: i64) -> Result<(), AppError> {
 pub fn migrate(conn: &Connection) -> Result<(), AppError> {
     conn.execute_batch(MIGRATION_V1)
         .map_err(|e| AppError::Database(format!("执行 schema v1 失败: {e}")))?;
-    ensure_group_auto_failover(conn)?;
+    ensure_group_columns(conn)?;
     apply_version(conn, 1)?;
     Ok(())
 }
@@ -149,42 +163,45 @@ mod tests {
     }
 
     #[test]
-    fn migrate_adds_missing_group_auto_failover_without_losing_data() {
+    fn migrate_adds_missing_group_columns_without_losing_data() {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
             "CREATE TABLE groups (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                created_at TEXT NOT NULL
+                name TEXT NOT NULL UNIQUE
             );
-            INSERT INTO groups (name, created_at) VALUES ('legacy', '2024-01-01T00:00:00Z');",
+            INSERT INTO groups (name) VALUES ('legacy');",
         )
         .unwrap();
 
         migrate(&conn).unwrap();
 
-        let group: (String, i64) = conn
+        let group: (String, i64, String) = conn
             .query_row(
-                "SELECT name, auto_failover FROM groups WHERE id = 1",
+                "SELECT name, auto_failover, created_at FROM groups WHERE id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(group.0, "legacy");
+        assert_eq!(group.1, 1);
+        assert!(!group.2.is_empty());
+        chrono::DateTime::parse_from_rfc3339(&group.2).unwrap();
+
+        migrate(&conn).unwrap();
+        let (value, created_at): (i64, String) = conn
+            .query_row(
+                "SELECT auto_failover, created_at FROM groups WHERE name = 'legacy'",
                 [],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .unwrap();
-        assert_eq!(group, ("legacy".into(), 1));
-
-        migrate(&conn).unwrap();
-        let value: i64 = conn
-            .query_row(
-                "SELECT auto_failover FROM groups WHERE name = 'legacy'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
         assert_eq!(value, 1);
+        assert_eq!(created_at, group.2);
     }
 
     #[test]
-    fn migrate_does_not_overwrite_existing_auto_failover_value() {
+    fn migrate_does_not_overwrite_existing_group_values() {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
             "CREATE TABLE groups (
@@ -201,13 +218,13 @@ mod tests {
         migrate(&conn).unwrap();
         migrate(&conn).unwrap();
 
-        let value: i64 = conn
+        let values: (i64, String) = conn
             .query_row(
-                "SELECT auto_failover FROM groups WHERE name = 'disabled'",
+                "SELECT auto_failover, created_at FROM groups WHERE name = 'disabled'",
                 [],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .unwrap();
-        assert_eq!(value, 0);
+        assert_eq!(values, (0, "2024-01-01T00:00:00Z".into()));
     }
 }
