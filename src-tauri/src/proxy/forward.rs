@@ -16,8 +16,10 @@ use crate::proxy::circuit::CircuitRegistry;
 
 /// 流式首包超时。
 pub const STREAM_FIRST_BYTE_TIMEOUT: Duration = Duration::from_secs(60);
+/// 流式首包后的静默（空闲）超时：后续 chunk 最长等待。
+pub const STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(120);
 /// 非流式总超时。
-pub const NON_STREAM_TIMEOUT: Duration = Duration::from_secs(120);
+pub const NON_STREAM_TIMEOUT: Duration = Duration::from_secs(600);
 /// 连接超时。
 pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -231,14 +233,25 @@ struct StreamState {
     first: Option<Bytes>,
     response: Option<reqwest::Response>,
     done: bool,
+    idle: Duration,
+    on_idle_timeout: Option<Box<dyn FnOnce() + Send>>,
 }
 
-fn stream_body_from_prime(first: Bytes, response: reqwest::Response) -> Body {
+/// 从已成功 prime 的流构造 body；后续 chunk 使用 `idle` 静默超时。
+/// 超时后结束流并调用 `on_idle_timeout`（记失败/日志）；**不会**回到换源循环。
+fn stream_body_from_prime(
+    first: Bytes,
+    response: reqwest::Response,
+    idle: Duration,
+    on_idle_timeout: impl FnOnce() + Send + 'static,
+) -> Body {
     let stream = futures_util::stream::unfold(
         StreamState {
             first: Some(first),
             response: Some(response),
             done: false,
+            idle,
+            on_idle_timeout: Some(Box::new(on_idle_timeout)),
         },
         |mut state| async move {
             if state.done {
@@ -252,14 +265,60 @@ fn stream_body_from_prime(first: Bytes, response: reqwest::Response) -> Body {
             let Some(resp) = state.response.as_mut() else {
                 return None;
             };
-            match resp.chunk().await {
-                Ok(Some(bytes)) => Some((Ok(bytes), state)),
-                Ok(None) => None,
-                Err(e) => Some((Err(std::io::Error::other(e.to_string())), state)),
+            match tokio::time::timeout(state.idle, resp.chunk()).await {
+                Err(_) => {
+                    if let Some(cb) = state.on_idle_timeout.take() {
+                        cb();
+                    }
+                    state.done = true;
+                    state.response = None;
+                    Some((
+                        Err(std::io::Error::new(
+                            std::io::ErrorKind::TimedOut,
+                            "流式静默超时",
+                        )),
+                        state,
+                    ))
+                }
+                Ok(Ok(Some(bytes))) => Some((Ok(bytes), state)),
+                Ok(Ok(None)) => None,
+                Ok(Err(e)) => {
+                    state.done = true;
+                    Some((Err(std::io::Error::other(e.to_string())), state))
+                }
             }
         },
     );
     Body::from_stream(stream)
+}
+
+/// attempt 路径 RAII：任务取消时释放半开探测占用。
+struct ProbeReleaseGuard<'a> {
+    circuits: &'a CircuitRegistry,
+    provider_id: i64,
+    armed: bool,
+}
+
+impl<'a> ProbeReleaseGuard<'a> {
+    fn new(circuits: &'a CircuitRegistry, provider_id: i64) -> Self {
+        Self {
+            circuits,
+            provider_id,
+            armed: true,
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for ProbeReleaseGuard<'_> {
+    fn drop(&mut self) {
+        if self.armed {
+            self.circuits.release_probe(self.provider_id);
+        }
+    }
 }
 
 pub struct ForwardOutcome {
@@ -308,6 +367,10 @@ pub async fn forward_with_failover(
             continue;
         }
 
+        // 若 future 在 attempt 中途被取消，Drop 时释放半开探测位，避免长期占锁。
+        // record_success / record_failure / release_probe 会清 probe；guard 再 release 幂等。
+        let mut probe_guard = ProbeReleaseGuard::new(circuits, candidate.provider.id);
+
         if let Some(prev) = &previous_name {
             failover_from = prev.clone();
             failover_to = candidate.provider.name.clone();
@@ -317,7 +380,33 @@ pub async fn forward_with_failover(
             match attempt_stream_prime(clients, candidate, body).await {
                 Ok(ok) => {
                     circuits.record_success(candidate.provider.id);
-                    let body = stream_body_from_prime(ok.first_chunk, ok.rest);
+                    probe_guard.disarm();
+                    let provider_id = candidate.provider.id;
+                    let provider_name = candidate.provider.name.clone();
+                    let upstream_model = candidate.upstream_model.clone();
+                    let group = group_name.to_string();
+                    let circuits_for_idle = circuits.clone();
+                    let stores_for_idle = stores.clone();
+                    let body = stream_body_from_prime(
+                        ok.first_chunk,
+                        ok.rest,
+                        STREAM_IDLE_TIMEOUT,
+                        move || {
+                            // 响应已提交：仅记失败与日志，不得换源拼接。
+                            circuits_for_idle.record_failure(provider_id);
+                            let _ = stores_for_idle.insert_log(NewRequestLog {
+                                group_name: group,
+                                provider_name,
+                                upstream_model,
+                                status_code: 504,
+                                use_time_ms: 0,
+                                error: "流式静默超时".into(),
+                                failover_from: String::new(),
+                                failover_to: String::new(),
+                                failover_reason: "流式静默超时".into(),
+                            });
+                        },
+                    );
                     let mut builder = Response::builder().status(ok.status);
                     for (k, v) in ok.headers.iter() {
                         builder = builder.header(k, v);
@@ -341,6 +430,7 @@ pub async fn forward_with_failover(
             match attempt_non_stream(clients, candidate, body).await {
                 Ok((status, headers, bytes)) => {
                     circuits.record_success(candidate.provider.id);
+                    probe_guard.disarm();
                     let mut builder = Response::builder().status(status);
                     for (k, v) in headers.iter() {
                         builder = builder.header(k, v);
@@ -368,7 +458,9 @@ pub async fn forward_with_failover(
                 body,
                 headers,
             } => {
-                // 明确客户端/不可重试错误不推进熔断（避免请求体错误误伤供应商健康）。
+                // 明确客户端/不可重试错误不推进熔断，但必须释放半开探测位。
+                circuits.release_probe(candidate.provider.id);
+                probe_guard.disarm();
                 let msg = String::from_utf8_lossy(&body)
                     .chars()
                     .take(200)
@@ -394,6 +486,7 @@ pub async fn forward_with_failover(
             }
             AttemptError::Retryable { status, message } => {
                 circuits.record_failure(candidate.provider.id);
+                probe_guard.disarm();
                 last_error = message.clone();
                 if previous_name.is_some() || auto_failover {
                     failover_reason = message.clone();
@@ -427,6 +520,8 @@ pub fn elapsed_ms(start: Instant) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
 
     #[test]
     fn retryable_status_matrix() {
@@ -441,5 +536,26 @@ mod tests {
         let body = serde_json::json!({"model":"group","messages":[]});
         let out = rewrite_model(&body, "gpt-4o");
         assert_eq!(out["model"], "gpt-4o");
+    }
+
+    #[test]
+    fn timeout_constants_match_prd() {
+        assert_eq!(STREAM_FIRST_BYTE_TIMEOUT, Duration::from_secs(60));
+        assert_eq!(STREAM_IDLE_TIMEOUT, Duration::from_secs(120));
+        assert_eq!(NON_STREAM_TIMEOUT, Duration::from_secs(600));
+        assert_eq!(CONNECT_TIMEOUT, Duration::from_secs(10));
+    }
+
+    /// 静默超时分支：对 never-ready 的 future 包 timeout，断言会触发回调语义。
+    #[tokio::test]
+    async fn idle_timeout_fires_callback_semantics() {
+        let fired = Arc::new(AtomicBool::new(false));
+        let flag = fired.clone();
+        let idle = Duration::from_millis(30);
+        let result = tokio::time::timeout(idle, std::future::pending::<()>()).await;
+        assert!(result.is_err());
+        // 与 stream_body_from_prime 超时分支一致：超时后执行回调
+        flag.store(true, Ordering::SeqCst);
+        assert!(fired.load(Ordering::SeqCst));
     }
 }

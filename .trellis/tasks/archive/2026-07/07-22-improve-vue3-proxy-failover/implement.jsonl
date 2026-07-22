@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "proxy/circuit/forward 模块边界"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "故障转移与熔断错误分类"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "请求日志字段与禁写密钥"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "测试门禁"}
+{"file": ".trellis/tasks/07-22-improve-vue3-proxy-failover/design.md", "reason": "超时与半开探测设计"}

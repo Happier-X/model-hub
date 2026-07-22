@@ -36,6 +36,8 @@ struct Entry {
     consecutive_failures: u32,
     opened_at: Option<Instant>,
     half_open_successes: u32,
+    /// HalfOpen 探测占用：同时最多一个真实请求作为探测。
+    probe_in_flight: bool,
 }
 
 impl Default for Entry {
@@ -45,6 +47,7 @@ impl Default for Entry {
             consecutive_failures: 0,
             opened_at: None,
             half_open_successes: 0,
+            probe_in_flight: false,
         }
     }
 }
@@ -72,39 +75,63 @@ impl CircuitRegistry {
                 if opened.elapsed() >= RECOVERY_TIMEOUT {
                     entry.state = CircuitState::HalfOpen;
                     entry.half_open_successes = 0;
+                    // 进入半开时探测位保持现状；通常 Open 期间为 false。
                 }
             }
         }
     }
 
     /// 是否允许请求该供应商。
+    ///
+    /// - Closed：允许
+    /// - Open：拒绝（恢复窗口到达时先转 HalfOpen）
+    /// - HalfOpen：仅当 `probe_in_flight == false` 时放行并占用探测位
     pub fn allow_request(&self, provider_id: i64) -> bool {
         self.with_entry(provider_id, |e| match e.state {
             CircuitState::Open => false,
-            CircuitState::Closed | CircuitState::HalfOpen => true,
+            CircuitState::Closed => true,
+            CircuitState::HalfOpen => {
+                if e.probe_in_flight {
+                    false
+                } else {
+                    e.probe_in_flight = true;
+                    true
+                }
+            }
         })
     }
 
+    /// 仅释放 HalfOpen 探测占用（不可重试 4xx 等不记失败的路径）。
+    pub fn release_probe(&self, provider_id: i64) {
+        self.with_entry(provider_id, |e| {
+            e.probe_in_flight = false;
+        });
+    }
+
     pub fn record_success(&self, provider_id: i64) {
-        self.with_entry(provider_id, |e| match e.state {
-            CircuitState::HalfOpen => {
-                e.half_open_successes += 1;
-                if e.half_open_successes >= HALF_OPEN_SUCCESS_THRESHOLD {
-                    e.state = CircuitState::Closed;
-                    e.consecutive_failures = 0;
-                    e.opened_at = None;
-                    e.half_open_successes = 0;
+        self.with_entry(provider_id, |e| {
+            e.probe_in_flight = false;
+            match e.state {
+                CircuitState::HalfOpen => {
+                    e.half_open_successes += 1;
+                    if e.half_open_successes >= HALF_OPEN_SUCCESS_THRESHOLD {
+                        e.state = CircuitState::Closed;
+                        e.consecutive_failures = 0;
+                        e.opened_at = None;
+                        e.half_open_successes = 0;
+                    }
                 }
+                CircuitState::Closed => {
+                    e.consecutive_failures = 0;
+                }
+                CircuitState::Open => {}
             }
-            CircuitState::Closed => {
-                e.consecutive_failures = 0;
-            }
-            CircuitState::Open => {}
         });
     }
 
     pub fn record_failure(&self, provider_id: i64) {
         self.with_entry(provider_id, |e| {
+            e.probe_in_flight = false;
             e.consecutive_failures = e.consecutive_failures.saturating_add(1);
             match e.state {
                 CircuitState::HalfOpen => {
@@ -161,6 +188,12 @@ impl CircuitRegistry {
         }
         out
     }
+
+    /// 测试/调试：当前是否占用半开探测位。
+    #[cfg(test)]
+    fn probe_in_flight(&self, provider_id: i64) -> bool {
+        self.with_entry(provider_id, |e| e.probe_in_flight)
+    }
 }
 
 #[cfg(test)]
@@ -182,7 +215,11 @@ mod tests {
             e.opened_at = Some(Instant::now() - RECOVERY_TIMEOUT - Duration::from_secs(1));
         }
         assert!(reg.allow_request(1));
+        assert!(reg.probe_in_flight(1));
         reg.record_success(1);
+        assert!(!reg.probe_in_flight(1));
+        // 第二次成功关闭半开
+        assert!(reg.allow_request(1));
         reg.record_success(1);
         assert!(reg.allow_request(1));
         assert!(matches!(reg.health_label(1), HealthLabel::Healthy));
@@ -198,8 +235,54 @@ mod tests {
             let mut g = reg.inner.lock().unwrap();
             let e = g.get_mut(&7).unwrap();
             e.state = CircuitState::HalfOpen;
+            e.probe_in_flight = false;
         }
+        assert!(reg.allow_request(7));
         reg.record_failure(7);
+        assert!(!reg.probe_in_flight(7));
         assert!(!reg.allow_request(7));
+    }
+
+    #[test]
+    fn half_open_allows_only_one_probe() {
+        let reg = CircuitRegistry::new();
+        for _ in 0..FAILURE_THRESHOLD {
+            reg.record_failure(3);
+        }
+        {
+            let mut g = reg.inner.lock().unwrap();
+            let e = g.get_mut(&3).unwrap();
+            e.opened_at = Some(Instant::now() - RECOVERY_TIMEOUT - Duration::from_secs(1));
+        }
+        // 恢复后第一个探测放行
+        assert!(reg.allow_request(3));
+        // 探测进行中，并发请求跳过
+        assert!(!reg.allow_request(3));
+        assert!(!reg.allow_request(3));
+        // 失败释放后可再次探测
+        reg.record_failure(3);
+        assert!(!reg.allow_request(3)); // 回到 Open
+        {
+            let mut g = reg.inner.lock().unwrap();
+            let e = g.get_mut(&3).unwrap();
+            e.opened_at = Some(Instant::now() - RECOVERY_TIMEOUT - Duration::from_secs(1));
+        }
+        assert!(reg.allow_request(3));
+        reg.record_success(3);
+        assert!(!reg.probe_in_flight(3));
+        // 半开仍需第二次成功；此时可再放行一个探测
+        assert!(reg.allow_request(3));
+        assert!(!reg.allow_request(3));
+        reg.release_probe(3);
+        assert!(!reg.probe_in_flight(3));
+        assert!(reg.allow_request(3));
+    }
+
+    #[test]
+    fn closed_does_not_require_probe_slot() {
+        let reg = CircuitRegistry::new();
+        assert!(reg.allow_request(9));
+        assert!(reg.allow_request(9));
+        assert!(!reg.probe_in_flight(9));
     }
 }
