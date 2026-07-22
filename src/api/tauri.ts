@@ -72,6 +72,23 @@ export interface RequestLog {
   failover_reason: string;
 }
 
+export type LogStatusClass = "all" | "2xx" | "4xx" | "5xx" | "error";
+
+export interface LogQuery {
+  page?: number;
+  page_size?: number;
+  group_name?: string;
+  status_class?: LogStatusClass;
+  failover_only?: boolean;
+}
+
+export interface LogPage {
+  items: RequestLog[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export interface HealthSnapshot {
   provider_id: number;
   provider_name: string;
@@ -143,8 +160,16 @@ export const updateApiKey = (payload: { id: number; name: string; enabled: boole
   invoke<ApiKeyPublic>("update_api_key", { payload });
 export const deleteApiKey = (id: number) => invoke<void>("delete_api_key", { id });
 
-export const listLogs = (page = 1, pageSize = 50) =>
-  invoke<RequestLog[]>("list_logs", { page, page_size: pageSize });
+export const listLogs = (query: LogQuery = {}) =>
+  invoke<LogPage>("list_logs", {
+    query: {
+      page: query.page ?? 1,
+      page_size: query.page_size ?? 50,
+      group_name: query.group_name || undefined,
+      status_class: query.status_class || "all",
+      failover_only: query.failover_only ?? false,
+    },
+  });
 export const clearLogs = () => invoke<void>("clear_logs");
 export const listHealth = () => invoke<HealthSnapshot[]>("list_health");
 

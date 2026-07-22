@@ -171,11 +171,10 @@ pub fn delete_api_key(proxy: State<'_, ProxyHandle>, id: i64) -> Result<(), Invo
 #[tauri::command]
 pub fn list_logs(
     proxy: State<'_, ProxyHandle>,
-    page: Option<i64>,
-    page_size: Option<i64>,
-) -> Result<Vec<crate::domain::log::RequestLog>, InvokeError> {
+    query: Option<crate::domain::log::LogQuery>,
+) -> Result<crate::domain::log::LogPage, InvokeError> {
     stores(&proxy)?
-        .list_logs(page.unwrap_or(1), page_size.unwrap_or(50))
+        .list_logs(query.unwrap_or_default())
         .map_err(Into::into)
 }
 

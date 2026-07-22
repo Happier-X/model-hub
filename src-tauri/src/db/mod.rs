@@ -157,11 +157,18 @@ mod tests {
         assert_eq!(api_keys[0].masked, "sk-modelhub-...abcd");
         assert!(!api_keys[0].enabled);
 
-        let logs = stores.list_logs(1, 100).unwrap();
-        assert_eq!(logs.len(), 1);
-        assert_eq!(logs[0].status_code, 503);
-        assert_eq!(logs[0].use_time_ms, 321);
-        assert_eq!(logs[0].failover_to, "backup-provider");
+        let logs = stores
+            .list_logs(crate::domain::log::LogQuery {
+                page: 1,
+                page_size: 100,
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(logs.total, 1);
+        assert_eq!(logs.items.len(), 1);
+        assert_eq!(logs.items[0].status_code, 503);
+        assert_eq!(logs.items[0].use_time_ms, 321);
+        assert_eq!(logs.items[0].failover_to, "backup-provider");
 
         stores
             .with_conn(|conn| {

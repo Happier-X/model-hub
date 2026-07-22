@@ -277,15 +277,22 @@ async fn stream_idle_timeout_single_failure_log() {
     // 等待终态回调落库（兜底）
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let logs = env.stores.list_logs(1, 50).unwrap();
+    let logs = env
+        .stores
+        .list_logs(model_hub_lib::domain::log::LogQuery {
+            page: 1,
+            page_size: 50,
+            ..Default::default()
+        })
+        .unwrap();
     // 静默超时路径：不得留下「仅 200 且 error 为空」作为结论；应为单条失败。
     assert_eq!(
-        logs.len(),
+        logs.items.len(),
         1,
         "期望仅一条最终日志，实际: {:?}",
         logs
     );
-    let log = &logs[0];
+    let log = &logs.items[0];
     assert_eq!(log.status_code, 504);
     assert_eq!(log.error, "流式静默超时");
     assert_eq!(log.provider_name, "slow-stream");
@@ -357,9 +364,16 @@ async fn stream_success_single_ok_log() {
     let _ = axum::body::to_bytes(res.into_body(), usize::MAX).await;
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    let logs = env.stores.list_logs(1, 50).unwrap();
-    assert_eq!(logs.len(), 1, "期望单条成功日志: {:?}", logs);
-    assert_eq!(logs[0].status_code, 200);
-    assert!(logs[0].error.is_empty());
-    assert_eq!(logs[0].provider_name, "ok-stream");
+    let logs = env
+        .stores
+        .list_logs(model_hub_lib::domain::log::LogQuery {
+            page: 1,
+            page_size: 50,
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(logs.items.len(), 1, "期望单条成功日志: {:?}", logs);
+    assert_eq!(logs.items[0].status_code, 200);
+    assert!(logs.items[0].error.is_empty());
+    assert_eq!(logs.items[0].provider_name, "ok-stream");
 }
