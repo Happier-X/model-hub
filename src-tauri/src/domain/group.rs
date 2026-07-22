@@ -83,6 +83,22 @@ impl Stores {
     ) -> Result<(), AppError> {
         conn.execute("DELETE FROM group_items WHERE group_id = ?1", [group_id])
             .map_err(|e| AppError::Database(e.to_string()))?;
+
+        // 旧 gateway-rust 表仍有 channel_id/model_name NOT NULL，迁移采用加列保留旧表，
+        // 因此应用写入时需同步填充旧列；新表仅写当前列。
+        let mut stmt = conn
+            .prepare("PRAGMA table_info(group_items)")
+            .map_err(|e| AppError::Database(format!("检查 group_items 表结构失败: {e}")))?;
+        let column_rows = stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| AppError::Database(format!("读取 group_items 表结构失败: {e}")))?;
+        let mut columns = std::collections::HashSet::new();
+        for row in column_rows {
+            columns.insert(row.map_err(|e| AppError::Database(e.to_string()))?);
+        }
+        let legacy_columns = columns.contains("channel_id") && columns.contains("model_name");
+        drop(stmt);
+
         for (idx, item) in items.iter().enumerate() {
             let model = item.upstream_model.trim();
             if model.is_empty() {
@@ -101,11 +117,23 @@ impl Stores {
                     item.provider_id
                 )));
             }
-            conn.execute(
-                "INSERT INTO group_items (group_id, provider_id, upstream_model, sort_order) VALUES (?1, ?2, ?3, ?4)",
-                params![group_id, item.provider_id, model, idx as i64],
-            )
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            if legacy_columns {
+                // priority 与 weight 同步写入，兼容旧表即使其默认约束不完整。
+                conn.execute(
+                    "INSERT INTO group_items
+                     (group_id, provider_id, upstream_model, sort_order,
+                      channel_id, model_name, priority, weight)
+                     VALUES (?1, ?2, ?3, ?4, ?2, ?3, ?4, 1)",
+                    params![group_id, item.provider_id, model, idx as i64],
+                )
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            } else {
+                conn.execute(
+                    "INSERT INTO group_items (group_id, provider_id, upstream_model, sort_order) VALUES (?1, ?2, ?3, ?4)",
+                    params![group_id, item.provider_id, model, idx as i64],
+                )
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            }
         }
         Ok(())
     }

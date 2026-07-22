@@ -107,6 +107,52 @@ fn ensure_group_columns(conn: &Connection) -> Result<(), AppError> {
     Ok(())
 }
 
+/// 兼容旧 gateway-rust 的 group_items(channel_id, model_name, priority, weight)。
+///
+/// 使用加列 + 条件回填，不重建/删除旧表；旧列保留用于回溯。
+fn ensure_group_items_columns(conn: &Connection) -> Result<(), AppError> {
+    let columns = table_column_names(conn, "group_items")?;
+    let required: &[(&str, &str)] = &[
+        ("provider_id", "provider_id INTEGER NOT NULL DEFAULT 0"),
+        ("upstream_model", "upstream_model TEXT NOT NULL DEFAULT ''"),
+        ("sort_order", "sort_order INTEGER NOT NULL DEFAULT 0"),
+    ];
+    for (name, ddl) in required {
+        if columns.contains(*name) {
+            continue;
+        }
+        conn.execute(
+            &format!("ALTER TABLE group_items ADD COLUMN {ddl}"),
+            [],
+        )
+        .map_err(|e| AppError::Database(format!("添加 group_items.{name} 字段失败: {e}")))?;
+    }
+
+    // 仅从确实存在的旧列回填；只覆盖新列默认值，保留已经迁移/编辑过的数据。
+    if columns.contains("channel_id") {
+        conn.execute(
+            "UPDATE group_items SET provider_id = channel_id WHERE provider_id = 0",
+            [],
+        )
+        .map_err(|e| AppError::Database(format!("回填 group_items.provider_id 失败: {e}")))?;
+    }
+    if columns.contains("model_name") {
+        conn.execute(
+            "UPDATE group_items SET upstream_model = model_name WHERE upstream_model = ''",
+            [],
+        )
+        .map_err(|e| AppError::Database(format!("回填 group_items.upstream_model 失败: {e}")))?;
+    }
+    if columns.contains("priority") {
+        conn.execute(
+            "UPDATE group_items SET sort_order = COALESCE(priority, 0) WHERE sort_order = 0",
+            [],
+        )
+        .map_err(|e| AppError::Database(format!("回填 group_items.sort_order 失败: {e}")))?;
+    }
+    Ok(())
+}
+
 /// 为残缺的既有 `request_logs` 表补齐当前 schema 列（CREATE IF NOT EXISTS 不会改旧表）。
 fn ensure_request_logs_columns(conn: &Connection) -> Result<(), AppError> {
     // 表尚不存在时由 MIGRATION_V1 创建完整表，此处无需处理。
@@ -178,6 +224,7 @@ pub fn migrate(conn: &Connection) -> Result<(), AppError> {
     conn.execute_batch(MIGRATION_V1)
         .map_err(|e| AppError::Database(format!("执行 schema v1 失败: {e}")))?;
     ensure_group_columns(conn)?;
+    ensure_group_items_columns(conn)?;
     ensure_request_logs_columns(conn)?;
     apply_version(conn, 1)?;
     Ok(())
@@ -247,6 +294,97 @@ mod tests {
             .unwrap();
         assert_eq!(value, 1);
         assert_eq!(created_at, group.2);
+    }
+
+    #[test]
+    fn migrate_adds_and_backfills_group_items_current_columns() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE groups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE
+            );
+            CREATE TABLE group_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id INTEGER NOT NULL,
+                channel_id INTEGER NOT NULL,
+                model_name TEXT NOT NULL,
+                priority INTEGER NOT NULL DEFAULT 1,
+                weight INTEGER NOT NULL DEFAULT 1
+            );
+            INSERT INTO groups (name) VALUES ('legacy-group');
+            INSERT INTO group_items
+                (group_id, channel_id, model_name, priority, weight)
+            VALUES (1, 7, 'legacy-model', 3, 2);",
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let row: (i64, i64, String, i64, i64, String) = conn
+            .query_row(
+                "SELECT id, provider_id, upstream_model, sort_order, channel_id, model_name
+                 FROM group_items WHERE id = 1",
+                [],
+                |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                    ))
+                },
+            )
+            .unwrap();
+        assert_eq!(row, (1, 7, "legacy-model".into(), 3, 7, "legacy-model".into()));
+
+        // 当前应用写入：兼容表必须同步填新旧两套 NOT NULL 列。
+        conn.execute(
+            "INSERT INTO group_items
+             (group_id, provider_id, upstream_model, sort_order,
+              channel_id, model_name, priority, weight)
+             VALUES (1, 8, 'new-model', 4, 8, 'new-model', 4, 1)",
+            [],
+        )
+        .unwrap();
+        migrate(&conn).unwrap();
+        let n: i64 = conn
+            .query_row("SELECT COUNT(*) FROM group_items", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 2);
+    }
+
+    #[test]
+    fn migrate_group_items_preserves_existing_current_values() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE group_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id INTEGER NOT NULL,
+                channel_id INTEGER NOT NULL,
+                model_name TEXT NOT NULL,
+                priority INTEGER NOT NULL,
+                weight INTEGER NOT NULL,
+                provider_id INTEGER NOT NULL DEFAULT 0,
+                upstream_model TEXT NOT NULL DEFAULT '',
+                sort_order INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT INTO group_items
+                (group_id, channel_id, model_name, priority, weight, provider_id, upstream_model, sort_order)
+            VALUES (1, 7, 'old', 1, 1, 9, 'current', 5);",
+        )
+        .unwrap();
+        migrate(&conn).unwrap();
+        let row: (i64, String, i64) = conn
+            .query_row(
+                "SELECT provider_id, upstream_model, sort_order FROM group_items",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(row, (9, "current".into(), 5));
     }
 
     #[test]
