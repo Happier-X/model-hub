@@ -51,7 +51,7 @@ mod tests {
     }
 
     #[test]
-    fn open_db_upgrades_legacy_groups_and_preserves_items() {
+    fn open_db_upgrades_confirmed_legacy_schema_and_all_domain_reads_succeed() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("legacy.db");
         let conn = Connection::open(&path).unwrap();
@@ -75,28 +75,103 @@ mod tests {
                 upstream_model TEXT NOT NULL,
                 sort_order INTEGER NOT NULL DEFAULT 0
             );
-            INSERT INTO providers (name, base_url, created_at)
-            VALUES ('legacy-provider', 'https://example.com/v1', '2024-01-01T00:00:00Z');
-            INSERT INTO groups (name)
-            VALUES ('legacy-group');
-            INSERT INTO group_items (group_id, provider_id, upstream_model, sort_order)
-            VALUES (1, 1, 'legacy-model', 0);",
+            CREATE TABLE api_keys (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                key_hash TEXT NOT NULL UNIQUE,
+                masked TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE request_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                time INTEGER NOT NULL,
+                group_name TEXT NOT NULL DEFAULT '',
+                provider_name TEXT NOT NULL DEFAULT '',
+                upstream_model TEXT NOT NULL DEFAULT '',
+                status_code INTEGER NOT NULL DEFAULT 0,
+                use_time_ms INTEGER NOT NULL DEFAULT 0,
+                error TEXT NOT NULL DEFAULT '',
+                failover_from TEXT NOT NULL DEFAULT '',
+                failover_to TEXT NOT NULL DEFAULT '',
+                failover_reason TEXT NOT NULL DEFAULT ''
+            );
+            INSERT INTO providers
+                (name, base_url, api_key, enabled, created_at)
+            VALUES
+                ('legacy-provider', 'https://example.com/v1', 'legacy-secret', 0,
+                 '2024-01-01T00:00:00Z');
+            INSERT INTO groups (name) VALUES ('legacy-group');
+            INSERT INTO group_items
+                (group_id, provider_id, upstream_model, sort_order)
+            VALUES (1, 1, 'legacy-model', 7);
+            INSERT INTO api_keys
+                (name, key_hash, masked, enabled, created_at)
+            VALUES
+                ('legacy-key', 'legacy-hash', 'sk-modelhub-...abcd', 0,
+                 '2024-01-02T00:00:00Z');
+            INSERT INTO request_logs
+                (time, group_name, provider_name, upstream_model, status_code,
+                 use_time_ms, error, failover_from, failover_to, failover_reason)
+            VALUES
+                (1704153600, 'legacy-group', 'legacy-provider', 'legacy-model', 503,
+                 321, 'upstream unavailable', 'legacy-provider', 'backup-provider',
+                 'server error');",
         )
         .unwrap();
         drop(conn);
 
         let stores = Stores::new(open_db(&path).unwrap());
         let groups = stores.list_groups().unwrap();
-
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].name, "legacy-group");
         assert!(groups[0].auto_failover);
-        assert!(!groups[0].created_at.is_empty());
         chrono::DateTime::parse_from_rfc3339(&groups[0].created_at).unwrap();
         assert_eq!(groups[0].items.len(), 1);
         assert_eq!(groups[0].items[0].upstream_model, "legacy-model");
+        assert_eq!(groups[0].items[0].sort_order, 7);
+
+        let migrated_created_at = groups[0].created_at.clone();
+        {
+            let conn = stores.db.lock().unwrap();
+            migrate(&conn).unwrap();
+        }
         let group = stores.get_group_by_name("legacy-group").unwrap().unwrap();
+        assert_eq!(group.created_at, migrated_created_at);
         assert_eq!(group.items.len(), 1);
-        assert_eq!(group.items[0].provider_name.as_deref(), Some("legacy-provider"));
+        assert_eq!(
+            group.items[0].provider_name.as_deref(),
+            Some("legacy-provider")
+        );
+
+        let providers = stores.list_providers().unwrap();
+        assert_eq!(providers.len(), 1);
+        assert_eq!(providers[0].api_key, "legacy-secret");
+        assert!(!providers[0].enabled);
+        let provider = stores.get_provider(1).unwrap().unwrap();
+        assert_eq!(provider.created_at, "2024-01-01T00:00:00Z");
+
+        let api_keys = stores.list_api_keys().unwrap();
+        assert_eq!(api_keys.len(), 1);
+        assert_eq!(api_keys[0].name, "legacy-key");
+        assert_eq!(api_keys[0].masked, "sk-modelhub-...abcd");
+        assert!(!api_keys[0].enabled);
+
+        let logs = stores.list_logs(1, 100).unwrap();
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0].status_code, 503);
+        assert_eq!(logs[0].use_time_ms, 321);
+        assert_eq!(logs[0].failover_to, "backup-provider");
+
+        stores
+            .with_conn(|conn| {
+                let key_hash: String = conn
+                    .query_row("SELECT key_hash FROM api_keys WHERE id = 1", [], |row| {
+                        row.get(0)
+                    })
+                    .map_err(|e| AppError::Database(e.to_string()))?;
+                Ok(assert_eq!(key_hash, "legacy-hash"))
+            })
+            .unwrap();
     }
 }
