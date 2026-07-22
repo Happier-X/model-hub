@@ -42,3 +42,51 @@
 ### Next Steps
 
 - None - task complete
+
+---
+
+## Session: Vue3 内嵌代理迭代（Pi 导出 + 无 Key + 文档）
+
+**Date**: 2026-07-22
+**Branch**: `master`
+
+### Summary
+
+在 Vue3 重写与内嵌代理基线之上，继续修旧库兼容、管理台能力，并落地：
+
+1. API Key 页 **一键配置到 Pi Agent**（合并 `~/.pi/agent/models.json` 的 `model-hub`）
+2. 本机 `/v1` **允许无客户端 API Key**；错误 Key 仍 401；占位 `model-hub` 放行
+3. 补齐发布说明、README、客户端/上手文档与本 journal
+
+此前同周期已归档任务包括：分组/日志/api_keys/group_items 迁移、故障转移与流式空闲超时、管理台 UX、更新检查、上游模型拉取、日志分页、今日统计、批量加模型、队列拖拽等。
+
+### Main Changes
+
+- `src-tauri/src/pi_export.rs` + `export_to_pi_agent` 命令
+- `src/pages/ApiKeysPage.vue` 一键配置 UI
+- `proxy/server.rs`：`require_key` 无 Key / 占位 Key 放行
+- 文档：`docs/release-notes-v0.1.0.md`、`README.md`、`docs/client-integration.md`、`docs/chat-onboarding.md` 等
+
+### Git Commits（节选）
+
+| Hash | Message |
+|------|---------|
+| `028289c` | feat: API Key 页一键配置到 Pi Agent |
+| `680cffa` | feat: 本机 /v1 允许无客户端 API Key |
+| `9896b22` | fix: 将 Pi 占位 Key 视为本机无鉴权 |
+| （本提交） | docs: 同步 v0.1.0 说明与会话 journal |
+
+### Testing
+
+- `cargo test --lib`（含 `pi_export`）
+- `cargo test --test proxy_failover`（无 Key / 占位 Key / 错误 Key）
+- `pnpm typecheck` / `pnpm lint`（导出功能合入时）
+
+### Status
+
+[OK] 文档与 journal 同步完成
+
+### Next Steps
+
+- 本机完全重启应用后验证 Pi 无 Key 调用
+- 可选：打 `v0.1.0` tag / CI 发版（需 Secrets）

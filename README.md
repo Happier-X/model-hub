@@ -35,10 +35,22 @@ cargo check
 
 ## 客户端用法
 
-1. 在应用内创建客户端 API Key（明文仅展示一次）
-2. 配置供应商与分组队列
-3. 客户端 Base URL 使用概览页展示的地址，例如 `http://127.0.0.1:8080`
-4. `model` 填分组名
+1. 配置供应商与分组队列（分组名 = 客户端 `model`）
+2. （可选）在「API 密钥」页创建客户端 Key；本机默认可不带 Key
+3. 客户端 Base URL 使用概览页展示的地址，例如 `http://127.0.0.1:8080`（OpenAI SDK 用 `.../v1`）
+4. 对接 Pi：同一页「一键配置到 Pi」，写入 `~/.pi/agent/models.json` 的 `model-hub`
+
+无 Key：
+
+```bash
+curl http://127.0.0.1:8080/v1/models
+
+curl http://127.0.0.1:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"你的分组名","messages":[{"role":"user","content":"hi"}]}'
+```
+
+带 Key（可选）：
 
 ```bash
 curl http://127.0.0.1:8080/v1/chat/completions \
