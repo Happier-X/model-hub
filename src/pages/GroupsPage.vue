@@ -25,6 +25,9 @@ const editing = ref<Group | null>(null);
 /** 每条队列条目拉取到的上游模型 id 列表 */
 const modelOptions = ref<Record<number, string[]>>({});
 const fetchingModels = ref<Record<number, boolean>>({});
+const bulkProviderId = ref(0);
+const bulkAddingModels = ref(false);
+const bulkMessage = ref("");
 
 const form = reactive({
   name: "",
@@ -41,6 +44,9 @@ async function refresh() {
       listProviders(),
       listHealth(),
     ]);
+    if (!bulkProviderId.value && providers.value.length > 0) {
+      bulkProviderId.value = providers.value[0]?.id ?? 0;
+    }
     error.value = "";
   } catch (e) {
     error.value = extractInvokeError(e);
@@ -64,6 +70,10 @@ function resetForm() {
   form.name = "";
   form.auto_failover = true;
   form.items = [];
+  modelOptions.value = {};
+  fetchingModels.value = {};
+  bulkProviderId.value = providers.value[0]?.id ?? 0;
+  bulkMessage.value = "";
 }
 
 function startEdit(g: Group) {
@@ -126,6 +136,50 @@ function pickModel(index: number, modelId: string) {
   item.upstream_model = modelId;
 }
 
+async function bulkAddProviderModels() {
+  const providerId = bulkProviderId.value;
+  if (!providerId) {
+    error.value = "请先选择要批量添加模型的供应商";
+    return;
+  }
+  bulkAddingModels.value = true;
+  bulkMessage.value = "";
+  try {
+    const ids = await fetchProviderModels({ provider_id: providerId });
+    if (ids.length === 0) {
+      error.value = "上游返回空模型列表，队列未修改";
+      return;
+    }
+
+    const existing = new Set(
+      form.items.map((item) => `${item.provider_id}\u0000${item.upstream_model.trim()}`),
+    );
+    let added = 0;
+    let skipped = 0;
+    for (const rawId of ids) {
+      const modelId = rawId.trim();
+      if (!modelId) {
+        skipped += 1;
+        continue;
+      }
+      const key = `${providerId}\u0000${modelId}`;
+      if (existing.has(key)) {
+        skipped += 1;
+        continue;
+      }
+      form.items.push({ provider_id: providerId, upstream_model: modelId });
+      existing.add(key);
+      added += 1;
+    }
+    error.value = "";
+    bulkMessage.value = `已添加 ${added} 个模型${skipped > 0 ? `，跳过 ${skipped} 个重复或空模型` : ""}；点击“保存”后生效`;
+  } catch (e) {
+    error.value = extractInvokeError(e);
+  } finally {
+    bulkAddingModels.value = false;
+  }
+}
+
 async function save() {
   try {
     const payload = {
@@ -175,10 +229,32 @@ onMounted(refresh);
       </div>
 
       <div class="mt-4 space-y-2">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-2">
           <h3 class="text-sm font-medium">故障转移队列</h3>
           <button type="button" class="text-sm text-cyan-700 hover:underline" @click="addItem">添加条目</button>
         </div>
+        <div class="flex flex-wrap items-end gap-2 rounded-lg border border-cyan-100 bg-cyan-50/60 p-3">
+          <label class="text-sm">
+            <span class="mb-1 block text-slate-600">批量添加供应商全部模型</span>
+            <select
+              v-model.number="bulkProviderId"
+              class="min-w-48 rounded border border-slate-300 bg-white px-2 py-1.5 text-sm"
+            >
+              <option :value="0">选择供应商</option>
+              <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            class="rounded border border-cyan-600 bg-white px-3 py-1.5 text-sm text-cyan-700 hover:bg-cyan-50 disabled:opacity-50"
+            :disabled="!bulkProviderId || bulkAddingModels"
+            @click="bulkAddProviderModels"
+          >
+            {{ bulkAddingModels ? "拉取添加中…" : "拉取并全部添加" }}
+          </button>
+          <span class="pb-1 text-xs text-slate-500">按供应商 + 模型名去重，仅修改当前表单。</span>
+        </div>
+        <p v-if="bulkMessage" class="text-sm text-emerald-700">{{ bulkMessage }}</p>
         <div
           v-for="(item, index) in form.items"
           :key="index"
