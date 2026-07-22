@@ -181,6 +181,36 @@ onMounted(refresh);
     </section>
 
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 class="mb-3 text-base font-semibold">本机接入步骤</h2>
+      <ol class="list-decimal space-y-2 pl-5 text-sm text-slate-700">
+        <li>
+          <span class="font-medium">启动代理</span>
+          ：确认状态为 running，记下或复制 Base URL（默认 127.0.0.1）。
+        </li>
+        <li>
+          <span class="font-medium">新建供应商</span>
+          ：填写上游 Base URL 与 API Key，并启用。
+        </li>
+        <li>
+          <span class="font-medium">新建分组与队列</span>
+          ：分组名即客户端 model；按优先级添加供应商与上游模型，按需开启自动故障转移。
+        </li>
+        <li>
+          <span class="font-medium">创建 API Key</span>
+          ：明文仅创建成功时展示一次，请立即保存。
+        </li>
+        <li>
+          <span class="font-medium">客户端 / curl 调用</span>
+          ：Base URL 用本机地址，Authorization 用客户端 Key，body 中 model 填分组名。
+        </li>
+      </ol>
+      <p class="mt-3 text-xs text-slate-500">
+        完整可勾选验收步骤见仓库
+        <code class="rounded bg-slate-100 px-1">docs/local-acceptance.md</code>。
+      </p>
+    </section>
+
+    <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 class="mb-3 text-base font-semibold">调用示例</h2>
       <p class="mb-2 text-sm text-slate-500">
         客户端使用统一 Base URL + 客户端 API Key；请求体中的 model 填分组名。

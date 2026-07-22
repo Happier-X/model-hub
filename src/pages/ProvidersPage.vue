@@ -10,10 +10,13 @@ import {
   type HealthSnapshot,
   type Provider,
 } from "../api/tauri";
+import HealthBadge from "../components/HealthBadge.vue";
+import { findHealth } from "../utils/health";
 
 const items = ref<Provider[]>([]);
 const health = ref<HealthSnapshot[]>([]);
 const error = ref("");
+const healthLoading = ref(false);
 const editing = ref<Provider | null>(null);
 const form = reactive({
   name: "",
@@ -22,21 +25,24 @@ const form = reactive({
   enabled: true,
 });
 
-function healthLabel(providerId: number) {
-  const h = health.value.find((x) => x.provider_id === providerId);
-  if (!h) return "健康";
-  if (h.state === "open") return "熔断";
-  if (h.state === "half_open") return "半开";
-  if (h.state === "warning") return "警告";
-  return "健康";
-}
-
 async function refresh() {
   try {
     [items.value, health.value] = await Promise.all([listProviders(), listHealth()]);
     error.value = "";
   } catch (e) {
     error.value = extractInvokeError(e);
+  }
+}
+
+async function refreshHealth() {
+  healthLoading.value = true;
+  try {
+    health.value = await listHealth();
+    error.value = "";
+  } catch (e) {
+    error.value = extractInvokeError(e);
+  } finally {
+    healthLoading.value = false;
   }
 }
 
@@ -104,7 +110,12 @@ onMounted(refresh);
         </label>
         <label class="text-sm md:col-span-2">
           <span class="mb-1 block text-slate-500">上游 API Key</span>
-          <input v-model="form.api_key" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
+          <input
+            v-model="form.api_key"
+            type="password"
+            autocomplete="off"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2"
+          />
         </label>
         <label class="flex items-center gap-2 text-sm">
           <input v-model="form.enabled" type="checkbox" />
@@ -128,7 +139,17 @@ onMounted(refresh);
     </section>
 
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 class="mb-4 text-base font-semibold">供应商列表</h2>
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-base font-semibold">供应商列表</h2>
+        <button
+          type="button"
+          class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
+          :disabled="healthLoading"
+          @click="refreshHealth"
+        >
+          {{ healthLoading ? "刷新中…" : "刷新健康" }}
+        </button>
+      </div>
       <div v-if="items.length === 0" class="text-sm text-slate-500">暂无供应商</div>
       <div v-else class="overflow-x-auto">
         <table class="min-w-full text-left text-sm">
@@ -146,7 +167,9 @@ onMounted(refresh);
               <td class="px-2 py-2 font-medium">{{ p.name }}</td>
               <td class="px-2 py-2 font-mono text-xs">{{ p.base_url }}</td>
               <td class="px-2 py-2">{{ p.enabled ? "启用" : "停用" }}</td>
-              <td class="px-2 py-2">{{ healthLabel(p.id) }}</td>
+              <td class="px-2 py-2">
+                <HealthBadge :snapshot="findHealth(health, p.id)" />
+              </td>
               <td class="px-2 py-2 space-x-2">
                 <button type="button" class="text-cyan-700 hover:underline" @click="startEdit(p)">编辑</button>
                 <button type="button" class="text-rose-600 hover:underline" @click="remove(p.id)">删除</button>

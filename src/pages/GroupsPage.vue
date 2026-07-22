@@ -12,11 +12,14 @@ import {
   type HealthSnapshot,
   type Provider,
 } from "../api/tauri";
+import HealthBadge from "../components/HealthBadge.vue";
+import { findHealth } from "../utils/health";
 
 const groups = ref<Group[]>([]);
 const providers = ref<Provider[]>([]);
 const health = ref<HealthSnapshot[]>([]);
 const error = ref("");
+const healthLoading = ref(false);
 const editing = ref<Group | null>(null);
 
 const form = reactive({
@@ -26,15 +29,6 @@ const form = reactive({
 });
 
 const providerMap = computed(() => new Map(providers.value.map((p) => [p.id, p])));
-
-function healthLabel(providerId: number) {
-  const h = health.value.find((x) => x.provider_id === providerId);
-  if (!h) return "健康";
-  if (h.state === "open") return "熔断";
-  if (h.state === "half_open") return "半开";
-  if (h.state === "warning") return "警告";
-  return "健康";
-}
 
 async function refresh() {
   try {
@@ -46,6 +40,18 @@ async function refresh() {
     error.value = "";
   } catch (e) {
     error.value = extractInvokeError(e);
+  }
+}
+
+async function refreshHealth() {
+  healthLoading.value = true;
+  try {
+    health.value = await listHealth();
+    error.value = "";
+  } catch (e) {
+    error.value = extractInvokeError(e);
+  } finally {
+    healthLoading.value = false;
   }
 }
 
@@ -178,7 +184,17 @@ onMounted(refresh);
     </section>
 
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 class="mb-4 text-base font-semibold">分组列表</h2>
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-base font-semibold">分组列表</h2>
+        <button
+          type="button"
+          class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
+          :disabled="healthLoading"
+          @click="refreshHealth"
+        >
+          {{ healthLoading ? "刷新中…" : "刷新健康" }}
+        </button>
+      </div>
       <div v-if="groups.length === 0" class="text-sm text-slate-500">暂无分组</div>
       <div v-for="g in groups" :key="g.id" class="mb-4 rounded-lg border border-slate-100 p-4 last:mb-0">
         <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -193,12 +209,12 @@ onMounted(refresh);
             <button type="button" class="text-rose-600 hover:underline" @click="remove(g.id)">删除</button>
           </div>
         </div>
-        <ol class="space-y-1 text-sm">
-          <li v-for="(item, idx) in g.items" :key="item.id" class="flex gap-2 text-slate-700">
+        <ol class="space-y-2 text-sm">
+          <li v-for="(item, idx) in g.items" :key="item.id" class="flex flex-wrap items-center gap-2 text-slate-700">
             <span class="text-slate-400">{{ idx + 1 }}.</span>
             <span>{{ providerMap.get(item.provider_id)?.name || item.provider_name || item.provider_id }}</span>
             <span class="font-mono text-xs text-slate-500">{{ item.upstream_model }}</span>
-            <span class="text-xs text-slate-400">{{ healthLabel(item.provider_id) }}</span>
+            <HealthBadge :snapshot="findHealth(health, item.provider_id)" />
           </li>
         </ol>
       </div>

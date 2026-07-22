@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { clearLogs, extractInvokeError, listLogs, type RequestLog } from "../api/tauri";
+import { statusCodeClass } from "../utils/health";
 
 const items = ref<RequestLog[]>([]);
 const error = ref("");
@@ -65,7 +66,14 @@ onMounted(refresh);
               <td class="px-2 py-2">{{ log.group_name }}</td>
               <td class="px-2 py-2">{{ log.provider_name }}</td>
               <td class="px-2 py-2 font-mono">{{ log.upstream_model }}</td>
-              <td class="px-2 py-2">{{ log.status_code || "-" }}</td>
+              <td class="px-2 py-2">
+                <span
+                  class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium tabular-nums"
+                  :class="statusCodeClass(log.status_code)"
+                >
+                  {{ log.status_code || "-" }}
+                </span>
+              </td>
               <td class="px-2 py-2">{{ log.use_time_ms }}</td>
               <td class="max-w-[200px] px-2 py-2 break-words text-rose-600">{{ log.error || "-" }}</td>
               <td class="max-w-[220px] px-2 py-2 break-words">
