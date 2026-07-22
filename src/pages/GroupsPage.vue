@@ -15,6 +15,10 @@ import {
 } from "../api/tauri";
 import HealthBadge from "../components/HealthBadge.vue";
 import { findHealth } from "../utils/health";
+import {
+  scoreModelCapability,
+  sortByModelCapability,
+} from "../utils/modelCapability";
 
 const groups = ref<Group[]>([]);
 const providers = ref<Provider[]>([]);
@@ -199,6 +203,43 @@ function onDragEnd() {
   dragOverIndex.value = null;
 }
 
+function capabilityOf(modelId: string) {
+  return scoreModelCapability(modelId);
+}
+
+function sortQueueByCapability() {
+  if (form.items.length < 2) {
+    bulkMessage.value = "队列条目少于 2 条，无需排序";
+    return;
+  }
+  const before = form.items.map((item) => item.uid);
+  const sorted = sortByModelCapability(form.items, (item) => item.upstream_model);
+  const after = sorted.map((item) => item.uid);
+  if (before.every((uid, index) => uid === after[index])) {
+    bulkMessage.value = "当前顺序已符合模型能力启发式排序";
+    return;
+  }
+
+  // 同步 modelOptions / fetchingModels 到新下标，避免拉取缓存错位。
+  const oldIndexByUid = new Map(form.items.map((item, index) => [item.uid, index]));
+  const nextOptions: Record<number, string[]> = {};
+  const nextFetching: Record<number, boolean> = {};
+  sorted.forEach((item, newIndex) => {
+    const oldIndex = oldIndexByUid.get(item.uid);
+    if (oldIndex === undefined) return;
+    if (modelOptions.value[oldIndex]) nextOptions[newIndex] = modelOptions.value[oldIndex];
+    if (fetchingModels.value[oldIndex]) nextFetching[newIndex] = fetchingModels.value[oldIndex];
+  });
+
+  form.items.splice(0, form.items.length, ...sorted);
+  modelOptions.value = nextOptions;
+  fetchingModels.value = nextFetching;
+  dragFromIndex.value = null;
+  dragOverIndex.value = null;
+  bulkMessage.value =
+    "已按模型能力启发式排序（分数越高越优先）；未识别模型排后。点击“保存”后生效，仍可拖拽微调。";
+}
+
 async function pullModels(index: number) {
   const item = form.items[index];
   if (!item || !item.provider_id) {
@@ -321,7 +362,17 @@ onMounted(refresh);
       <div class="mt-4 space-y-2">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h3 class="text-sm font-medium">故障转移队列</h3>
-          <button type="button" class="text-sm text-cyan-700 hover:underline" @click="addItem">添加条目</button>
+          <div class="flex flex-wrap gap-3">
+            <button
+              type="button"
+              class="text-sm text-cyan-700 hover:underline disabled:opacity-40"
+              :disabled="form.items.length < 2"
+              @click="sortQueueByCapability"
+            >
+              按模型能力排序
+            </button>
+            <button type="button" class="text-sm text-cyan-700 hover:underline" @click="addItem">添加条目</button>
+          </div>
         </div>
         <div class="flex flex-wrap items-end gap-2 rounded-lg border border-cyan-100 bg-cyan-50/60 p-3">
           <label class="text-sm">
@@ -345,7 +396,9 @@ onMounted(refresh);
           <span class="pb-1 text-xs text-slate-500">按供应商 + 模型名去重，仅修改当前表单。</span>
         </div>
         <p v-if="bulkMessage" class="text-sm text-emerald-700">{{ bulkMessage }}</p>
-        <p class="text-xs text-slate-500">可拖动左侧手柄调整故障转移优先级；上移/下移仍可用。顺序保存前仅作用于当前表单。</p>
+        <p class="text-xs text-slate-500">
+          可拖动左侧手柄调整故障转移优先级；上移/下移与「按模型能力排序」仅作用于当前表单，需点保存写入。能力分来自模型名启发式，不是官方基准。
+        </p>
         <div
           v-for="(item, index) in form.items"
           :key="item.uid"
@@ -371,6 +424,19 @@ onMounted(refresh);
             ⋮⋮
           </button>
           <span class="w-8 text-xs text-slate-400">#{{ index + 1 }}</span>
+          <span
+            class="rounded-full px-2 py-0.5 text-[11px] tabular-nums"
+            :class="
+              capabilityOf(item.upstream_model).recognized
+                ? 'bg-violet-50 text-violet-700'
+                : 'bg-slate-100 text-slate-500'
+            "
+            :title="`启发式能力分 ${capabilityOf(item.upstream_model).score}`"
+          >
+            {{ capabilityOf(item.upstream_model).label }}
+            ·
+            {{ capabilityOf(item.upstream_model).score }}
+          </span>
           <select v-model.number="item.provider_id" class="rounded border border-slate-300 px-2 py-1 text-sm">
             <option :value="0">选择供应商</option>
             <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
