@@ -110,11 +110,19 @@ export function extractInvokeError(error: unknown): string {
   return "未知错误";
 }
 
+export interface ShellPrefs {
+  gateway_port: number;
+  check_update_on_startup: boolean;
+}
+
 export const getPaths = () => invoke<AppPaths>("get_paths");
 export const proxyStart = () => invoke<ProxyStatus>("proxy_start");
 export const proxyStop = () => invoke<ProxyStatus>("proxy_stop");
 export const proxyStatus = () => invoke<ProxyStatus>("proxy_status");
 export const proxySetPort = (port: number) => invoke<ProxyStatus>("proxy_set_port", { port });
+export const getShellPrefs = () => invoke<ShellPrefs>("get_shell_prefs");
+export const setCheckUpdateOnStartup = (enabled: boolean) =>
+  invoke<ShellPrefs>("set_check_update_on_startup", { enabled });
 
 export const listProviders = () => invoke<Provider[]>("list_providers");
 export const createProvider = (payload: {

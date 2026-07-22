@@ -68,6 +68,8 @@ pub fn run() {
             commands::proxy_stop,
             commands::proxy_status,
             commands::proxy_set_port,
+            commands::get_shell_prefs,
+            commands::set_check_update_on_startup,
             commands::list_providers,
             commands::create_provider,
             commands::update_provider,

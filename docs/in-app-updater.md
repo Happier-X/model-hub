@@ -4,16 +4,19 @@
 
 项目已配置 Tauri Updater 的签名、公钥与 Windows 发布资产生成。应用本体为 **Vue 3 + 进程内 Rust 代理**，发布包**不含**侧车 `model-hub-gateway.exe`。
 
-### 管理台手动检查更新
+### 管理台检查更新
 
-概览页提供 **「检查更新」** 入口，流程如下：
+概览页提供 **「检查更新」** 入口，以及可选的 **「进入概览时自动检查更新」**（写入 `config/shell.json` 的 `check_update_on_startup`，**默认 false**）。
+
+流程如下：
 
 1. 调用 `@tauri-apps/plugin-updater` 的 `check()`，对照 `latest.json`。
-2. **无更新**：提示当前已是最新（可展示当前版本号）。
-3. **有更新**：展示新版本号与可选发布说明（body）；**须用户点击确认**后才执行 `downloadAndInstall`。
+2. **无更新**：手动检查时提示当前已是最新；启动自动检查时保持安静（不打扰）。
+3. **有更新**：展示新版本号与可选发布说明（body）；**须用户点击确认**后才执行 `downloadAndInstall`（从不静默安装）。
 4. 下载过程可展示进度（Started / Progress / Finished）；安装成功后调用 `@tauri-apps/plugin-process` 的 `relaunch()` 重启应用。
-5. 失败时展示中文错误，可对已发现的版本重试下载安装。
+5. 失败时：手动检查展示中文错误并可重试；启动自动检查失败仅短提示，不阻断使用。
 6. 浏览器开发态（`pnpm dev`，无 Tauri 壳）会提示「请在桌面应用内检查更新」。
+7. 修改监听端口并保存时，会保留 `check_update_on_startup` 字段，不会被擦除。
 
 权限沿用 default capability 中的 `updater:default` 与 `process:allow-restart`，无需额外配置。
 

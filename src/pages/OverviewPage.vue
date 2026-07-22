@@ -6,11 +6,13 @@ import {
   extractInvokeError,
   getAppVersion,
   getPaths,
+  getShellPrefs,
   proxySetPort,
   proxyStart,
   proxyStatus,
   proxyStop,
   relaunchApp,
+  setCheckUpdateOnStartup,
   type AppPaths,
   type DownloadEvent,
   type ProxyStatus,
@@ -33,6 +35,8 @@ const currentVersion = ref("");
 const pendingUpdate = ref<Update | null>(null);
 const downloadLoaded = ref(0);
 const downloadTotal = ref<number | null>(null);
+const checkUpdateOnStartup = ref(false);
+const prefsLoading = ref(false);
 
 const updateBusy = computed(
   () =>
@@ -73,10 +77,12 @@ function onDownloadEvent(event: DownloadEvent) {
   }
 }
 
-async function checkUpdate() {
+async function checkUpdate(options?: { quietIfLatest?: boolean; softError?: boolean }) {
   if (updateBusy.value) return;
+  const quietIfLatest = options?.quietIfLatest ?? false;
+  const softError = options?.softError ?? false;
   updatePhase.value = "checking";
-  updateMessage.value = "正在检查更新…";
+  updateMessage.value = quietIfLatest ? "启动时检查更新…" : "正在检查更新…";
   updateError.value = "";
   pendingUpdate.value = null;
   downloadLoaded.value = 0;
@@ -90,8 +96,12 @@ async function checkUpdate() {
     const update = await checkForUpdate();
     if (!update) {
       updatePhase.value = "idle";
-      const ver = currentVersion.value ? `（当前版本 ${currentVersion.value}）` : "";
-      updateMessage.value = `当前已是最新版本${ver}`;
+      if (quietIfLatest) {
+        updateMessage.value = "";
+      } else {
+        const ver = currentVersion.value ? `（当前版本 ${currentVersion.value}）` : "";
+        updateMessage.value = `当前已是最新版本${ver}`;
+      }
       return;
     }
     pendingUpdate.value = update;
@@ -99,9 +109,35 @@ async function checkUpdate() {
     updatePhase.value = "available";
     updateMessage.value = `发现新版本 ${update.version}`;
   } catch (e) {
+    const msg = extractInvokeError(e);
+    if (softError) {
+      updatePhase.value = "idle";
+      updateError.value = "";
+      updateMessage.value = `启动时检查更新失败：${msg}`;
+      return;
+    }
     updatePhase.value = "error";
-    updateError.value = extractInvokeError(e);
+    updateError.value = msg;
     updateMessage.value = "";
+  }
+}
+
+async function toggleStartupCheck(enabled: boolean) {
+  const previous = checkUpdateOnStartup.value;
+  checkUpdateOnStartup.value = enabled;
+  prefsLoading.value = true;
+  try {
+    const prefs = await setCheckUpdateOnStartup(enabled);
+    checkUpdateOnStartup.value = prefs.check_update_on_startup;
+    message.value = prefs.check_update_on_startup
+      ? "已开启：下次进入概览将自动检查更新"
+      : "已关闭启动时自动检查更新";
+    error.value = "";
+  } catch (e) {
+    error.value = extractInvokeError(e);
+    checkUpdateOnStartup.value = previous;
+  } finally {
+    prefsLoading.value = false;
   }
 }
 
@@ -140,6 +176,12 @@ async function refresh() {
     status.value = await proxyStatus();
     portInput.value = status.value.port;
     paths.value = await getPaths();
+    try {
+      const prefs = await getShellPrefs();
+      checkUpdateOnStartup.value = prefs.check_update_on_startup;
+    } catch {
+      /* 偏好读取失败不阻塞代理状态 */
+    }
     error.value = "";
   } catch (e) {
     error.value = extractInvokeError(e);
@@ -199,7 +241,12 @@ const exampleCurl = () => {
   -d '{"model":"你的分组名","messages":[{"role":"user","content":"hi"}]}'`;
 };
 
-onMounted(refresh);
+onMounted(async () => {
+  await refresh();
+  if (checkUpdateOnStartup.value) {
+    await checkUpdate({ quietIfLatest: true, softError: true });
+  }
+});
 </script>
 
 <template>
@@ -300,14 +347,23 @@ onMounted(refresh);
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 class="mb-3 text-base font-semibold">应用更新</h2>
       <p class="mb-3 text-sm text-slate-500">
-        手动检查 GitHub Release 上的更新清单；发现新版本后须确认才会下载安装并重启。
+        检查 GitHub Release 上的更新清单；发现新版本后须确认才会下载安装并重启。默认不在启动时自动检查。
       </p>
+      <label class="mb-3 flex items-center gap-2 text-sm text-slate-700">
+        <input
+          type="checkbox"
+          :checked="checkUpdateOnStartup"
+          :disabled="prefsLoading"
+          @change="toggleStartupCheck(($event.target as HTMLInputElement).checked)"
+        />
+        进入概览时自动检查更新（仍需确认后才安装）
+      </label>
       <div class="flex flex-wrap items-center gap-3">
         <button
           type="button"
           class="rounded-lg bg-cyan-700 px-4 py-2 text-sm text-white hover:bg-cyan-600 disabled:opacity-50"
           :disabled="updateBusy"
-          @click="checkUpdate"
+          @click="checkUpdate()"
         >
           {{ updatePhase === "checking" ? "检查中…" : "检查更新" }}
         </button>

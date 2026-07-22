@@ -15,12 +15,16 @@ pub const DEFAULT_PORT: u16 = 8080;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShellConfig {
     pub gateway_port: u16,
+    /// 启动后是否自动检查应用更新（默认关闭；发现更新仍须用户确认安装）。
+    #[serde(default)]
+    pub check_update_on_startup: bool,
 }
 
 impl Default for ShellConfig {
     fn default() -> Self {
         Self {
             gateway_port: DEFAULT_PORT,
+            check_update_on_startup: false,
         }
     }
 }
@@ -138,8 +142,45 @@ mod tests {
     #[test]
     fn save_and_load_roundtrip() {
         let dir = tempdir().unwrap();
-        save_shell_config(dir.path(), &ShellConfig { gateway_port: 19090 }).unwrap();
+        save_shell_config(
+            dir.path(),
+            &ShellConfig {
+                gateway_port: 19090,
+                check_update_on_startup: true,
+            },
+        )
+        .unwrap();
         let cfg = load_shell_config(dir.path()).unwrap();
         assert_eq!(cfg.gateway_port, 19090);
+        assert!(cfg.check_update_on_startup);
+    }
+
+    #[test]
+    fn missing_check_update_field_defaults_false() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("shell.json");
+        fs::write(&path, r#"{ "gateway_port": 9090 }"#).unwrap();
+        let cfg = load_shell_config(dir.path()).unwrap();
+        assert_eq!(cfg.gateway_port, 9090);
+        assert!(!cfg.check_update_on_startup);
+    }
+
+    #[test]
+    fn save_port_preserves_check_update_flag() {
+        let dir = tempdir().unwrap();
+        save_shell_config(
+            dir.path(),
+            &ShellConfig {
+                gateway_port: 8080,
+                check_update_on_startup: true,
+            },
+        )
+        .unwrap();
+        let mut cfg = load_shell_config(dir.path()).unwrap();
+        cfg.gateway_port = 18080;
+        save_shell_config(dir.path(), &cfg).unwrap();
+        let cfg = load_shell_config(dir.path()).unwrap();
+        assert_eq!(cfg.gateway_port, 18080);
+        assert!(cfg.check_update_on_startup);
     }
 }

@@ -43,6 +43,39 @@ pub fn proxy_set_port(
         .map_err(Into::into)
 }
 
+#[derive(Debug, Serialize)]
+pub struct ShellPrefs {
+    pub gateway_port: u16,
+    pub check_update_on_startup: bool,
+}
+
+#[tauri::command]
+pub fn get_shell_prefs(app: AppHandle) -> Result<ShellPrefs, InvokeError> {
+    let paths = paths::resolve_paths(&app).map_err(InvokeError::from)?;
+    let cfg = crate::settings::load_shell_config(std::path::Path::new(&paths.config_dir))
+        .map_err(InvokeError::from)?;
+    Ok(ShellPrefs {
+        gateway_port: cfg.gateway_port,
+        check_update_on_startup: cfg.check_update_on_startup,
+    })
+}
+
+#[tauri::command]
+pub fn set_check_update_on_startup(
+    app: AppHandle,
+    enabled: bool,
+) -> Result<ShellPrefs, InvokeError> {
+    let paths = paths::resolve_paths(&app).map_err(InvokeError::from)?;
+    let config_dir = std::path::Path::new(&paths.config_dir);
+    let mut cfg = crate::settings::load_shell_config(config_dir).map_err(InvokeError::from)?;
+    cfg.check_update_on_startup = enabled;
+    crate::settings::save_shell_config(config_dir, &cfg).map_err(InvokeError::from)?;
+    Ok(ShellPrefs {
+        gateway_port: cfg.gateway_port,
+        check_update_on_startup: cfg.check_update_on_startup,
+    })
+}
+
 #[tauri::command]
 pub fn list_providers(proxy: State<'_, ProxyHandle>) -> Result<Vec<Provider>, InvokeError> {
     stores(&proxy)?.list_providers().map_err(Into::into)

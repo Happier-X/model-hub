@@ -12,7 +12,7 @@ use crate::error::AppError;
 use crate::proxy::circuit::CircuitRegistry;
 use crate::proxy::forward::{ForwardPolicy, UpstreamClients};
 use crate::proxy::server::{self, AppState};
-use crate::settings::{self, ShellConfig, DEFAULT_PORT};
+use crate::settings::{self, DEFAULT_PORT};
 
 pub const DEFAULT_HOST: &str = "127.0.0.1";
 
@@ -212,7 +212,9 @@ impl ProxyHandle {
         if port == 0 {
             return Err(AppError::InvalidPort);
         }
-        settings::save_shell_config(config_dir, &ShellConfig { gateway_port: port })?;
+        let mut cfg = settings::load_shell_config(config_dir)?;
+        cfg.gateway_port = port;
+        settings::save_shell_config(config_dir, &cfg)?;
 
         let was_running = self.with_inner(|inner| {
             if matches!(inner.state, ProxyState::Starting | ProxyState::Stopping) {
