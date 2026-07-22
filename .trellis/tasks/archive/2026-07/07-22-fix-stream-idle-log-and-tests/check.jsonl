@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "检查日志语义与敏感信息"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "检查静默超时不换源"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查测试门禁"}
+{"file": ".trellis/tasks/07-22-fix-stream-idle-log-and-tests/prd.md", "reason": "按验收标准检查"}

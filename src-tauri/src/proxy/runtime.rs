@@ -10,7 +10,7 @@ use crate::db::{default_db_path, open_db};
 use crate::domain::Stores;
 use crate::error::AppError;
 use crate::proxy::circuit::CircuitRegistry;
-use crate::proxy::forward::UpstreamClients;
+use crate::proxy::forward::{ForwardPolicy, UpstreamClients};
 use crate::proxy::server::{self, AppState};
 use crate::settings::{self, ShellConfig, DEFAULT_PORT};
 
@@ -165,6 +165,7 @@ impl ProxyHandle {
             stores,
             circuits,
             clients,
+            forward_policy: ForwardPolicy::default(),
         };
 
         let join = self.tokio_rt.spawn(async move {

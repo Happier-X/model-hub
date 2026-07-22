@@ -15,7 +15,7 @@ use crate::domain::log::NewRequestLog;
 use crate::domain::Stores;
 use crate::proxy::circuit::CircuitRegistry;
 use crate::proxy::forward::{
-    elapsed_ms, forward_with_failover, Candidate, UpstreamClients,
+    elapsed_ms, forward_with_failover, Candidate, ForwardPolicy, UpstreamClients,
 };
 
 #[derive(Clone)]
@@ -23,6 +23,7 @@ pub struct AppState {
     pub stores: Stores,
     pub circuits: CircuitRegistry,
     pub clients: UpstreamClients,
+    pub forward_policy: ForwardPolicy,
 }
 
 fn extract_client_key(headers: &HeaderMap) -> Option<String> {
@@ -176,22 +177,26 @@ async fn chat_completions(
         &candidates,
         &body,
         stream,
+        &state.forward_policy,
     )
     .await
     {
         Ok(outcome) => {
-            let status = outcome.response.status().as_u16() as i64;
-            let _ = state.stores.insert_log(NewRequestLog {
-                group_name: group_name.clone(),
-                provider_name: outcome.final_provider_name.clone(),
-                upstream_model: outcome.final_model.clone(),
-                status_code: status,
-                use_time_ms: elapsed_ms(start),
-                error: outcome.error,
-                failover_from: outcome.failover_from,
-                failover_to: outcome.failover_to,
-                failover_reason: outcome.failover_reason,
-            });
+            // 流式：最终日志由 body 正常结束 / 静默超时 / 读错误回调写入，避免 prime 成功时误记 200。
+            if !outcome.defer_request_log {
+                let status = outcome.response.status().as_u16() as i64;
+                let _ = state.stores.insert_log(NewRequestLog {
+                    group_name: group_name.clone(),
+                    provider_name: outcome.final_provider_name.clone(),
+                    upstream_model: outcome.final_model.clone(),
+                    status_code: status,
+                    use_time_ms: elapsed_ms(start),
+                    error: outcome.error,
+                    failover_from: outcome.failover_from,
+                    failover_to: outcome.failover_to,
+                    failover_reason: outcome.failover_reason,
+                });
+            }
             outcome.response
         }
         Err((status, message)) => {

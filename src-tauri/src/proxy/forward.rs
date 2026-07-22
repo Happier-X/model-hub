@@ -23,6 +23,20 @@ pub const NON_STREAM_TIMEOUT: Duration = Duration::from_secs(600);
 /// 连接超时。
 pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// 转发策略（可测注入：如缩短流式静默超时）。
+#[derive(Debug, Clone)]
+pub struct ForwardPolicy {
+    pub stream_idle_timeout: Duration,
+}
+
+impl Default for ForwardPolicy {
+    fn default() -> Self {
+        Self {
+            stream_idle_timeout: STREAM_IDLE_TIMEOUT,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct UpstreamClients {
     non_stream: Client,
@@ -235,15 +249,20 @@ struct StreamState {
     done: bool,
     idle: Duration,
     on_idle_timeout: Option<Box<dyn FnOnce() + Send>>,
+    on_success: Option<Box<dyn FnOnce() + Send>>,
+    on_error: Option<Box<dyn FnOnce(String) + Send>>,
 }
 
 /// 从已成功 prime 的流构造 body；后续 chunk 使用 `idle` 静默超时。
 /// 超时后结束流并调用 `on_idle_timeout`（记失败/日志）；**不会**回到换源循环。
+/// 正常结束调用 `on_success`；中途读错误调用 `on_error`（最终日志均在此写入，避免 server 侧提前记 200）。
 fn stream_body_from_prime(
     first: Bytes,
     response: reqwest::Response,
     idle: Duration,
     on_idle_timeout: impl FnOnce() + Send + 'static,
+    on_success: impl FnOnce() + Send + 'static,
+    on_error: impl FnOnce(String) + Send + 'static,
 ) -> Body {
     let stream = futures_util::stream::unfold(
         StreamState {
@@ -252,6 +271,8 @@ fn stream_body_from_prime(
             done: false,
             idle,
             on_idle_timeout: Some(Box::new(on_idle_timeout)),
+            on_success: Some(Box::new(on_success)),
+            on_error: Some(Box::new(on_error)),
         },
         |mut state| async move {
             if state.done {
@@ -263,6 +284,10 @@ fn stream_body_from_prime(
                 }
             }
             let Some(resp) = state.response.as_mut() else {
+                // 无后续响应体：视为正常结束（仅首包）。
+                if let Some(cb) = state.on_success.take() {
+                    cb();
+                }
                 return None;
             };
             match tokio::time::timeout(state.idle, resp.chunk()).await {
@@ -270,6 +295,9 @@ fn stream_body_from_prime(
                     if let Some(cb) = state.on_idle_timeout.take() {
                         cb();
                     }
+                    // 丢弃其余终态回调，避免双写。
+                    state.on_success.take();
+                    state.on_error.take();
                     state.done = true;
                     state.response = None;
                     Some((
@@ -281,10 +309,25 @@ fn stream_body_from_prime(
                     ))
                 }
                 Ok(Ok(Some(bytes))) => Some((Ok(bytes), state)),
-                Ok(Ok(None)) => None,
+                Ok(Ok(None)) => {
+                    if let Some(cb) = state.on_success.take() {
+                        cb();
+                    }
+                    // 终态结束，不再进入下一轮 unfold。
+                    state.on_idle_timeout.take();
+                    state.on_error.take();
+                    None
+                }
                 Ok(Err(e)) => {
+                    let msg = e.to_string();
+                    if let Some(cb) = state.on_error.take() {
+                        cb(msg.clone());
+                    }
+                    state.on_idle_timeout.take();
+                    state.on_success.take();
                     state.done = true;
-                    Some((Err(std::io::Error::other(e.to_string())), state))
+                    state.response = None;
+                    Some((Err(std::io::Error::other(msg)), state))
                 }
             }
         },
@@ -330,6 +373,8 @@ pub struct ForwardOutcome {
     pub failover_reason: String,
     /// 最终响应若为上游错误（如不可重试 4xx），填入摘要供请求日志使用。
     pub error: String,
+    /// 为 true 时最终 request_log 由流式 body 终态回调写入，server 不得再记成功。
+    pub defer_request_log: bool,
 }
 
 pub async fn forward_with_failover(
@@ -341,6 +386,7 @@ pub async fn forward_with_failover(
     candidates: &[Candidate],
     body: &Value,
     stream: bool,
+    policy: &ForwardPolicy,
 ) -> Result<ForwardOutcome, (StatusCode, String)> {
     if candidates.is_empty() {
         return Err((StatusCode::BAD_GATEWAY, "分组无可用上游".into()));
@@ -379,33 +425,100 @@ pub async fn forward_with_failover(
         let attempt_err: AttemptError = if stream {
             match attempt_stream_prime(clients, candidate, body).await {
                 Ok(ok) => {
+                    // 首包成功仅表示可开始透传；熔断成功先记一笔。
+                    // 若随后静默超时会再 record_failure。最终 request_log 延迟到 body 终态。
                     circuits.record_success(candidate.provider.id);
                     probe_guard.disarm();
                     let provider_id = candidate.provider.id;
                     let provider_name = candidate.provider.name.clone();
                     let upstream_model = candidate.upstream_model.clone();
                     let group = group_name.to_string();
-                    let circuits_for_idle = circuits.clone();
-                    let stores_for_idle = stores.clone();
+                    let fo_from = failover_from.clone();
+                    let fo_to = failover_to.clone();
+                    let fo_reason = failover_reason.clone();
+                    let success_status = ok.status.as_u16() as i64;
+                    let started = Instant::now();
+                    let idle = policy.stream_idle_timeout;
+
+                    // 各终态回调独立克隆字段，避免 move 交叉与双写。
+                    let on_idle = {
+                        let circuits = circuits.clone();
+                        let stores = stores.clone();
+                        let group = group.clone();
+                        let name = provider_name.clone();
+                        let model = upstream_model.clone();
+                        let fo_from = fo_from.clone();
+                        let fo_to = fo_to.clone();
+                        let fo_reason = fo_reason.clone();
+                        move || {
+                            // 响应已提交：仅记失败与日志，不得换源拼接。
+                            circuits.record_failure(provider_id);
+                            let _ = stores.insert_log(NewRequestLog {
+                                group_name: group,
+                                provider_name: name,
+                                upstream_model: model,
+                                status_code: 504,
+                                use_time_ms: elapsed_ms(started),
+                                error: "流式静默超时".into(),
+                                failover_from: fo_from,
+                                failover_to: fo_to,
+                                failover_reason: if fo_reason.is_empty() {
+                                    "流式静默超时".into()
+                                } else {
+                                    fo_reason
+                                },
+                            });
+                        }
+                    };
+                    let on_success = {
+                        let stores = stores.clone();
+                        let group = group.clone();
+                        let name = provider_name.clone();
+                        let model = upstream_model.clone();
+                        let fo_from = fo_from.clone();
+                        let fo_to = fo_to.clone();
+                        let fo_reason = fo_reason.clone();
+                        move || {
+                            let _ = stores.insert_log(NewRequestLog {
+                                group_name: group,
+                                provider_name: name,
+                                upstream_model: model,
+                                status_code: success_status,
+                                use_time_ms: elapsed_ms(started),
+                                error: String::new(),
+                                failover_from: fo_from,
+                                failover_to: fo_to,
+                                failover_reason: fo_reason,
+                            });
+                        }
+                    };
+                    let on_error = {
+                        let circuits = circuits.clone();
+                        let stores = stores.clone();
+                        move |message: String| {
+                            circuits.record_failure(provider_id);
+                            let summary: String = message.chars().take(200).collect();
+                            let _ = stores.insert_log(NewRequestLog {
+                                group_name: group,
+                                provider_name: provider_name,
+                                upstream_model: upstream_model,
+                                status_code: 502,
+                                use_time_ms: elapsed_ms(started),
+                                error: format!("流式中断: {summary}"),
+                                failover_from: fo_from,
+                                failover_to: fo_to,
+                                failover_reason: fo_reason,
+                            });
+                        }
+                    };
+
                     let body = stream_body_from_prime(
                         ok.first_chunk,
                         ok.rest,
-                        STREAM_IDLE_TIMEOUT,
-                        move || {
-                            // 响应已提交：仅记失败与日志，不得换源拼接。
-                            circuits_for_idle.record_failure(provider_id);
-                            let _ = stores_for_idle.insert_log(NewRequestLog {
-                                group_name: group,
-                                provider_name,
-                                upstream_model,
-                                status_code: 504,
-                                use_time_ms: 0,
-                                error: "流式静默超时".into(),
-                                failover_from: String::new(),
-                                failover_to: String::new(),
-                                failover_reason: "流式静默超时".into(),
-                            });
-                        },
+                        idle,
+                        on_idle,
+                        on_success,
+                        on_error,
                     );
                     let mut builder = Response::builder().status(ok.status);
                     for (k, v) in ok.headers.iter() {
@@ -422,6 +535,7 @@ pub async fn forward_with_failover(
                         failover_to,
                         failover_reason,
                         error: String::new(),
+                        defer_request_log: true,
                     });
                 }
                 Err(e) => e,
@@ -446,6 +560,7 @@ pub async fn forward_with_failover(
                         failover_to,
                         failover_reason,
                         error: String::new(),
+                        defer_request_log: false,
                     });
                 }
                 Err(e) => e,
@@ -482,6 +597,7 @@ pub async fn forward_with_failover(
                     failover_to,
                     failover_reason: "不可重试错误".into(),
                     error: msg,
+                    defer_request_log: false,
                 });
             }
             AttemptError::Retryable { status, message } => {
