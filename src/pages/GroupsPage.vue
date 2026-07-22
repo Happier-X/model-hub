@@ -28,12 +28,29 @@ const fetchingModels = ref<Record<number, boolean>>({});
 const bulkProviderId = ref(0);
 const bulkAddingModels = ref(false);
 const bulkMessage = ref("");
+const dragFromIndex = ref<number | null>(null);
+const dragOverIndex = ref<number | null>(null);
+let nextItemUid = 1;
+
+type QueueItemDraft = {
+  uid: number;
+  provider_id: number;
+  upstream_model: string;
+};
 
 const form = reactive({
   name: "",
   auto_failover: true,
-  items: [] as { provider_id: number; upstream_model: string }[],
+  items: [] as QueueItemDraft[],
 });
+
+function createQueueItem(providerId: number, upstreamModel: string): QueueItemDraft {
+  return {
+    uid: nextItemUid++,
+    provider_id: providerId,
+    upstream_model: upstreamModel,
+  };
+}
 
 const providerMap = computed(() => new Map(providers.value.map((p) => [p.id, p])));
 
@@ -80,33 +97,106 @@ function startEdit(g: Group) {
   editing.value = g;
   form.name = g.name;
   form.auto_failover = g.auto_failover;
-  form.items = g.items.map((i) => ({
-    provider_id: i.provider_id,
-    upstream_model: i.upstream_model,
-  }));
+  form.items = g.items.map((i) => createQueueItem(i.provider_id, i.upstream_model));
+  modelOptions.value = {};
+  fetchingModels.value = {};
+  dragFromIndex.value = null;
+  dragOverIndex.value = null;
+  bulkMessage.value = "";
 }
 
 function addItem() {
   const first = providers.value[0];
-  form.items.push({
-    provider_id: first?.id ?? 0,
-    upstream_model: "gpt-4o-mini",
+  form.items.push(createQueueItem(first?.id ?? 0, "gpt-4o-mini"));
+}
+
+function reorderQueue(from: number, to: number) {
+  if (
+    from === to ||
+    from < 0 ||
+    to < 0 ||
+    from >= form.items.length ||
+    to >= form.items.length
+  ) {
+    return;
+  }
+
+  const nextItems = form.items.slice();
+  const [movedItem] = nextItems.splice(from, 1);
+  nextItems.splice(to, 0, movedItem);
+
+  const indexOrder = form.items.map((_, i) => i);
+  const [movedIndex] = indexOrder.splice(from, 1);
+  indexOrder.splice(to, 0, movedIndex);
+
+  const nextOptions: Record<number, string[]> = {};
+  const nextFetching: Record<number, boolean> = {};
+  indexOrder.forEach((oldIndex, newIndex) => {
+    if (modelOptions.value[oldIndex]) {
+      nextOptions[newIndex] = modelOptions.value[oldIndex];
+    }
+    if (fetchingModels.value[oldIndex]) {
+      nextFetching[newIndex] = fetchingModels.value[oldIndex];
+    }
   });
+
+  form.items.splice(0, form.items.length, ...nextItems);
+  modelOptions.value = nextOptions;
+  fetchingModels.value = nextFetching;
+  bulkMessage.value = "队列顺序已调整，点击“保存”后生效";
 }
 
 function moveItem(index: number, delta: number) {
-  const next = index + delta;
-  if (next < 0 || next >= form.items.length) return;
-  const arr = form.items;
-  const tmp = arr[index];
-  arr[index] = arr[next];
-  arr[next] = tmp;
+  reorderQueue(index, index + delta);
 }
 
 function removeItem(index: number) {
   form.items.splice(index, 1);
-  delete modelOptions.value[index];
-  delete fetchingModels.value[index];
+  const nextOptions: Record<number, string[]> = {};
+  const nextFetching: Record<number, boolean> = {};
+  form.items.forEach((_, newIndex) => {
+    const oldIndex = newIndex >= index ? newIndex + 1 : newIndex;
+    if (modelOptions.value[oldIndex]) {
+      nextOptions[newIndex] = modelOptions.value[oldIndex];
+    }
+    if (fetchingModels.value[oldIndex]) {
+      nextFetching[newIndex] = fetchingModels.value[oldIndex];
+    }
+  });
+  modelOptions.value = nextOptions;
+  fetchingModels.value = nextFetching;
+}
+
+function onDragStart(index: number, event: DragEvent) {
+  dragFromIndex.value = index;
+  dragOverIndex.value = index;
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", String(index));
+  }
+}
+
+function onDragOver(index: number, event: DragEvent) {
+  event.preventDefault();
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = "move";
+  }
+  if (dragFromIndex.value === null) return;
+  dragOverIndex.value = index;
+}
+
+function onDrop(index: number, event: DragEvent) {
+  event.preventDefault();
+  const from = dragFromIndex.value;
+  dragFromIndex.value = null;
+  dragOverIndex.value = null;
+  if (from === null) return;
+  reorderQueue(from, index);
+}
+
+function onDragEnd() {
+  dragFromIndex.value = null;
+  dragOverIndex.value = null;
 }
 
 async function pullModels(index: number) {
@@ -167,7 +257,7 @@ async function bulkAddProviderModels() {
         skipped += 1;
         continue;
       }
-      form.items.push({ provider_id: providerId, upstream_model: modelId });
+      form.items.push(createQueueItem(providerId, modelId));
       existing.add(key);
       added += 1;
     }
@@ -255,11 +345,31 @@ onMounted(refresh);
           <span class="pb-1 text-xs text-slate-500">按供应商 + 模型名去重，仅修改当前表单。</span>
         </div>
         <p v-if="bulkMessage" class="text-sm text-emerald-700">{{ bulkMessage }}</p>
+        <p class="text-xs text-slate-500">可拖动左侧手柄调整故障转移优先级；上移/下移仍可用。顺序保存前仅作用于当前表单。</p>
         <div
           v-for="(item, index) in form.items"
-          :key="index"
-          class="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 p-3"
+          :key="item.uid"
+          class="flex flex-wrap items-center gap-2 rounded-lg border p-3 transition"
+          :class="
+            dragOverIndex === index
+              ? 'border-cyan-400 bg-cyan-50'
+              : dragFromIndex === index
+                ? 'border-slate-300 bg-slate-50 opacity-80'
+                : 'border-slate-200 bg-white'
+          "
+          @dragover="onDragOver(index, $event)"
+          @drop="onDrop(index, $event)"
         >
+          <button
+            type="button"
+            class="cursor-grab select-none rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-500 active:cursor-grabbing"
+            title="拖动排序"
+            draggable="true"
+            @dragstart="onDragStart(index, $event)"
+            @dragend="onDragEnd"
+          >
+            ⋮⋮
+          </button>
           <span class="w-8 text-xs text-slate-400">#{{ index + 1 }}</span>
           <select v-model.number="item.provider_id" class="rounded border border-slate-300 px-2 py-1 text-sm">
             <option :value="0">选择供应商</option>
