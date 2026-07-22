@@ -13,6 +13,10 @@ import {
 } from "../api/tauri";
 import HealthBadge from "../components/HealthBadge.vue";
 import { findHealth } from "../utils/health";
+import {
+  describeProviderPasteSource,
+  parseProviderPaste,
+} from "../utils/providerPaste";
 
 const items = ref<Provider[]>([]);
 const health = ref<HealthSnapshot[]>([]);
@@ -21,6 +25,7 @@ const message = ref("");
 const healthLoading = ref(false);
 const testLoading = ref(false);
 const editing = ref<Provider | null>(null);
+const pasteText = ref("");
 const form = reactive({
   name: "",
   base_url: "https://api.openai.com/v1",
@@ -55,6 +60,30 @@ function resetForm() {
   form.base_url = "https://api.openai.com/v1";
   form.api_key = "";
   form.enabled = true;
+  pasteText.value = "";
+}
+
+function applyPaste() {
+  message.value = "";
+  error.value = "";
+  const parsed = parseProviderPaste(pasteText.value);
+  if (!parsed) {
+    error.value =
+      "未能识别 Base URL 或 API Key。可粘贴 NewAPI 分享 JSON、环境变量、curl 或普通文本。";
+    return;
+  }
+  if (parsed.baseUrl) form.base_url = parsed.baseUrl;
+  if (parsed.apiKey) form.api_key = parsed.apiKey;
+  // 编辑时保留原名称；新建且名称为空时用域名建议名。
+  if (!editing.value && !form.name.trim() && parsed.suggestedName) {
+    form.name = parsed.suggestedName;
+  }
+  const sourceLabel = describeProviderPasteSource(parsed.source);
+  if (parsed.warnings.length > 0) {
+    error.value = `${sourceLabel} 部分识别：${parsed.warnings.join("；")}。请补全后保存。`;
+  } else {
+    message.value = `已从${sourceLabel}识别并填入表单，请确认后保存。`;
+  }
 }
 
 function startEdit(p: Provider) {
@@ -128,6 +157,36 @@ onMounted(refresh);
   <div class="space-y-6">
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 class="mb-4 text-base font-semibold">{{ editing ? "编辑供应商" : "新建供应商" }}</h2>
+      <div class="mb-4 rounded-lg border border-dashed border-cyan-300 bg-cyan-50/40 p-3">
+        <div class="mb-2 text-sm font-medium text-slate-700">粘贴快速添加</div>
+        <p class="mb-2 text-xs text-slate-500">
+          支持 NewAPI 分享 JSON（含
+          <code class="rounded bg-white px-1">newapi_channel_conn</code>）、环境变量、curl 与普通文本。仅本地解析，不会上传。
+        </p>
+        <textarea
+          v-model="pasteText"
+          rows="4"
+          spellcheck="false"
+          placeholder='例如：{"_type":"newapi_channel_conn","key":"sk-...","url":"https://..."}'
+          class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs"
+        />
+        <div class="mt-2 flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="rounded-lg bg-cyan-700 px-3 py-1.5 text-sm text-white hover:bg-cyan-600"
+            @click="applyPaste"
+          >
+            识别并填入表单
+          </button>
+          <button
+            type="button"
+            class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-white"
+            @click="pasteText = ''"
+          >
+            清空粘贴框
+          </button>
+        </div>
+      </div>
       <div class="grid gap-3 md:grid-cols-2">
         <label class="text-sm">
           <span class="mb-1 block text-slate-500">名称</span>
