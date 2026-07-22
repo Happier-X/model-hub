@@ -36,6 +36,7 @@ pub fn default_db_path(gateway_dir: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::Stores;
     use tempfile::tempdir;
 
     #[test]
@@ -47,5 +48,51 @@ mod tests {
             let conn = db.lock().unwrap();
             migrate(&conn).unwrap();
         }
+    }
+
+    #[test]
+    fn open_db_upgrades_legacy_groups_and_preserves_items() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("legacy.db");
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE providers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                base_url TEXT NOT NULL,
+                api_key TEXT NOT NULL DEFAULT '',
+                enabled INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE groups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE group_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+                provider_id INTEGER NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+                upstream_model TEXT NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT INTO providers (name, base_url, created_at)
+            VALUES ('legacy-provider', 'https://example.com/v1', '2024-01-01T00:00:00Z');
+            INSERT INTO groups (name, created_at)
+            VALUES ('legacy-group', '2024-01-01T00:00:00Z');
+            INSERT INTO group_items (group_id, provider_id, upstream_model, sort_order)
+            VALUES (1, 1, 'legacy-model', 0);",
+        )
+        .unwrap();
+        drop(conn);
+
+        let stores = Stores::new(open_db(&path).unwrap());
+        let groups = stores.list_groups().unwrap();
+
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].name, "legacy-group");
+        assert!(groups[0].auto_failover);
+        assert_eq!(groups[0].items.len(), 1);
+        assert_eq!(groups[0].items[0].upstream_model, "legacy-model");
     }
 }

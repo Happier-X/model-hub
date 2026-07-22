@@ -49,3 +49,63 @@
 ## Verification
 
 - migrate 幂等；`cargo test` 含 domain CRUD 与临时库。
+
+## 场景：为既有 SQLite 表补充字段
+
+### 1. 范围 / 触发条件
+
+当新版本查询依赖既有表中的新字段，而 `CREATE TABLE IF NOT EXISTS` 不会修改已存在的表时，必须在启动迁移中补充字段。当前示例是 `groups.auto_failover`。
+
+### 2. 签名
+
+- Rust：`fn migrate(conn: &rusqlite::Connection) -> Result<(), AppError>`
+- Rust：`fn ensure_group_auto_failover(conn: &rusqlite::Connection) -> Result<(), AppError>`
+- SQLite：`ALTER TABLE groups ADD COLUMN auto_failover INTEGER NOT NULL DEFAULT 1`
+
+### 3. 契约
+
+- 迁移先用 `PRAGMA table_info(groups)` 检查列名，再决定是否执行 `ALTER TABLE`。
+- 缺列时新增 `INTEGER NOT NULL DEFAULT 1`；SQLite 会为既有行提供默认值 `1`。
+- 已有列时不得执行重复添加，也不得更新既有值。
+- 迁移不得重建或删除 `groups`、`group_items`，不得覆盖既有业务数据。
+- 迁移重复执行必须成功。
+
+### 4. 校验与错误矩阵
+
+| 条件 | 行为 |
+|------|------|
+| `groups` 缺少 `auto_failover` | 添加列，既有行读取为 `1` |
+| `groups` 已有 `auto_failover` | 跳过添加，保留所有值 |
+| `PRAGMA table_info` 或读取字段失败 | 返回 `AppError::Database` |
+| `ALTER TABLE` 失败 | 返回 `AppError::Database` |
+| 重复执行迁移 | 成功且不产生重复列 |
+
+### 5. 正常 / 基线 / 异常案例
+
+- 正常：旧表有分组和条目但缺列，`open_db` 后可查询，默认 `auto_failover=1`，条目仍存在。
+- 基线：新表首次创建并重复 `migrate`，两次均成功。
+- 异常：旧表已有 `auto_failover=0`，迁移后仍为 `0`；禁止用默认值更新覆盖它。
+
+### 6. 必要测试
+
+- 迁移单测：旧 `groups` 缺列时添加列、保留分组、默认值为 `1`、重复迁移成功。
+- 迁移单测：已有 `auto_failover=0` 时重复迁移不改变值。
+- 数据库集成单测：通过 `open_db` 升级旧库后，`list_groups` 可读且 `group_items` 数量与内容保持不变。
+
+### 7. 错误与正确做法
+
+#### 错误
+
+```sql
+CREATE TABLE IF NOT EXISTS groups (... auto_failover ...);
+```
+
+它不会为已经存在的旧表添加新列；直接查询新列可能产生 `no such column`。
+
+#### 正确
+
+```text
+PRAGMA table_info(groups) → 不存在时 ALTER TABLE ADD COLUMN
+```
+
+只做一次结构性补充，依靠列默认值填充旧行，并用回归测试验证数据保留与幂等性。
