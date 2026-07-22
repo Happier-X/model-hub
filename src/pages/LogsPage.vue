@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import {
   clearLogs,
   extractInvokeError,
@@ -22,6 +22,9 @@ const failoverOnly = ref(false);
 const loading = ref(false);
 const error = ref("");
 const message = ref("");
+const autoRefresh = ref(true);
+const AUTO_REFRESH_MS = 3_000;
+let refreshTimer: ReturnType<typeof setInterval> | undefined;
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value) || 1));
 
@@ -31,6 +34,8 @@ function formatTime(unix: number) {
 }
 
 async function refresh() {
+  // 定时器与手动操作撞车时跳过，防止 invoke 重叠及旧响应覆盖新响应。
+  if (loading.value) return;
   loading.value = true;
   try {
     const result = await listLogs({
@@ -96,7 +101,28 @@ async function purgeExpired() {
   }
 }
 
-onMounted(refresh);
+function startAutoRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(() => {
+    if (autoRefresh.value && !document.hidden) void refresh();
+  }, AUTO_REFRESH_MS);
+}
+
+function toggleAutoRefresh() {
+  autoRefresh.value = !autoRefresh.value;
+  message.value = autoRefresh.value ? "已恢复每 3 秒自动刷新" : "已暂停自动刷新";
+  if (autoRefresh.value) void refresh();
+}
+
+onMounted(async () => {
+  await refresh();
+  startAutoRefresh();
+});
+
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = undefined;
+});
 </script>
 
 <template>
@@ -154,6 +180,18 @@ onMounted(refresh);
           @click="refresh"
         >
           刷新
+        </button>
+        <button
+          type="button"
+          class="rounded-lg border px-4 py-2 text-sm"
+          :class="
+            autoRefresh
+              ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+              : 'border-slate-300 bg-white text-slate-600'
+          "
+          @click="toggleAutoRefresh"
+        >
+          {{ autoRefresh ? "自动刷新：3 秒" : "自动刷新：已暂停" }}
         </button>
         <button
           type="button"
