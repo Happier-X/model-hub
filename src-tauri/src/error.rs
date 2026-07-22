@@ -32,8 +32,16 @@ pub enum AppError {
     InvalidPort,
     #[error("代理正在切换状态，请稍候再修改监听端口")]
     PortChangeWhileActive,
-    #[error("端口 {port} 已被占用。请修改监听端口后保存；应用不会自动结束占用端口的进程。")]
+    #[error("端口 {port} 已被占用。应用会自动尝试后续端口；若全部失败请手动修改监听端口。不会结束占用端口的进程。")]
     PortInUse { port: u16 },
+    #[error(
+        "端口 {preferred} 起连续 {attempts} 个端口均不可用（试到 {last_tried}）。请手动指定可用端口后保存；不会结束占用进程。"
+    )]
+    NoAvailablePort {
+        preferred: u16,
+        attempts: u16,
+        last_tried: u16,
+    },
     #[error("代理启动失败：{0}")]
     ProxyStart(String),
     #[error("数据库错误：{0}")]
@@ -62,6 +70,7 @@ impl AppError {
             Self::InvalidPort => "PROXY_INVALID_PORT",
             Self::PortChangeWhileActive => "PROXY_PORT_CHANGE_BLOCKED",
             Self::PortInUse { .. } => "PROXY_PORT_IN_USE",
+            Self::NoAvailablePort { .. } => "PROXY_NO_AVAILABLE_PORT",
             Self::ProxyStart(_) => "PROXY_START_FAILED",
             Self::Database(_) => "DATABASE_ERROR",
             Self::Business(_) => "BUSINESS_ERROR",

@@ -59,7 +59,8 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("legacy.db");
         let conn = Connection::open(&path).unwrap();
-        conn.execute_batch(
+        let recent_ts = chrono::Utc::now().timestamp() - 3600;
+        conn.execute_batch(&format!(
             "CREATE TABLE providers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
@@ -118,10 +119,11 @@ mod tests {
                 (time, group_name, provider_name, upstream_model, status_code,
                  use_time_ms, error, failover_from, failover_to, failover_reason)
             VALUES
-                (1704153600, 'legacy-group', 'legacy-provider', 'legacy-model', 503,
+                -- time 用近期秒级时间戳，避免 list_logs 默认 30 天保留策略清掉测试行
+                ({recent_ts}, 'legacy-group', 'legacy-provider', 'legacy-model', 503,
                  321, 'upstream unavailable', 'legacy-provider', 'backup-provider',
-                 'server error');",
-        )
+                 'server error');"
+        ))
         .unwrap();
         drop(conn);
 

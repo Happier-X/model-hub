@@ -19,6 +19,8 @@ export interface ProxyStatus {
   last_error: string | null;
   base_url: string;
   data_dir: string;
+  /** 端口被占用后自动改口时的中文说明 */
+  port_note?: string | null;
 }
 
 export interface Provider {

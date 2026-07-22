@@ -33,7 +33,7 @@ cargo check
 ## Review Checklist
 
 - [ ] 数据目录可发现
-- [ ] 代理启停与 Base URL
+- [ ] 代理启停与 Base URL；首选端口占用时自动改口并持久化
 - [ ] 无密钥进日志
 - [ ] 默认只监听本机
 - [ ] `/v1` 无 Key 可访问；错误 Key 拒绝

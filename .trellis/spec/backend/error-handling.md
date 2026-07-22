@@ -10,7 +10,7 @@
 |----|------|
 | Rust 壳 / IPC | `Result` + `InvokeError`；前端 toast 展示 message |
 | 内嵌代理 HTTP | JSON / 透传上游状态；携带无效客户端 Key 时 401（无 Key 本机默认可放行） |
-| 端口占用 / 绑定失败 | `last_error` 可行动文案 |
+| 端口占用 / 绑定失败 | 启动时从首选端口起最多扫描 50 个可用端口并自动改口写入 `shell.json`；仍失败则 `NoAvailablePort` / `last_error` 可行动文案；**不**结束占用进程 |
 
 ---
 

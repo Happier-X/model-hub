@@ -34,8 +34,12 @@ pub fn run() {
                 .map(|c| c.gateway_port)
                 .unwrap_or(settings::DEFAULT_PORT);
 
-            let proxy = ProxyHandle::new(app_paths.gateway_dir.clone(), port)
-                .map_err(|e| Box::<dyn std::error::Error>::from(e.to_string()))?;
+            let proxy = ProxyHandle::new_with_config_dir(
+                app_paths.gateway_dir.clone(),
+                port,
+                Some(std::path::PathBuf::from(&app_paths.config_dir)),
+            )
+            .map_err(|e| Box::<dyn std::error::Error>::from(e.to_string()))?;
 
             // 打开应用即尝试启动内嵌代理；失败写入 last_error，不阻止窗口。
             if let Err(err) = proxy.start() {

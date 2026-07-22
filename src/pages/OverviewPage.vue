@@ -188,6 +188,9 @@ async function refresh() {
   try {
     status.value = await proxyStatus();
     portInput.value = status.value.port;
+    if (status.value.port_note) {
+      message.value = status.value.port_note;
+    }
     paths.value = await getPaths();
     try {
       const prefs = await getShellPrefs();
@@ -207,7 +210,8 @@ async function start() {
   message.value = "";
   try {
     status.value = await proxyStart();
-    message.value = "代理已启动";
+    portInput.value = status.value.port;
+    message.value = status.value.port_note || "代理已启动";
   } catch (e) {
     error.value = extractInvokeError(e);
   } finally {
@@ -233,7 +237,9 @@ async function savePort() {
   message.value = "";
   try {
     status.value = await proxySetPort(portInput.value);
-    message.value = `端口已更新为 ${portInput.value}`;
+    portInput.value = status.value.port;
+    message.value =
+      status.value.port_note || `端口已更新为 ${status.value.port}`;
   } catch (e) {
     error.value = extractInvokeError(e);
   } finally {
@@ -393,9 +399,18 @@ onMounted(async () => {
         </button>
       </div>
 
-      <p v-if="message" class="mt-3 text-sm text-emerald-700">{{ message }}</p>
+      <p v-if="message" class="mt-3 whitespace-pre-line text-sm text-emerald-700">{{ message }}</p>
+      <p
+        v-if="status?.port_note && status.port_note !== message"
+        class="mt-2 text-sm text-amber-800"
+      >
+        {{ status.port_note }}
+      </p>
       <p v-if="error || status?.last_error" class="mt-3 text-sm text-rose-600">
         {{ error || status?.last_error }}
+      </p>
+      <p class="mt-2 text-xs text-slate-500">
+        若首选端口被占用，会自动向后寻找可用端口并写入配置，不会结束占用进程。改口后若用 Pi，请重新「一键配置到 Pi」。
       </p>
     </section>
 
