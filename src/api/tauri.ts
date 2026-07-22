@@ -89,6 +89,15 @@ export interface LogPage {
   page_size: number;
 }
 
+export interface RequestStats {
+  total: number;
+  success: number;
+  failure: number;
+  failover: number;
+  day_start_unix: number;
+  day_end_unix: number;
+}
+
 export interface HealthSnapshot {
   provider_id: number;
   provider_name: string;
@@ -179,6 +188,7 @@ export const listLogs = (query: LogQuery = {}) =>
     },
   });
 export const clearLogs = () => invoke<void>("clear_logs");
+export const getRequestStats = () => invoke<RequestStats>("get_request_stats");
 export const listHealth = () => invoke<HealthSnapshot[]>("list_health");
 
 /** 浏览器 / 非 Tauri 壳内无法使用更新与进程插件 */

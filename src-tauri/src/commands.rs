@@ -216,6 +216,13 @@ pub fn clear_logs(proxy: State<'_, ProxyHandle>) -> Result<(), InvokeError> {
     stores(&proxy)?.clear_logs().map_err(Into::into)
 }
 
+#[tauri::command]
+pub fn get_request_stats(
+    proxy: State<'_, ProxyHandle>,
+) -> Result<crate::domain::log::RequestStats, InvokeError> {
+    stores(&proxy)?.request_stats_today().map_err(Into::into)
+}
+
 #[derive(Debug, Serialize)]
 pub struct HealthSnapshot {
     pub provider_id: i64,

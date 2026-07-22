@@ -6,6 +6,7 @@ import {
   extractInvokeError,
   getAppVersion,
   getPaths,
+  getRequestStats,
   getShellPrefs,
   proxySetPort,
   proxyStart,
@@ -16,6 +17,7 @@ import {
   type AppPaths,
   type DownloadEvent,
   type ProxyStatus,
+  type RequestStats,
   type Update,
 } from "../api/tauri";
 
@@ -37,6 +39,8 @@ const downloadLoaded = ref(0);
 const downloadTotal = ref<number | null>(null);
 const checkUpdateOnStartup = ref(false);
 const prefsLoading = ref(false);
+const stats = ref<RequestStats | null>(null);
+const statsError = ref("");
 
 const updateBusy = computed(
   () =>
@@ -171,6 +175,15 @@ function cancelPendingUpdate() {
   updateError.value = "";
 }
 
+async function refreshStats() {
+  try {
+    stats.value = await getRequestStats();
+    statsError.value = "";
+  } catch (e) {
+    statsError.value = extractInvokeError(e);
+  }
+}
+
 async function refresh() {
   try {
     status.value = await proxyStatus();
@@ -182,6 +195,7 @@ async function refresh() {
     } catch {
       /* 偏好读取失败不阻塞代理状态 */
     }
+    await refreshStats();
     error.value = "";
   } catch (e) {
     error.value = extractInvokeError(e);
@@ -251,6 +265,47 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-6">
+    <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-base font-semibold">今日请求（本地日）</h2>
+        <button
+          type="button"
+          class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
+          @click="refreshStats"
+        >
+          刷新统计
+        </button>
+      </div>
+      <p class="mb-3 text-xs text-slate-500">
+        基于请求日志；成功 = 2xx 且无 error；失败 = 状态 ≥400 或有 error；故障转移 = 记录了换源。
+      </p>
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="rounded-lg bg-slate-50 px-3 py-3">
+          <div class="text-xs text-slate-500">总请求</div>
+          <div class="mt-1 text-2xl font-semibold tabular-nums">{{ stats?.total ?? 0 }}</div>
+        </div>
+        <div class="rounded-lg bg-emerald-50 px-3 py-3">
+          <div class="text-xs text-emerald-700">成功</div>
+          <div class="mt-1 text-2xl font-semibold tabular-nums text-emerald-800">
+            {{ stats?.success ?? 0 }}
+          </div>
+        </div>
+        <div class="rounded-lg bg-rose-50 px-3 py-3">
+          <div class="text-xs text-rose-700">失败</div>
+          <div class="mt-1 text-2xl font-semibold tabular-nums text-rose-800">
+            {{ stats?.failure ?? 0 }}
+          </div>
+        </div>
+        <div class="rounded-lg bg-amber-50 px-3 py-3">
+          <div class="text-xs text-amber-800">故障转移</div>
+          <div class="mt-1 text-2xl font-semibold tabular-nums text-amber-900">
+            {{ stats?.failover ?? 0 }}
+          </div>
+        </div>
+      </div>
+      <p v-if="statsError" class="mt-3 text-sm text-rose-600">{{ statsError }}</p>
+    </section>
+
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 class="mb-4 text-base font-semibold">本地代理</h2>
       <div class="grid gap-3 text-sm md:grid-cols-2">

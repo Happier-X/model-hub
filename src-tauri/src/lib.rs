@@ -85,6 +85,7 @@ pub fn run() {
             commands::delete_api_key,
             commands::list_logs,
             commands::clear_logs,
+            commands::get_request_stats,
             commands::list_health,
         ])
         .build(tauri::generate_context!())

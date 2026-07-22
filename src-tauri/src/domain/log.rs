@@ -232,6 +232,69 @@ impl Stores {
             Ok(())
         })
     }
+
+    /// 本地自然日 00:00（含）至次日 00:00（不含）的请求聚合。
+    pub fn request_stats_today(&self) -> Result<RequestStats, AppError> {
+        let (start_ts, end_ts) = local_day_bounds_unix();
+        self.request_stats_between(start_ts, end_ts)
+    }
+
+    pub fn request_stats_between(&self, start_ts: i64, end_ts: i64) -> Result<RequestStats, AppError> {
+        self.with_conn(|conn| {
+            conn.query_row(
+                "SELECT
+                    COUNT(*) AS total,
+                    COALESCE(SUM(CASE WHEN status_code BETWEEN 200 AND 299 AND (error IS NULL OR length(error) = 0) THEN 1 ELSE 0 END), 0) AS success,
+                    COALESCE(SUM(CASE WHEN status_code >= 400 OR (error IS NOT NULL AND length(error) > 0) THEN 1 ELSE 0 END), 0) AS failure,
+                    COALESCE(SUM(CASE WHEN (failover_from IS NOT NULL AND length(failover_from) > 0)
+                        OR (failover_to IS NOT NULL AND length(failover_to) > 0) THEN 1 ELSE 0 END), 0) AS failover
+                 FROM request_logs
+                 WHERE time >= ?1 AND time < ?2",
+                params![start_ts, end_ts],
+                |row| {
+                    Ok(RequestStats {
+                        total: row.get(0)?,
+                        success: row.get(1)?,
+                        failure: row.get(2)?,
+                        failover: row.get(3)?,
+                        day_start_unix: start_ts,
+                        day_end_unix: end_ts,
+                    })
+                },
+            )
+            .map_err(|e| AppError::Database(e.to_string()))
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RequestStats {
+    pub total: i64,
+    pub success: i64,
+    pub failure: i64,
+    pub failover: i64,
+    /// 统计窗口起点（本地日 00:00，unix 秒）
+    pub day_start_unix: i64,
+    pub day_end_unix: i64,
+}
+
+fn local_day_bounds_unix() -> (i64, i64) {
+    use chrono::{Local, TimeZone};
+    let today = Local::now().date_naive();
+    let tomorrow = today.succ_opt().expect("date overflow");
+    let start = today.and_hms_opt(0, 0, 0).expect("midnight");
+    let end = tomorrow.and_hms_opt(0, 0, 0).expect("midnight");
+    let start_ts = Local
+        .from_local_datetime(&start)
+        .single()
+        .map(|dt| dt.timestamp())
+        .unwrap_or_else(|| start.and_utc().timestamp());
+    let end_ts = Local
+        .from_local_datetime(&end)
+        .single()
+        .map(|dt| dt.timestamp())
+        .unwrap_or_else(|| end.and_utc().timestamp());
+    (start_ts, end_ts)
 }
 
 #[cfg(test)]
@@ -351,5 +414,48 @@ mod tests {
             .unwrap();
         assert_eq!(page.total, 1);
         assert_eq!(page.items[0].failover_from, "a");
+    }
+
+    fn insert_at(stores: &Stores, time: i64, status: i64, err: &str, fo_from: &str, fo_to: &str) {
+        stores
+            .with_conn(|conn| {
+                conn.execute(
+                    "INSERT INTO request_logs
+                     (time, group_name, provider_name, upstream_model, status_code, use_time_ms, error, failover_from, failover_to, failover_reason)
+                     VALUES (?1, 'g', 'p', 'm', ?2, 1, ?3, ?4, ?5, '')",
+                    params![time, status, err, fo_from, fo_to],
+                )
+                .map_err(|e| AppError::Database(e.to_string()))?;
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn request_stats_classifies_and_windows() {
+        let (_dir, stores) = setup();
+        let (start, end) = super::local_day_bounds_unix();
+        // 窗口内：成功、失败、故障转移成功
+        insert_at(&stores, start + 10, 200, "", "", "");
+        insert_at(&stores, start + 20, 502, "bad", "", "");
+        insert_at(&stores, start + 30, 200, "", "a", "b");
+        // 窗口外：昨日
+        insert_at(&stores, start - 100, 200, "", "", "");
+        // 窗口外：明日
+        insert_at(&stores, end + 10, 500, "x", "", "");
+
+        let stats = stores.request_stats_between(start, end).unwrap();
+        assert_eq!(stats.total, 3);
+        assert_eq!(stats.success, 2); // 两条 200 且无 error
+        assert_eq!(stats.failure, 1);
+        assert_eq!(stats.failover, 1);
+        assert_eq!(stats.day_start_unix, start);
+        assert_eq!(stats.day_end_unix, end);
+
+        let empty = stores.request_stats_between(end, end + 1).unwrap();
+        assert_eq!(empty.total, 0);
+        assert_eq!(empty.success, 0);
+        assert_eq!(empty.failure, 0);
+        assert_eq!(empty.failover, 0);
     }
 }
