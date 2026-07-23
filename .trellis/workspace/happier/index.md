@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 6
+- **Total Sessions**: 7
 - **Last Active**: 2026-07-23
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~259 | Active |
+| `journal-1.md` | ~292 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 7 | 2026-07-23 | 修复编辑分组误创建重复分组 | `c84dff7` | `master` |
 | 6 | 2026-07-23 | 修复退出后端口占用与单实例 | `98bbd10` | `master` |
 | 5 | 2026-07-23 | 禁止对用户上游测活 | `7cbe744` | `master` |
 | 4 | 2026-07-23 | 移除客户端 API Key 管理与鉴权 | `f0d8adc` | `master` |

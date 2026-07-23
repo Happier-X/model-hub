@@ -257,3 +257,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: 修复编辑分组误创建重复分组
+
+**Date**: 2026-07-23
+**Task**: 修复编辑分组误创建重复分组
+**Branch**: `master`
+
+### Summary
+
+使用稳定的编辑分组 ID 隔离创建与更新路径，增加防重复提交及前后端回归测试，并同步前端组件规范。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c84dff7` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
