@@ -14,7 +14,7 @@
 8. 分组队列「按模型能力排序」只可修改当前表单，不得自动保存；支持本地启发式 / 外部通用 / 外部编码；外部分需标注 OpenRouter 来源与缓存状态，未匹配回退本地启发式；未知模型稳定排后，用户仍可拖拽微调。合同见 [model-queue-sort.md](./model-queue-sort.md)。
 9. **配置到 Pi**：入口在**分组页**列表行「配置到 Pi」；调用 `exportGroupToPiAgent(groupId)`；**无 Key UI / 无 Key 入参**；模型名=分组名，写入本机 `~/.pi/agent/models.json` 的单一 `providers.model-hub`（按 id upsert）。
 10. 信息架构无「API 密钥 / 客户端 Key」页面与导航。
-11. **上游访问**：禁止供应商页「测试连接」及任何自动/后台对用户上游的测活；供应商页健康状态只读展示，不提供手动刷新入口；分组页「拉取模型」**仅**用户点击触发，不得在 `onMounted`/保存时自动拉取。健康展示只读熔断内存（`listHealth`），不打上游。合同见 backend [upstream-access.md](../backend/upstream-access.md)。
+11. **上游访问**：禁止供应商页「测试连接」及任何自动/后台对用户上游的测活；供应商页与分组页健康状态只读展示，不提供手动刷新入口；分组页「拉取模型」**仅**用户点击触发，不得在 `onMounted`/保存时自动拉取。健康展示只读熔断内存（`listHealth`），不打上游。合同见 backend [upstream-access.md](../backend/upstream-access.md)。
 
 ## 状态与生命周期
 

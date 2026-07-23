@@ -36,7 +36,6 @@ const providers = ref<Provider[]>([]);
 const health = ref<HealthSnapshot[]>([]);
 const error = ref("");
 const message = ref("");
-const healthLoading = ref(false);
 /** 正在导出到 Pi 的分组 id */
 const exportingPiId = ref<number | null>(null);
 /** 稳定编辑目标 id；null 表示新建态。不得依赖列表对象引用。 */
@@ -161,18 +160,6 @@ async function refresh() {
     error.value = "";
   } catch (e) {
     error.value = extractInvokeError(e);
-  }
-}
-
-async function refreshHealth() {
-  healthLoading.value = true;
-  try {
-    health.value = await listHealth();
-    error.value = "";
-  } catch (e) {
-    error.value = extractInvokeError(e);
-  } finally {
-    healthLoading.value = false;
   }
 }
 
@@ -732,14 +719,6 @@ onMounted(async () => {
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h2 class="text-base font-semibold">分组列表</h2>
-        <button
-          type="button"
-          class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
-          :disabled="healthLoading"
-          @click="refreshHealth"
-        >
-          {{ healthLoading ? "刷新中…" : "刷新健康" }}
-        </button>
       </div>
       <p class="mb-3 text-xs text-slate-500">
         「配置到 Pi」会将该分组名写入本机
