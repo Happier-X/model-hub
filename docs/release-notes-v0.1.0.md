@@ -8,7 +8,7 @@
 - 分组 = 客户端请求中的 `model`，组内有序故障转移队列（支持拖拽排序、批量添加上游模型）
 - 默认熔断（连续失败阈值 / 恢复等待 / 半开单探测）
 - `/v1/*` 客户端 API Key **可选**（本机默认可不带；携带错误/停用 Key 仍 401）
-- Pi 一键导出：API Key 页写入 `~/.pi/agent/models.json` 的 `model-hub` 供应商；Key 可留空（占位 `model-hub` 与无 Key 同等放行）
+- Pi 一键导出：写入 `~/.pi/agent/models.json` 的 `model-hub` 供应商（历史入口在 API Key 页；现已迁至分组页按分组配置，固定占位 Key）
 - `GET /v1/models`、`POST /v1/chat/completions`（非流式 + SSE）
 - 管理台：概览启停与端口/今日请求统计、供应商/分组/Key/日志筛选分页、健康状态与连续失败次数、可选启动检查更新
 - 旧版 SQLite 兼容：对 `groups` / `group_items` / `api_keys` / `request_logs` 缺列做幂等 `ALTER` + 必要双写，不重建丢数据
@@ -72,8 +72,8 @@ TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 
 ## 本机对接 Pi Agent（可选）
 
-1. 在「API 密钥」页点击 **一键配置到 Pi**（Key 可留空）。
-2. 配置写入 `%USERPROFILE%\.pi\agent\models.json` 的 `providers.model-hub`（合并，不覆盖其它供应商）。
+1. 在「分组」页对目标分组点击 **配置到 Pi**（无需客户端 Key）。
+2. 配置按分组名 upsert 写入 `%USERPROFILE%\.pi\agent\models.json` 的 `providers.model-hub`（保留其它供应商与其它模型）。
 3. 在 Pi 中 `/model` 选择 `model-hub/<分组名>`。
 4. 修改后须**完全重启** Model Hub 进程再验证（避免旧二进制仍强制 Key）。
 

@@ -210,12 +210,12 @@ export interface ExportToPiResult {
   provider_id: string;
   model_count: number;
   base_url: string;
-  used_placeholder_key: boolean;
+  group_name: string;
 }
 
-/** 将分组写入 ~/.pi/agent/models.json；api_key 可空 */
-export const exportToPiAgent = (apiKey?: string) =>
-  invoke<ExportToPiResult>("export_to_pi_agent", { api_key: apiKey ?? null });
+/** 将指定分组 upsert 到 ~/.pi/agent/models.json 的 model-hub（固定占位 Key，无 Key 入参） */
+export const exportGroupToPiAgent = (groupId: number) =>
+  invoke<ExportToPiResult>("export_group_to_pi_agent", { group_id: groupId });
 export const listHealth = () => invoke<HealthSnapshot[]>("list_health");
 
 /** OpenRouter 公共榜单模型（白名单字段）。 */

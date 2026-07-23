@@ -410,7 +410,7 @@ onMounted(async () => {
         {{ error || status?.last_error }}
       </p>
       <p class="mt-2 text-xs text-slate-500">
-        若首选端口被占用，会自动向后寻找可用端口并写入配置，不会结束占用进程。改口后若用 Pi，请重新「一键配置到 Pi」。
+        若首选端口被占用，会自动向后寻找可用端口并写入配置，不会结束占用进程。改口后若用 Pi，请到「分组」页重新「配置到 Pi」。
       </p>
     </section>
 

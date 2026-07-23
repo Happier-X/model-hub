@@ -38,7 +38,7 @@ cargo check
 1. 配置供应商与分组队列（分组名 = 客户端 `model`）
 2. （可选）在「API 密钥」页创建客户端 Key；本机默认可不带 Key
 3. 客户端 Base URL 使用概览页展示的地址，例如 `http://127.0.0.1:8080`（OpenAI SDK 用 `.../v1`）
-4. 对接 Pi：同一页「一键配置到 Pi」，写入 `~/.pi/agent/models.json` 的 `model-hub`
+4. 对接 Pi：在「分组」页对目标分组点「配置到 Pi」，按分组名 upsert 写入 `~/.pi/agent/models.json` 的 `model-hub`（无需客户端 Key）
 
 无 Key：
 

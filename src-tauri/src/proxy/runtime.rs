@@ -180,7 +180,7 @@ impl ProxyHandle {
         let chosen = bind.port;
         let port_note = if chosen != preferred {
             Some(format!(
-                "端口 {preferred} 已被占用，已自动改用 {chosen} 并写入配置。不会结束占用进程；若已导出 Pi，请在 API Key 页重新「一键配置到 Pi」。"
+                "端口 {preferred} 已被占用，已自动改用 {chosen} 并写入配置。不会结束占用进程；若已导出 Pi，请在分组页重新「配置到 Pi」。"
             ))
         } else {
             None

@@ -12,6 +12,7 @@
 6. 表单中的 Key 输入使用密码类型；客户端 Key 仅在创建成功后展示一次，列表只展示脱敏值。
 7. 应用无登录页，首屏直接进入主布局。
 8. 分组队列「按模型能力排序」只可修改当前表单，不得自动保存；支持本地启发式 / 外部通用 / 外部编码；外部分需标注 OpenRouter 来源与缓存状态，未匹配回退本地启发式；未知模型稳定排后，用户仍可拖拽微调。合同见 [model-queue-sort.md](./model-queue-sort.md)。
+9. **配置到 Pi**：入口在**分组页**列表行「配置到 Pi」；调用 `exportGroupToPiAgent(groupId)`；**无 Key UI / 无 Key 入参**；模型名=分组名，写入本机 `~/.pi/agent/models.json` 的单一 `providers.model-hub`（按 id upsert）。API 密钥页不提供全局导出入口。
 
 ## 状态与生命周期
 

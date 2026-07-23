@@ -92,7 +92,7 @@ pub fn run() {
             commands::clear_logs,
             commands::purge_expired_logs,
             commands::get_request_stats,
-            commands::export_to_pi_agent,
+            commands::export_group_to_pi_agent,
             commands::get_model_leaderboard,
             commands::list_health,
         ])

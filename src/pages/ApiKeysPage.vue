@@ -3,7 +3,6 @@ import { onMounted, reactive, ref } from "vue";
 import {
   createApiKey,
   deleteApiKey,
-  exportToPiAgent,
   extractInvokeError,
   listApiKeys,
   updateApiKey,
@@ -12,10 +11,7 @@ import {
 
 const items = ref<ApiKeyPublic[]>([]);
 const error = ref("");
-const message = ref("");
 const createdRaw = ref("");
-const piKeyInput = ref("");
-const exporting = ref(false);
 const form = reactive({ name: "", enabled: true });
 
 async function refresh() {
@@ -63,22 +59,6 @@ async function copyRaw() {
   await navigator.clipboard.writeText(createdRaw.value);
 }
 
-async function exportPi() {
-  exporting.value = true;
-  message.value = "";
-  try {
-    // 若刚创建过 Key 且未单独填写，优先用明文
-    const key = piKeyInput.value.trim() || createdRaw.value.trim();
-    const result = await exportToPiAgent(key || undefined);
-    error.value = "";
-    message.value = `已写入 Pi 配置：${result.path}\n供应商 ${result.provider_id}，共 ${result.model_count} 个模型，Base URL ${result.base_url}${result.used_placeholder_key ? "（未填 Key，已写占位 apiKey）" : ""}。请在 Pi 中打开 /model 选择 model-hub/<分组名>。`;
-  } catch (e) {
-    error.value = extractInvokeError(e);
-  } finally {
-    exporting.value = false;
-  }
-}
-
 onMounted(refresh);
 </script>
 
@@ -107,38 +87,6 @@ onMounted(refresh);
         </div>
       </div>
       <p v-if="error" class="mt-3 text-sm text-rose-600">{{ error }}</p>
-    </section>
-
-    <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 class="mb-2 text-base font-semibold">配置到 Pi Agent</h2>
-      <p class="mb-3 text-sm text-slate-500">
-        一键将当前代理地址与全部分组写入本机
-        <code class="rounded bg-slate-100 px-1 text-xs">~/.pi/agent/models.json</code>
-        的
-        <code class="rounded bg-slate-100 px-1 text-xs">model-hub</code>
-        供应商。Key 可留空：本机代理默认允许无 Key 访问。
-      </p>
-      <div class="flex flex-wrap items-end gap-3">
-        <label class="text-sm">
-          <span class="mb-1 block text-slate-500">客户端 Key（可选）</span>
-          <input
-            v-model="piKeyInput"
-            type="password"
-            autocomplete="off"
-            placeholder="可留空；有刚创建的明文会自动使用"
-            class="w-72 rounded-lg border border-slate-300 px-3 py-2"
-          />
-        </label>
-        <button
-          type="button"
-          class="rounded-lg bg-cyan-700 px-4 py-2 text-sm text-white hover:bg-cyan-600 disabled:opacity-50"
-          :disabled="exporting"
-          @click="exportPi"
-        >
-          {{ exporting ? "写入中…" : "一键配置到 Pi" }}
-        </button>
-      </div>
-      <p v-if="message" class="mt-3 whitespace-pre-line text-sm text-emerald-700">{{ message }}</p>
     </section>
 
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">

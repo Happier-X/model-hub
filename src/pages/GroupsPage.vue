@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from "vue";
 import {
   createGroup,
   deleteGroup,
+  exportGroupToPiAgent,
   extractInvokeError,
   fetchProviderModels,
   getModelLeaderboard,
@@ -32,7 +33,10 @@ const groups = ref<Group[]>([]);
 const providers = ref<Provider[]>([]);
 const health = ref<HealthSnapshot[]>([]);
 const error = ref("");
+const message = ref("");
 const healthLoading = ref(false);
+/** 正在导出到 Pi 的分组 id */
+const exportingPiId = ref<number | null>(null);
 const editing = ref<Group | null>(null);
 /** 每条队列条目拉取到的上游模型 id 列表 */
 const modelOptions = ref<Record<number, string[]>>({});
@@ -469,6 +473,20 @@ async function remove(id: number) {
   }
 }
 
+async function exportToPi(groupId: number) {
+  exportingPiId.value = groupId;
+  message.value = "";
+  try {
+    const result = await exportGroupToPiAgent(groupId);
+    error.value = "";
+    message.value = `已写入 Pi 配置：${result.path}\n模型 ${result.provider_id}/${result.group_name}（当前 model-hub 共 ${result.model_count} 个模型），Base URL ${result.base_url}。请在 Pi 中打开 /model 选择 model-hub/${result.group_name}。`;
+  } catch (e) {
+    error.value = extractInvokeError(e);
+  } finally {
+    exportingPiId.value = null;
+  }
+}
+
 onMounted(async () => {
   await refresh();
 });
@@ -670,6 +688,15 @@ onMounted(async () => {
           {{ healthLoading ? "刷新中…" : "刷新健康" }}
         </button>
       </div>
+      <p class="mb-3 text-xs text-slate-500">
+        「配置到 Pi」会将该分组名写入本机
+        <code class="rounded bg-slate-100 px-1">~/.pi/agent/models.json</code>
+        的
+        <code class="rounded bg-slate-100 px-1">model-hub</code>
+        （固定占位 Key，无需客户端密钥）。
+      </p>
+      <p v-if="message" class="mb-3 whitespace-pre-line text-sm text-emerald-700">{{ message }}</p>
+      <p v-if="error" class="mb-3 text-sm text-rose-600">{{ error }}</p>
       <div v-if="groups.length === 0" class="text-sm text-slate-500">暂无分组</div>
       <div v-for="g in groups" :key="g.id" class="mb-4 rounded-lg border border-slate-100 p-4 last:mb-0">
         <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -680,6 +707,14 @@ onMounted(async () => {
             </span>
           </div>
           <div class="space-x-2 text-sm">
+            <button
+              type="button"
+              class="text-cyan-700 hover:underline disabled:opacity-50"
+              :disabled="exportingPiId === g.id"
+              @click="exportToPi(g.id)"
+            >
+              {{ exportingPiId === g.id ? "配置中…" : "配置到 Pi" }}
+            </button>
             <button type="button" class="text-cyan-700 hover:underline" @click="startEdit(g)">编辑</button>
             <button type="button" class="text-rose-600 hover:underline" @click="remove(g.id)">删除</button>
           </div>

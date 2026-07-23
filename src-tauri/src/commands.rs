@@ -237,30 +237,38 @@ pub struct ExportToPiResult {
     pub provider_id: String,
     pub model_count: usize,
     pub base_url: String,
-    pub used_placeholder_key: bool,
+    pub group_name: String,
 }
 
-/// 将当前分组写入 `~/.pi/agent/models.json` 的 model-hub 供应商。
-/// `api_key` 可空：空则写入占位 key。
+/// 将指定分组写入 `~/.pi/agent/models.json` 的 model-hub 供应商（按分组名 upsert，固定占位 Key）。
 #[tauri::command]
-pub fn export_to_pi_agent(
+pub fn export_group_to_pi_agent(
     proxy: State<'_, ProxyHandle>,
-    api_key: Option<String>,
+    group_id: i64,
 ) -> Result<ExportToPiResult, InvokeError> {
     let status = proxy.status_snapshot().map_err(InvokeError::from)?;
     let groups = stores(&proxy)?.list_groups().map_err(InvokeError::from)?;
-    let names: Vec<String> = groups.into_iter().map(|g| g.name).collect();
-    let key = api_key.unwrap_or_default();
-    let used_placeholder = key.trim().is_empty();
+    let group = groups
+        .into_iter()
+        .find(|g| g.id == group_id)
+        .ok_or_else(|| {
+            InvokeError::from(AppError::Business(
+                "分组不存在或已删除，刷新后重试".into(),
+            ))
+        })?;
     let path = crate::pi_export::default_pi_models_path().map_err(InvokeError::from)?;
-    crate::pi_export::export_model_hub_to_path(&path, &status.base_url, &key, &names)
-        .map_err(InvokeError::from)?;
+    let model_count = crate::pi_export::upsert_model_hub_group(
+        &path,
+        &status.base_url,
+        &group.name,
+    )
+    .map_err(InvokeError::from)?;
     Ok(ExportToPiResult {
         path: path.display().to_string(),
         provider_id: crate::pi_export::PI_PROVIDER_ID.to_string(),
-        model_count: names.len(),
+        model_count,
         base_url: crate::pi_export::normalize_openai_base_url(&status.base_url),
-        used_placeholder_key: used_placeholder,
+        group_name: group.name,
     })
 }
 
