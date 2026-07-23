@@ -1,0 +1,2 @@
+{"path":".trellis/spec/frontend/component-guidelines.md","reason":"验收供应商页面不保留主动健康刷新入口，且健康展示与上游访问约束不被破坏"}
+{"path":"src/pages/ProvidersPage.vue","reason":"验收页面按钮、状态、请求和列表展示的完整删除范围"}
