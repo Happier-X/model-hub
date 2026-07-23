@@ -191,3 +191,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: 禁止对用户上游测活
+
+**Date**: 2026-07-23
+**Task**: 禁止对用户上游测活
+**Branch**: `master`
+
+### Summary
+
+移除供应商页测试连接；固化禁止自动/后台/AI 默认对用户上游测活的 code-spec；保留分组页点击拉模型、真实 Chat 转发与熔断内存健康展示。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7cbe744` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
