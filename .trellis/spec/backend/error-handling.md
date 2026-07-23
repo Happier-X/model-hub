@@ -10,7 +10,8 @@
 |----|------|
 | Rust 壳 / IPC | `Result` + `InvokeError`；前端 toast 展示 message |
 | 内嵌代理 HTTP | JSON / 透传上游状态；**不**因客户端 Key 返回 401 |
-| 端口占用 / 绑定失败 | 启动时从首选端口起最多扫描 50 个可用端口并自动改口写入 `shell.json`；仍失败则 `NoAvailablePort` / `last_error` 可行动文案；**不**结束占用进程 |
+| 端口占用 / 绑定失败 | 启动时从首选端口起最多扫描 50 个可用端口并自动改口写入 `shell.json`；仍失败则 `NoAvailablePort` / `last_error` 可行动文案；**不**结束占用进程；文案可提示意外多开时托盘「退出」旧实例 |
+| 代理停止 / 退出 | `stop` 先发 shutdown，在 `PROXY_STOP_GRACE`（默认 3s）内 await JoinHandle；**超时必须 `abort`**，禁止仅丢弃 handle 导致仍占端口；`ProxyHandle::Drop` best-effort `stop`；托盘「退出」与 `RunEvent::Exit` 均 stop |
 
 ---
 
@@ -40,3 +41,5 @@
 
 - 生产路径 `unwrap` 进程管理。
 - UI 只显示「未知错误」。
+- `stop` 超时后丢弃 JoinHandle 而不 `abort`（端口孤儿占用）。
+- 为释放端口而 kill 无关第三方进程。

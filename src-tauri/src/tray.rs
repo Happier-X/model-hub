@@ -54,7 +54,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     let _tray = TrayIconBuilder::with_id("model-hub-tray")
         .icon(icon)
-        .tooltip("Model Hub — 关闭窗口将隐藏到托盘；托盘「退出」才停止代理")
+        .tooltip("Model Hub — 关闭窗口将隐藏到托盘，代理继续运行；托盘「退出」才停止代理并释放端口")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {

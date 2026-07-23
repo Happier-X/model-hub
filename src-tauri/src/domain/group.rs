@@ -45,10 +45,7 @@ pub struct UpdateGroupPayload {
 }
 
 impl Stores {
-    fn load_items(
-        conn: &rusqlite::Connection,
-        group_id: i64,
-    ) -> Result<Vec<GroupItem>, AppError> {
+    fn load_items(conn: &rusqlite::Connection, group_id: i64) -> Result<Vec<GroupItem>, AppError> {
         let mut stmt = conn
             .prepare(
                 "SELECT gi.id, gi.provider_id, p.name, gi.upstream_model, gi.sort_order
@@ -240,8 +237,7 @@ impl Stores {
             })?;
             let id = tx.last_insert_rowid();
             Self::replace_items(&tx, id, &payload.items)?;
-            tx.commit()
-                .map_err(|e| AppError::Database(e.to_string()))?;
+            tx.commit().map_err(|e| AppError::Database(e.to_string()))?;
             Ok(id)
         })
         .and_then(|id| {
@@ -263,11 +259,7 @@ impl Stores {
             let n = tx
                 .execute(
                     "UPDATE groups SET name=?1, auto_failover=?2 WHERE id=?3",
-                    params![
-                        name,
-                        if payload.auto_failover { 1 } else { 0 },
-                        payload.id
-                    ],
+                    params![name, if payload.auto_failover { 1 } else { 0 }, payload.id],
                 )
                 .map_err(|e| {
                     if e.to_string().contains("UNIQUE") {
@@ -280,8 +272,7 @@ impl Stores {
                 return Err(AppError::Business("分组不存在".into()));
             }
             Self::replace_items(&tx, payload.id, &payload.items)?;
-            tx.commit()
-                .map_err(|e| AppError::Database(e.to_string()))?;
+            tx.commit().map_err(|e| AppError::Database(e.to_string()))?;
             Ok(())
         })?;
         self.get_group_by_name(&name)?

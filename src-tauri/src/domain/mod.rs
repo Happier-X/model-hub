@@ -17,7 +17,10 @@ impl Stores {
         Self { db }
     }
 
-    pub fn with_conn<T>(&self, f: impl FnOnce(&rusqlite::Connection) -> Result<T, AppError>) -> Result<T, AppError> {
+    pub fn with_conn<T>(
+        &self,
+        f: impl FnOnce(&rusqlite::Connection) -> Result<T, AppError>,
+    ) -> Result<T, AppError> {
         let guard = self.db.lock().map_err(|_| AppError::LockPoisoned)?;
         f(&guard)
     }

@@ -57,11 +57,7 @@ async fn list_models(State(state): State<AppState>) -> Response {
     }
 }
 
-async fn chat_completions(
-    State(state): State<AppState>,
-    Json(body): Json<Value>,
-) -> Response {
-
+async fn chat_completions(State(state): State<AppState>, Json(body): Json<Value>) -> Response {
     let group_name = body
         .get("model")
         .and_then(|v| v.as_str())
@@ -155,7 +151,11 @@ async fn chat_completions(
                 failover_to: String::new(),
                 failover_reason: String::new(),
             });
-            (status, Json(json!({"message": message, "error": {"message": message}}))).into_response()
+            (
+                status,
+                Json(json!({"message": message, "error": {"message": message}})),
+            )
+                .into_response()
         }
     }
 }

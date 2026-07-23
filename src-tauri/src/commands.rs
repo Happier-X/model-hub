@@ -223,17 +223,12 @@ pub fn export_group_to_pi_agent(
         .into_iter()
         .find(|g| g.id == group_id)
         .ok_or_else(|| {
-            InvokeError::from(AppError::Business(
-                "分组不存在或已删除，刷新后重试".into(),
-            ))
+            InvokeError::from(AppError::Business("分组不存在或已删除，刷新后重试".into()))
         })?;
     let path = crate::pi_export::default_pi_models_path().map_err(InvokeError::from)?;
-    let model_count = crate::pi_export::upsert_model_hub_group(
-        &path,
-        &status.base_url,
-        &group.name,
-    )
-    .map_err(InvokeError::from)?;
+    let model_count =
+        crate::pi_export::upsert_model_hub_group(&path, &status.base_url, &group.name)
+            .map_err(InvokeError::from)?;
     Ok(ExportToPiResult {
         path: path.display().to_string(),
         provider_id: crate::pi_export::PI_PROVIDER_ID.to_string(),

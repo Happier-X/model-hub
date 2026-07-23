@@ -94,7 +94,11 @@
 
 端口持久化：`{config_dir}/shell.json` 的 `gateway_port`。
 
-打开应用：`try` 自动 `proxy.start`；`RunEvent::Exit` 时 stop。
+打开应用：`try` 自动 `proxy.start`；`RunEvent::Exit` / 托盘「退出」时 `stop`（graceful + 超时 abort）；`ProxyHandle` Drop best-effort stop。
+
+**单实例**（桌面）：`tauri-plugin-single-instance` 在 setup（含 `proxy.start`）之前注册；第二实例通知第一实例 `show_main_window` 后退出，不启第二套代理。
+
+**关窗 vs 退出**：关窗隐藏到托盘，代理继续；仅托盘「退出」停止代理并释放端口。
 
 ---
 

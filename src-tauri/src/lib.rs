@@ -23,12 +23,15 @@ pub fn run() {
         .try_init();
 
     tauri::Builder::default()
+        // 单实例须在会 proxy.start 的 setup 之前注册：第二实例在插件层退出，不启第二套代理。
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            tray::show_main_window(app);
+        }))
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            let app_paths = paths::resolve_paths(app.handle()).map_err(|error| {
-                Box::<dyn std::error::Error>::from(error.to_string())
-            })?;
+            let app_paths = paths::resolve_paths(app.handle())
+                .map_err(|error| Box::<dyn std::error::Error>::from(error.to_string()))?;
 
             let port = settings::load_shell_config(std::path::Path::new(&app_paths.config_dir))
                 .map(|c| c.gateway_port)

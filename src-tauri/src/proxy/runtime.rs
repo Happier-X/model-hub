@@ -3,6 +3,7 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::time::Duration;
 
 use serde::Serialize;
 use tokio::sync::oneshot;
@@ -18,6 +19,8 @@ use crate::settings::{self, DEFAULT_PORT};
 pub const DEFAULT_HOST: &str = "127.0.0.1";
 /// 首选端口被占用时，向后连续尝试的端口数量（含首选）。
 pub const PORT_SCAN_ATTEMPTS: u16 = 50;
+/// `stop` 时等待 graceful shutdown 的最长时间；超时则 abort 服务任务以释放端口。
+pub const PROXY_STOP_GRACE: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -159,28 +162,33 @@ impl ProxyHandle {
             ))
         })?;
 
-        let preferred = if preferred == 0 { DEFAULT_PORT } else { preferred };
-        let bind = match self
-            .tokio_rt
-            .block_on(bind_first_available(&host, preferred, PORT_SCAN_ATTEMPTS))
-        {
-            Ok(b) => b,
-            Err(err) => {
-                let msg = err.to_string();
-                let _ = self.with_inner(|inner| {
-                    inner.state = ProxyState::Error;
-                    inner.last_error = Some(msg);
-                    inner.port_note = None;
-                    Ok(())
-                });
-                return Err(err);
-            }
+        let preferred = if preferred == 0 {
+            DEFAULT_PORT
+        } else {
+            preferred
         };
+        let bind =
+            match self
+                .tokio_rt
+                .block_on(bind_first_available(&host, preferred, PORT_SCAN_ATTEMPTS))
+            {
+                Ok(b) => b,
+                Err(err) => {
+                    let msg = err.to_string();
+                    let _ = self.with_inner(|inner| {
+                        inner.state = ProxyState::Error;
+                        inner.last_error = Some(msg);
+                        inner.port_note = None;
+                        Ok(())
+                    });
+                    return Err(err);
+                }
+            };
 
         let chosen = bind.port;
         let port_note = if chosen != preferred {
             Some(format!(
-                "端口 {preferred} 已被占用，已自动改用 {chosen} 并写入配置。不会结束占用进程；若已导出 Pi，请在分组页重新「配置到 Pi」。"
+                "端口 {preferred} 已被占用，已自动改用 {chosen} 并写入配置。不会结束占用进程；若意外多开旧实例，请托盘「退出」旧进程；若已导出 Pi，请在分组页重新「配置到 Pi」。"
             ))
         } else {
             None
@@ -228,15 +236,33 @@ impl ProxyHandle {
 
         if let Some(live) = live {
             let _ = live.shutdown_tx.send(());
-            let _ = self.tokio_rt.block_on(async {
-                tokio::time::timeout(std::time::Duration::from_secs(3), live.join).await
+            let mut join = live.join;
+            // 超时必须 abort：JoinHandle drop 只会 detach，任务可能继续占端口。
+            self.tokio_rt.block_on(async {
+                tokio::select! {
+                    r = &mut join => {
+                        if let Err(e) = r {
+                            if !e.is_cancelled() {
+                                tracing::warn!(error = %e, "代理服务任务结束时出错");
+                            }
+                        }
+                    }
+                    _ = tokio::time::sleep(PROXY_STOP_GRACE) => {
+                        tracing::warn!(
+                            grace_ms = PROXY_STOP_GRACE.as_millis(),
+                            "代理 graceful stop 超时，abort 服务任务以释放端口"
+                        );
+                        join.abort();
+                        let _ = join.await;
+                    }
+                }
             });
         }
 
         self.with_inner(|inner| {
             inner.state = ProxyState::Idle;
             inner.last_error = None;
-            // 保留 port_note 直到下次启动，便于 UI 仍看到改口说明；停止时清空更干净。
+            // 停止时清空 port_note。
             inner.port_note = None;
             Ok(status_of(inner))
         })
@@ -270,6 +296,16 @@ impl ProxyHandle {
             return self.start();
         }
         self.status_snapshot()
+    }
+}
+
+impl Drop for ProxyHandle {
+    fn drop(&mut self) {
+        // best-effort：析构时仍有 live 则 stop，释放监听端口。
+        let has_live = self.inner.lock().map(|g| g.live.is_some()).unwrap_or(false);
+        if has_live {
+            let _ = self.stop();
+        }
     }
 }
 
@@ -398,5 +434,43 @@ mod tests {
 
         let _ = proxy.stop();
         drop(blocker);
+    }
+
+    #[test]
+    fn stop_sets_idle_and_releases_port() {
+        let dir = tempdir().unwrap();
+        let data_dir = dir.path().join("gateway");
+        std::fs::create_dir_all(&data_dir).unwrap();
+
+        let proxy = ProxyHandle::new(data_dir.display().to_string(), 0).unwrap();
+        let status = proxy.start().expect("应启动");
+        assert_eq!(status.state, ProxyState::Running);
+        let port = status.port;
+
+        let stopped = proxy.stop().expect("应停止");
+        assert_eq!(stopped.state, ProxyState::Idle);
+
+        // 停止后原端口应可重新 bind
+        let rebind = StdTcpListener::bind(format!("127.0.0.1:{port}"));
+        assert!(rebind.is_ok(), "stop 后端口应可重新绑定");
+    }
+
+    #[test]
+    fn drop_stops_live_proxy() {
+        let dir = tempdir().unwrap();
+        let data_dir = dir.path().join("gateway");
+        std::fs::create_dir_all(&data_dir).unwrap();
+
+        let port = {
+            let proxy = ProxyHandle::new(data_dir.display().to_string(), 0).unwrap();
+            let status = proxy.start().expect("应启动");
+            assert_eq!(status.state, ProxyState::Running);
+            let port = status.port;
+            drop(proxy);
+            port
+        };
+
+        let rebind = StdTcpListener::bind(format!("127.0.0.1:{port}"));
+        assert!(rebind.is_ok(), "Drop 后端口应可重新绑定");
     }
 }

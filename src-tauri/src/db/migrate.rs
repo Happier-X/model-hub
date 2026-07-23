@@ -50,7 +50,10 @@ CREATE TABLE IF NOT EXISTS request_logs (
 CREATE INDEX IF NOT EXISTS idx_request_logs_time ON request_logs(time DESC);
 "#;
 
-fn table_column_names(conn: &Connection, table: &str) -> Result<std::collections::HashSet<String>, AppError> {
+fn table_column_names(
+    conn: &Connection,
+    table: &str,
+) -> Result<std::collections::HashSet<String>, AppError> {
     // PRAGMA table_info 不支持绑定参数表名；table 仅内部常量调用。
     let mut stmt = conn
         .prepare(&format!("PRAGMA table_info({table})"))
@@ -112,11 +115,8 @@ fn ensure_group_items_columns(conn: &Connection) -> Result<(), AppError> {
         if columns.contains(*name) {
             continue;
         }
-        conn.execute(
-            &format!("ALTER TABLE group_items ADD COLUMN {ddl}"),
-            [],
-        )
-        .map_err(|e| AppError::Database(format!("添加 group_items.{name} 字段失败: {e}")))?;
+        conn.execute(&format!("ALTER TABLE group_items ADD COLUMN {ddl}"), [])
+            .map_err(|e| AppError::Database(format!("添加 group_items.{name} 字段失败: {e}")))?;
     }
 
     // 仅从确实存在的旧列回填；只覆盖新列默认值，保留已经迁移/编辑过的数据。
@@ -170,20 +170,18 @@ fn ensure_request_logs_columns(conn: &Connection) -> Result<(), AppError> {
         ("error", "error TEXT NOT NULL DEFAULT ''"),
         ("failover_from", "failover_from TEXT NOT NULL DEFAULT ''"),
         ("failover_to", "failover_to TEXT NOT NULL DEFAULT ''"),
-        ("failover_reason", "failover_reason TEXT NOT NULL DEFAULT ''"),
+        (
+            "failover_reason",
+            "failover_reason TEXT NOT NULL DEFAULT ''",
+        ),
     ];
 
     for (name, ddl) in required {
         if columns.contains(*name) {
             continue;
         }
-        conn.execute(
-            &format!("ALTER TABLE request_logs ADD COLUMN {ddl}"),
-            [],
-        )
-        .map_err(|e| {
-            AppError::Database(format!("添加 request_logs.{name} 字段失败: {e}"))
-        })?;
+        conn.execute(&format!("ALTER TABLE request_logs ADD COLUMN {ddl}"), [])
+            .map_err(|e| AppError::Database(format!("添加 request_logs.{name} 字段失败: {e}")))?;
     }
 
     // 旧 gateway-rust 列 → 当前列条件回填（仅当新列仍为默认空/0）。
@@ -224,8 +222,10 @@ fn ensure_request_logs_columns(conn: &Connection) -> Result<(), AppError> {
         .map_err(|e| AppError::Database(format!("回填 request_logs.use_time_ms 失败: {e}")))?;
     }
 
-    conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_request_logs_time ON request_logs(time DESC);")
-        .map_err(|e| AppError::Database(format!("创建 request_logs 时间索引失败: {e}")))?;
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_request_logs_time ON request_logs(time DESC);",
+    )
+    .map_err(|e| AppError::Database(format!("创建 request_logs 时间索引失败: {e}")))?;
     Ok(())
 }
 
@@ -269,12 +269,7 @@ mod tests {
         conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
         migrate(&conn).unwrap();
         migrate(&conn).unwrap();
-        for table in [
-            "providers",
-            "groups",
-            "group_items",
-            "request_logs",
-        ] {
+        for table in ["providers", "groups", "group_items", "request_logs"] {
             let n: i64 = conn
                 .query_row(
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
@@ -366,7 +361,10 @@ mod tests {
                 },
             )
             .unwrap();
-        assert_eq!(row, (1, 7, "legacy-model".into(), 3, 7, "legacy-model".into()));
+        assert_eq!(
+            row,
+            (1, 7, "legacy-model".into(), 3, 7, "legacy-model".into())
+        );
 
         // 当前应用写入：兼容表必须同步填新旧两套 NOT NULL 列。
         conn.execute(

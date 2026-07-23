@@ -156,6 +156,5 @@ mod tests {
         assert_eq!(logs.items[0].status_code, 503);
         assert_eq!(logs.items[0].use_time_ms, 321);
         assert_eq!(logs.items[0].failover_to, "backup-provider");
-
     }
 }

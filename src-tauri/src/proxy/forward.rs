@@ -73,7 +73,10 @@ pub struct Candidate {
 #[derive(Debug)]
 pub enum AttemptError {
     /// 可换源重试
-    Retryable { status: Option<u16>, message: String },
+    Retryable {
+        status: Option<u16>,
+        message: String,
+    },
     /// 不可换源（明确客户端错误）
     NonRetryable {
         status: u16,
@@ -551,8 +554,8 @@ pub async fn forward_with_failover(
                         move || {
                             stores.insert_log_best_effort(NewRequestLog {
                                 group_name: group,
-                                provider_name: provider_name,
-                                upstream_model: upstream_model,
+                                provider_name,
+                                upstream_model,
                                 // 499：客户端关闭请求（nginx 惯例）；不记熔断失败。
                                 status_code: 499,
                                 use_time_ms: elapsed_ms(started),

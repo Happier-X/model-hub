@@ -352,16 +352,16 @@ impl Stores {
         self.purge_logs_older_than_days(LOG_RETENTION_DAYS)
     }
 
-    pub fn purge_logs_older_than_days(&self, retention_days: i64) -> Result<LogPurgeResult, AppError> {
+    pub fn purge_logs_older_than_days(
+        &self,
+        retention_days: i64,
+    ) -> Result<LogPurgeResult, AppError> {
         let days = retention_days.max(1);
         let now = chrono::Utc::now().timestamp();
         let cutoff = now.saturating_sub(days.saturating_mul(86_400));
         self.with_conn(|conn| {
             let deleted = conn
-                .execute(
-                    "DELETE FROM request_logs WHERE time < ?1",
-                    params![cutoff],
-                )
+                .execute("DELETE FROM request_logs WHERE time < ?1", params![cutoff])
                 .map_err(|e| AppError::Database(e.to_string()))? as i64;
             let retained: i64 = conn
                 .query_row("SELECT COUNT(*) FROM request_logs", [], |row| row.get(0))
@@ -388,7 +388,11 @@ impl Stores {
         self.request_stats_between(start_ts, end_ts)
     }
 
-    pub fn request_stats_between(&self, start_ts: i64, end_ts: i64) -> Result<RequestStats, AppError> {
+    pub fn request_stats_between(
+        &self,
+        start_ts: i64,
+        end_ts: i64,
+    ) -> Result<RequestStats, AppError> {
         self.with_conn(|conn| {
             conn.query_row(
                 "SELECT

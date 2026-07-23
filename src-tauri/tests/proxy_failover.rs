@@ -298,12 +298,7 @@ async fn stream_idle_timeout_single_failure_log() {
         })
         .unwrap();
     // 静默超时路径：不得留下「仅 200 且 error 为空」作为结论；应为单条失败。
-    assert_eq!(
-        logs.items.len(),
-        1,
-        "期望仅一条最终日志，实际: {:?}",
-        logs
-    );
+    assert_eq!(logs.items.len(), 1, "期望仅一条最终日志，实际: {:?}", logs);
     let log = &logs.items[0];
     assert_eq!(log.status_code, 504);
     assert_eq!(log.error, "流式静默超时");
@@ -325,11 +320,9 @@ async fn stream_success_single_ok_log() {
     let upstream = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/v1/chat/completions"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_bytes(
-                "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\ndata: [DONE]\n\n",
-            ),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\ndata: [DONE]\n\n",
+        ))
         .mount(&upstream)
         .await;
 

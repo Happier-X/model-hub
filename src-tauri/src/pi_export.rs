@@ -26,9 +26,8 @@ pub fn normalize_openai_base_url(base_url: &str) -> String {
 }
 
 pub fn default_pi_models_path() -> Result<PathBuf, AppError> {
-    let home = dirs_home().ok_or_else(|| {
-        AppError::Business("无法定位用户主目录，无法写入 Pi Agent 配置".into())
-    })?;
+    let home = dirs_home()
+        .ok_or_else(|| AppError::Business("无法定位用户主目录，无法写入 Pi Agent 配置".into()))?;
     Ok(home.join(".pi").join("agent").join("models.json"))
 }
 
@@ -63,10 +62,7 @@ pub fn read_models_json(path: &Path) -> Result<Option<Value>, AppError> {
         return Ok(None);
     }
     let text = fs::read_to_string(path).map_err(|source| {
-        AppError::Business(format!(
-            "读取 Pi 配置失败（{}）：{source}",
-            path.display()
-        ))
+        AppError::Business(format!("读取 Pi 配置失败（{}）：{source}", path.display()))
     })?;
     if text.trim().is_empty() {
         return Ok(None);
@@ -142,9 +138,9 @@ pub fn upsert_model_hub_group(
         .entry("providers".to_string())
         .or_insert_with(|| Value::Object(Map::new()));
 
-    let providers_obj = providers.as_object_mut().ok_or_else(|| {
-        AppError::Business("Pi models.json 的 providers 必须是对象".into())
-    })?;
+    let providers_obj = providers
+        .as_object_mut()
+        .ok_or_else(|| AppError::Business("Pi models.json 的 providers 必须是对象".into()))?;
 
     let provider_entry = providers_obj
         .entry(PI_PROVIDER_ID.to_string())
@@ -218,8 +214,7 @@ mod tests {
     fn upsert_creates_provider_and_model() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("models.json");
-        let count =
-            upsert_model_hub_group(&path, "http://127.0.0.1:8080", "coding").unwrap();
+        let count = upsert_model_hub_group(&path, "http://127.0.0.1:8080", "coding").unwrap();
         assert_eq!(count, 1);
         let v: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(
@@ -243,8 +238,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("models.json");
         upsert_model_hub_group(&path, "http://127.0.0.1:8080", "coding").unwrap();
-        let count =
-            upsert_model_hub_group(&path, "http://127.0.0.1:9090", "coding").unwrap();
+        let count = upsert_model_hub_group(&path, "http://127.0.0.1:9090", "coding").unwrap();
         assert_eq!(count, 1);
         let v: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(
@@ -286,17 +280,14 @@ mod tests {
         )
         .unwrap();
 
-        let count =
-            upsert_model_hub_group(&path, "http://127.0.0.1:8080", "coding").unwrap();
+        let count = upsert_model_hub_group(&path, "http://127.0.0.1:8080", "coding").unwrap();
         assert_eq!(count, 2);
 
         let v: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         assert!(v["providers"].get("ollama").is_some());
         assert_eq!(v["providers"]["ollama"]["models"][0]["id"], "llama");
 
-        let models = v["providers"][PI_PROVIDER_ID]["models"]
-            .as_array()
-            .unwrap();
+        let models = v["providers"][PI_PROVIDER_ID]["models"].as_array().unwrap();
         assert_eq!(models.len(), 2);
         let ids: Vec<&str> = models
             .iter()

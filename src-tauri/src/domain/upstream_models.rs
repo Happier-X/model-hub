@@ -51,8 +51,12 @@ pub fn parse_models_list(body: &str) -> Result<Vec<String>, AppError> {
 fn map_http_status(status: u16) -> AppError {
     match status {
         401 => AppError::Business("上游返回 401：请检查 API Key".into()),
-        403 => AppError::Business("上游返回 403：无权限访问模型列表，请检查 API Key 或账号权限".into()),
-        404 => AppError::Business("上游返回 404：未找到 /models 接口，请确认 Base URL 是否含 /v1".into()),
+        403 => {
+            AppError::Business("上游返回 403：无权限访问模型列表，请检查 API Key 或账号权限".into())
+        }
+        404 => AppError::Business(
+            "上游返回 404：未找到 /models 接口，请确认 Base URL 是否含 /v1".into(),
+        ),
         429 => AppError::Business("上游返回 429：请求过于频繁，请稍后再试".into()),
         s if (500..600).contains(&s) => {
             AppError::Business(format!("上游服务异常（HTTP {s}），请稍后重试"))
@@ -63,13 +67,18 @@ fn map_http_status(status: u16) -> AppError {
 
 fn map_reqwest_error(err: reqwest::Error) -> AppError {
     if err.is_timeout() {
-        return AppError::Business("请求超时：上游未在限定时间内响应，请检查网络或 Base URL".into());
+        return AppError::Business(
+            "请求超时：上游未在限定时间内响应，请检查网络或 Base URL".into(),
+        );
     }
     if err.is_connect() {
         return AppError::Business("无法连接上游：请检查 Base URL 与网络连通性".into());
     }
     // 禁止把可能含 URL 查询串或重定向细节的完整错误原文原样回显；给可行动摘要。
-    AppError::Business(format!("请求上游失败：{}", sanitize_network_message(&err.to_string())))
+    AppError::Business(format!(
+        "请求上游失败：{}",
+        sanitize_network_message(&err.to_string())
+    ))
 }
 
 /// 去掉错误串中疑似密钥片段，避免意外回显。
@@ -120,10 +129,12 @@ pub async fn fetch_upstream_model_ids(
         return Err(map_http_status(status.as_u16()));
     }
 
-    let body = response
-        .text()
-        .await
-        .map_err(|e| AppError::Business(format!("读取上游响应失败：{}", sanitize_network_message(&e.to_string()))))?;
+    let body = response.text().await.map_err(|e| {
+        AppError::Business(format!(
+            "读取上游响应失败：{}",
+            sanitize_network_message(&e.to_string())
+        ))
+    })?;
 
     parse_models_list(&body)
 }
@@ -147,10 +158,7 @@ mod tests {
             models_url("https://api.openai.com/v1/").unwrap(),
             "https://api.openai.com/v1/models"
         );
-        assert_eq!(
-            models_url(" https://x/v1 ").unwrap(),
-            "https://x/v1/models"
-        );
+        assert_eq!(models_url(" https://x/v1 ").unwrap(), "https://x/v1/models");
     }
 
     #[test]

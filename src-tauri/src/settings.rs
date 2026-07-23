@@ -79,12 +79,11 @@ pub fn save_shell_config(config_dir: &Path, config: &ShellConfig) -> Result<(), 
     let bak = shell_bak_path(config_dir);
     let tmp = config_dir.join("shell.json.tmp");
 
-    let json = serde_json::to_string_pretty(config).map_err(|source| {
-        AppError::SerializeShellConfig {
+    let json =
+        serde_json::to_string_pretty(config).map_err(|source| AppError::SerializeShellConfig {
             path: path.display().to_string(),
             source,
-        }
-    })?;
+        })?;
 
     {
         let mut file = fs::File::create(&tmp).map_err(|source| AppError::WriteShellConfig {
