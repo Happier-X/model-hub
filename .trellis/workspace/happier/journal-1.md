@@ -488,3 +488,69 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 14: 发布 v0.0.2
+
+**Date**: 2026-07-23
+**Task**: 发布 v0.0.2
+**Branch**: `master`
+
+### Summary
+
+将版本统一升至 0.0.2，新增 changelog/v0.0.2.md，推送 master 与 v0.0.2 并成功触发 Windows Release。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5cc5855` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 15: 发布 v0.0.2
+
+**Date**: 2026-07-23
+**Task**: 发布 v0.0.2
+**Branch**: `master`
+
+### Summary
+
+将版本统一升至 0.0.2，新增 changelog/v0.0.2.md，推送 master 与 v0.0.2 并成功触发 Windows Release。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5cc5855` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

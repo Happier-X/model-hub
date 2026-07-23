@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 13
+- **Total Sessions**: 15
 - **Last Active**: 2026-07-23
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~490 | Active |
+| `journal-1.md` | ~556 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,8 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 15 | 2026-07-23 | 发布 v0.0.2 | `5cc5855` | `master` |
+| 14 | 2026-07-23 | 发布 v0.0.2 | `5cc5855` | `master` |
 | 13 | 2026-07-23 | 默认端口改为 8888 | `7bc7272` | `master` |
 | 12 | 2026-07-23 | 修复配置到 Pi 的 Tauri 参数名 | `df58edb` | `master` |
 | 11 | 2026-07-23 | 重置发布为 v0.0.1 | `f289196` | `master` |
