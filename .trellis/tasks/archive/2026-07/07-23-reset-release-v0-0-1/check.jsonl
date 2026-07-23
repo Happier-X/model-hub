@@ -1,0 +1,3 @@
+{"path":"docs/in-app-updater.md","reason":"验收文档发版步骤与版本号一致"}
+{"path":".github/workflows/release-windows.yml","reason":"验收 CI 读 changelog 且保留签名校验"}
+{"path":"README.md","reason":"验收对外文档不再引用旧 release-notes"}

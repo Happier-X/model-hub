@@ -1,0 +1,4 @@
+{"path":"docs/in-app-updater.md","reason":"现有发版与 updater 约定，需改为 changelog 路径"}
+{"path":".github/workflows/release-windows.yml","reason":"Windows tag 发布与资产上传流程"}
+{"path":"C:/code/muses/.github/workflows/release.yml","reason":"参考 muses 从 changelog 写 Release body"}
+{"path":"C:/code/muses/changelog/v0.0.1.md","reason":"参考 muses changelog 首发文风"}
