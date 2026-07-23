@@ -12,7 +12,7 @@
 | 层级 | 职责 | 技术 |
 |------|------|------|
 | 桌面壳 | 窗口、生命周期、数据目录、托盘、代理启停 | Tauri 2 + Rust |
-| 内嵌代理 | OpenAI 兼容 `/v1/*`、故障转移、熔断、SQLite | `src-tauri/src/proxy` + `domain` + `db` |
+| 内嵌代理 | OpenAI 兼容 `/v1/*`、顺序故障转移、SQLite | `src-tauri/src/proxy` + `domain` + `db` |
 | 持久化（MVP） | 供应商/分组/请求日志 | **仅 SQLite**（当前 schema 不执行旧数据自动迁移；无 `api_keys` 表） |
 
 - 管理 UI **无登录**；数据经 **Tauri commands**。
@@ -38,7 +38,8 @@
 
 ## Related Product Decisions
 
-- Vue3 重写 + CC Switch 式故障转移：任务 `07-21-vue3-rewrite-api-gateway`。
+- Vue3 重写 + 顺序故障转移：任务 `07-21-vue3-rewrite-api-gateway`。
+- 取消供应商熔断与 `auto_failover`，错误即换源：任务 `07-23-fix-model-failover`。
 
 ---
 

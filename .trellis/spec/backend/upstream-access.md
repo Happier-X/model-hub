@@ -17,15 +17,16 @@
 |------|----------|
 | `proxy/forward.rs` 转发 Chat | 仅处理客户端发来的真实 `/v1/chat/completions` |
 | `fetch_provider_models` IPC | 仅管理台用户**主动点击**「拉取模型」/批量添加时调用 |
-| `list_health` | **禁止**打上游；只读进程内熔断状态 |
 | 本机 `GET /health` | 仅本机代理自检，不使用供应商 Key |
 | OpenRouter 榜单 `leaderboard` | 固定公共 URL，**禁止**附带用户供应商 Key |
+
+**已移除**：`list_health` / 供应商熔断健康快照。不得再添加「只读熔断内存」类 IPC 作为测活替代。
 
 ### 3. Contracts
 
 **允许**
 
-1. 真实用户 Chat → 代理按队列故障转移转发上游（含熔断 HalfOpen 在**该业务请求**上占用探测位）。
+1. 真实用户 Chat → 代理按分组队列顺序故障转移转发上游（响应提交前任意失败换下一启用候选项；无熔断跳过）。
 2. 用户在分组页点击「拉取模型」或「批量添加供应商模型」→ `GET {base}/models`（或兼容路径）。
 3. OpenRouter 公共 Models API（无用户 Key）。
 
@@ -34,7 +35,7 @@
 1. 应用启动、定时器、后台任务对用户供应商做连通性检查。
 2. 供应商页「测试连接」、空 chat、假 health、预热请求。
 3. 打开供应商/分组页、保存供应商时**自动**拉 `/models`。
-4. 为恢复熔断而**单独**发起上游请求（HalfOpen 只能挂在真实业务请求上）。
+4. 为「健康展示」或恢复状态而**单独**发起上游请求。
 5. AI/自动化联调默认打用户上游；须用户**明确授权某次**操作。
 
 ### 4. Validation & Error Matrix
@@ -43,21 +44,20 @@
 |------|------|
 | 代码路径为启动/定时/测活 | **不得**发起上游 HTTP |
 | 用户未点击拉取模型 | 不得调用 `fetch_provider_models` |
-| 熔断 Open | 跳过该供应商；**不**另发探测请求 |
-| 熔断 HalfOpen | 至多一个**真实业务请求**作为探测 |
+| 真实 Chat 候选失败 | 可按队列换源；仍属该次业务请求，不算后台测活 |
 | 错误日志 | 不得打印完整上游 Key |
 
 ### 5. Good / Base / Bad Cases
 
 - **Good**：用户 Chat 失败后换队列下一源；用户点「拉取模型」后填入 datalist。
-- **Base**：`list_health` / 「刷新健康」只显示内存态，零上游流量。
+- **Base**：供应商/分组页不展示熔断健康；无 `list_health` 调用。
 - **Bad**：供应商表单「测试连接」；保存供应商时自动 GET models；每分钟 ping 上游。
 
 ### 6. Tests Required
 
 - 代理集成：故障转移不依赖独立测活接口。
 - 审计/评审：无 `setInterval`/启动钩子调用 `fetch_provider_models` 或对 `providers.base_url` 发空请求。
-- 前端：供应商页无「测试连接」类按钮；分组页拉取仅 `@click`。
+- 前端：供应商页无「测试连接」类按钮；分组页拉取仅 `@click`；无健康徽章/listHealth。
 
 ### 7. Wrong vs Correct
 
@@ -68,6 +68,7 @@
 onMounted(() => fetchProviderModels({ provider_id }))
 await createProvider(form)
 await fetchProviderModels({ base_url, api_key }) // 测试连接
+await listHealth() // 已删除的熔断健康
 ```
 
 #### Correct
@@ -77,8 +78,7 @@ await fetchProviderModels({ base_url, api_key }) // 测试连接
 async function pullModels(index: number) {
   await fetchProviderModels({ provider_id: form.items[index].provider_id })
 }
-// 健康展示
-await listHealth() // 不打上游
+// 页面只展示供应商/分组配置，不拉健康、不测活
 ```
 
 ---
@@ -88,3 +88,4 @@ await listHealth() // 不打上游
 - 把「刷新健康」实现成对每个供应商请求 `/v1/models` 或 chat。
 - 用用户 Key 请求 OpenRouter 或其它第三方做测活。
 - 在 AI 会话中未经用户同意对真实上游做联调请求。
+- 以熔断状态机或健康徽章名义恢复对用户上游的探测。

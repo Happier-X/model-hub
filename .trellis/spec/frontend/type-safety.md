@@ -7,7 +7,7 @@
 1. TypeScript 保持 `strict`，Vue 文件由 `vue-tsc --noEmit` 校验。
 2. Tauri 命令名、参数和返回类型集中定义在 `src/api/tauri.ts`。
 3. 页面调用封装函数，不直接散落 `invoke<any>` 或命令字符串。
-4. **返回体 / payload 结构字段**与 Rust serde 一致，当前为 `snake_case`（如 `base_url`、`auto_failover`）。
+4. **返回体 / payload 结构字段**与 Rust serde 一致，当前为 `snake_case`（如 `base_url`、`upstream_model`）。分组**无** `auto_failover`；**无** `HealthSnapshot` / `listHealth`。
 5. **Tauri 2 命令参数名**在前端 `invoke` 时使用 **camelCase** 键（Rust `group_id` → JS `{ groupId }`，`force_refresh` → `{ forceRefresh }`）。参数名与结构体字段不是同一套规则。
 6. 时间字段使用后端返回的统一字符串格式，并仅在展示层格式化。
 7. 环境变量只允许通过 `import.meta.env.VITE_*` 暴露给前端，且不得包含真实密钥。

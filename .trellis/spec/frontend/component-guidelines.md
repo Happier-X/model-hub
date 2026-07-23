@@ -14,14 +14,15 @@
 8. 分组队列「按模型能力排序」只可修改当前表单，不得自动保存；支持本地启发式 / 外部通用 / 外部编码；外部分需标注 OpenRouter 来源与缓存状态，未匹配回退本地启发式；未知模型稳定排后，用户仍可拖拽微调。合同见 [model-queue-sort.md](./model-queue-sort.md)。
 9. **配置到 Pi**：入口在**分组页**列表行「配置到 Pi」；调用 `exportGroupToPiAgent(groupId)`；**无 Key UI / 无 Key 入参**；模型名=分组名，写入本机 `~/.pi/agent/models.json` 的单一 `providers.model-hub`（按 id upsert）。
 10. 信息架构无「API 密钥 / 客户端 Key」页面与导航。
-11. **上游访问**：禁止供应商页「测试连接」及任何自动/后台对用户上游的测活；供应商页与分组页健康状态只读展示，不提供手动刷新入口；分组页「拉取模型」**仅**用户点击触发，不得在 `onMounted`/保存时自动拉取。健康展示只读熔断内存（`listHealth`），不打上游。合同见 backend [upstream-access.md](../backend/upstream-access.md)。
+11. **上游访问**：禁止供应商页「测试连接」及任何自动/后台对用户上游的测活；**不**展示供应商熔断健康徽章，**不**调用 `listHealth`（已删除）；分组页「拉取模型」**仅**用户点击触发，不得在 `onMounted`/保存时自动拉取。合同见 backend [upstream-access.md](../backend/upstream-access.md)。
+12. **故障转移**：分组队列始终按顺序故障转移，UI **无** `auto_failover` 开关；创建/更新分组 payload 不得再传该字段。
 
 ## 状态与生命周期
 
 - 局部交互使用 `ref` / `reactive` / `computed`。
 - 异步加载在 `onMounted` 中触发；定时器和事件订阅在 `onUnmounted` 中清理。
 - 提交期间禁用重复操作，并在失败时保留用户可修正的输入。
-- 编辑已有分组表单必须使用稳定的 `editingGroupId: number | null` 表达编辑目标；保存时先快照 id，id 非空只能调用更新，只有新建态才调用创建。添加条目、拉取模型、批量添加、排序、健康刷新等异步/局部操作不得清空编辑 id。
+- 编辑已有分组表单必须使用稳定的 `editingGroupId: number | null` 表达编辑目标；保存时先快照 id，id 非空只能调用更新，只有新建态才调用创建。添加条目、拉取模型、批量添加、排序等异步/局部操作不得清空编辑 id。
 - 新建/编辑供应商与分组复用 `AppDialog`，页面以稳定实体 id 区分创建和更新。打开新建 Dialog 前重置默认值；保存失败保留 Dialog 与输入；保存成功后关闭并刷新列表；保存期间禁止重复提交和关闭。
 
 ## 对话框合同

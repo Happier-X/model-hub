@@ -19,8 +19,8 @@
 
 | 类型 | 要求 |
 |------|------|
-| 单元 | 熔断、队列、路径 |
-| 集成 | 无 Key 可访问；任意 Bearer 不 401；models 分组列表；5xx 换源成功（wiremock） |
+| 单元 | 队列、路径、结构化错误信封识别 |
+| 集成 | 无 Key 可访问；任意 Bearer 不 401；models 分组列表；任意失败换源成功（wiremock） |
 
 ```powershell
 cd src-tauri

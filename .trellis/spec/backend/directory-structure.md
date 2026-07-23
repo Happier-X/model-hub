@@ -22,8 +22,8 @@
 │   │   └── proxy/             # 进程内 HTTP 代理
 │   │       ├── runtime.rs     # ProxyHandle 启停/状态
 │   │       ├── server.rs      # axum 路由 /health /v1/*
-│   │       ├── forward.rs     # 上游转发 + 故障转移
-│   │       └── circuit.rs     # 默认熔断
+│   │       ├── forward.rs     # 上游转发 + 顺序故障转移
+│   │       └── (无 circuit.rs；已取消供应商熔断)
 │   ├── tests/                 # 集成测（无鉴权访问/故障转移）
 │   ├── Cargo.toml
 │   ├── tauri.conf.json
@@ -38,7 +38,7 @@
 
 | 区域 | 放什么 | 不放什么 |
 |------|--------|----------|
-| `proxy/` | 监听、转发、熔断、流式 prime（无客户端 Key 鉴权） | Vue UI |
+| `proxy/` | 监听、转发、顺序故障转移、流式 prime（无客户端 Key 鉴权） | Vue UI |
 | `domain/` | CRUD 与 SQLite 读写 | HTTP 路由细节 |
 | `commands.rs` | Tauri invoke 薄封装 | 长业务逻辑（下沉 domain/proxy） |
 | `paths.rs` / `settings.rs` | 目录与端口持久化 | 业务表 |
@@ -79,7 +79,7 @@
 ### Signatures
 
 - `proxy_start` / `proxy_stop` / `proxy_status` / `proxy_set_port`
-- 领域：`list_providers` / `create_provider` / … / `list_groups` / … / `list_logs` / `clear_logs` / `list_health`
+- 领域：`list_providers` / `create_provider` / … / `list_groups` / … / `list_logs` / `clear_logs`（**无** `list_health`）
 
 ### ProxyStatus（snake_case）
 

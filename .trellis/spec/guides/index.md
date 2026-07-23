@@ -31,7 +31,7 @@ These guides help you **ask the right questions before coding**.
 ### When touching providers / proxy / upstream HTTP
 
 - [ ] 是否引入启动/定时/后台对**用户供应商**的请求？（禁止，见 [upstream-access.md](../backend/upstream-access.md)）
-- [ ] 「健康」是否只读熔断内存，而非打上游？
+- [ ] 是否误加供应商健康/熔断展示或后台测活？（已删除熔断；禁止测活）
 - [ ] 拉 `/models` 是否仅用户点击？
 - [ ] AI 联调是否未经用户授权就请求真实上游？
 
