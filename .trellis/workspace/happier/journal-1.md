@@ -158,3 +158,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: 移除客户端 API Key 管理与鉴权
+
+**Date**: 2026-07-23
+**Task**: 移除客户端 API Key 管理与鉴权
+**Branch**: `master`
+
+### Summary
+
+删除客户端 API Key 页面、路由、前后端 IPC 与 domain/apikey，移除代理客户端 Key 校验与 api_keys schema/迁移/测试，保留供应商上游 Key 与 Pi 占位配置；同步文档与 specs。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f0d8adc` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
