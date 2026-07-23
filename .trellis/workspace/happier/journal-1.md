@@ -422,3 +422,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 12: 修复配置到 Pi 的 Tauri 参数名
+
+**Date**: 2026-07-23
+**Task**: 修复配置到 Pi 的 Tauri 参数名
+**Branch**: `master`
+
+### Summary
+
+将 export_group_to_pi_agent 与 get_model_leaderboard 的 invoke 参数键改为 camelCase，并同步前端 type-safety 规范，修复配置到 Pi 缺失 groupId 报错。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `df58edb` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

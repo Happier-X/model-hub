@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 11
+- **Total Sessions**: 12
 - **Last Active**: 2026-07-23
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~424 | Active |
+| `journal-1.md` | ~457 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 12 | 2026-07-23 | 修复配置到 Pi 的 Tauri 参数名 | `df58edb` | `master` |
 | 11 | 2026-07-23 | 重置发布为 v0.0.1 | `f289196` | `master` |
 | 10 | 2026-07-23 | 移除分组刷新健康功能 | `baa31df` | `master` |
 | 9 | 2026-07-23 | 移除供应商刷新健康功能 | `dbb6bf0` | `master` |
