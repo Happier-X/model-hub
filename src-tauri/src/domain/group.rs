@@ -18,7 +18,6 @@ pub struct GroupItem {
 pub struct Group {
     pub id: i64,
     pub name: String,
-    pub auto_failover: bool,
     pub items: Vec<GroupItem>,
     pub created_at: String,
 }
@@ -32,7 +31,6 @@ pub struct GroupItemInput {
 #[derive(Debug, Deserialize)]
 pub struct CreateGroupPayload {
     pub name: String,
-    pub auto_failover: bool,
     pub items: Vec<GroupItemInput>,
 }
 
@@ -40,7 +38,6 @@ pub struct CreateGroupPayload {
 pub struct UpdateGroupPayload {
     pub id: i64,
     pub name: String,
-    pub auto_failover: bool,
     pub items: Vec<GroupItemInput>,
 }
 
@@ -138,27 +135,24 @@ impl Stores {
     pub fn list_groups(&self) -> Result<Vec<Group>, AppError> {
         self.with_conn(|conn| {
             let mut stmt = conn
-                .prepare("SELECT id, name, auto_failover, created_at FROM groups ORDER BY id ASC")
+                .prepare("SELECT id, name, created_at FROM groups ORDER BY id ASC")
                 .map_err(|e| AppError::Database(e.to_string()))?;
             let rows = stmt
                 .query_map([], |row| {
                     Ok((
                         row.get::<_, i64>(0)?,
                         row.get::<_, String>(1)?,
-                        row.get::<_, i64>(2)? != 0,
-                        row.get::<_, String>(3)?,
+                        row.get::<_, String>(2)?,
                     ))
                 })
                 .map_err(|e| AppError::Database(e.to_string()))?;
             let mut out = Vec::new();
             for r in rows {
-                let (id, name, auto_failover, created_at) =
-                    r.map_err(|e| AppError::Database(e.to_string()))?;
+                let (id, name, created_at) = r.map_err(|e| AppError::Database(e.to_string()))?;
                 let items = Self::load_items(conn, id)?;
                 out.push(Group {
                     id,
                     name,
-                    auto_failover,
                     items,
                     created_at,
                 });
@@ -171,27 +165,25 @@ impl Stores {
         self.with_conn(|conn| {
             let row = conn
                 .query_row(
-                    "SELECT id, name, auto_failover, created_at FROM groups WHERE name = ?1",
+                    "SELECT id, name, created_at FROM groups WHERE name = ?1",
                     [name],
                     |row| {
                         Ok((
                             row.get::<_, i64>(0)?,
                             row.get::<_, String>(1)?,
-                            row.get::<_, i64>(2)? != 0,
-                            row.get::<_, String>(3)?,
+                            row.get::<_, String>(2)?,
                         ))
                     },
                 )
                 .optional()
                 .map_err(|e| AppError::Database(e.to_string()))?;
-            let Some((id, name, auto_failover, created_at)) = row else {
+            let Some((id, name, created_at)) = row else {
                 return Ok(None);
             };
             let items = Self::load_items(conn, id)?;
             Ok(Some(Group {
                 id,
                 name,
-                auto_failover,
                 items,
                 created_at,
             }))
@@ -225,8 +217,8 @@ impl Stores {
                 .unchecked_transaction()
                 .map_err(|e| AppError::Database(e.to_string()))?;
             tx.execute(
-                "INSERT INTO groups (name, auto_failover, created_at) VALUES (?1, ?2, ?3)",
-                params![name, if payload.auto_failover { 1 } else { 0 }, created_at],
+                "INSERT INTO groups (name, created_at) VALUES (?1, ?2)",
+                params![name, created_at],
             )
             .map_err(|e| {
                 if e.to_string().contains("UNIQUE") {
@@ -258,8 +250,8 @@ impl Stores {
                 .map_err(|e| AppError::Database(e.to_string()))?;
             let n = tx
                 .execute(
-                    "UPDATE groups SET name=?1, auto_failover=?2 WHERE id=?3",
-                    params![name, if payload.auto_failover { 1 } else { 0 }, payload.id],
+                    "UPDATE groups SET name=?1 WHERE id=?2",
+                    params![name, payload.id],
                 )
                 .map_err(|e| {
                     if e.to_string().contains("UNIQUE") {
@@ -322,7 +314,6 @@ mod tests {
         let g = s
             .create_group(CreateGroupPayload {
                 name: "gpt".into(),
-                auto_failover: true,
                 items: vec![
                     GroupItemInput {
                         provider_id: p2.id,
@@ -365,7 +356,6 @@ mod tests {
         let g = s
             .create_group(CreateGroupPayload {
                 name: "routing".into(),
-                auto_failover: true,
                 items: vec![GroupItemInput {
                     provider_id: p1.id,
                     upstream_model: "model-a".into(),
@@ -379,7 +369,6 @@ mod tests {
             .update_group(UpdateGroupPayload {
                 id: g.id,
                 name: g.name.clone(),
-                auto_failover: true,
                 items: vec![
                     GroupItemInput {
                         provider_id: p1.id,

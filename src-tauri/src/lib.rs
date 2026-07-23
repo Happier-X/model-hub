@@ -93,7 +93,6 @@ pub fn run() {
             commands::get_request_stats,
             commands::export_group_to_pi_agent,
             commands::get_model_leaderboard,
-            commands::list_health,
         ])
         .build(tauri::generate_context!())
         .expect("构建 Model Hub 桌面应用失败")

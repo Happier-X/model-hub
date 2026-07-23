@@ -43,7 +43,6 @@ export interface GroupItem {
 export interface Group {
   id: number;
   name: string;
-  auto_failover: boolean;
   items: GroupItem[];
   created_at: string;
 }
@@ -100,13 +99,6 @@ export interface RequestStats {
   day_end_unix: number;
 }
 
-export interface HealthSnapshot {
-  provider_id: number;
-  provider_name: string;
-  state: "healthy" | "warning" | "open" | "half_open";
-  consecutive_failures: number;
-}
-
 export interface InvokeErrorShape {
   code?: string;
   message?: string;
@@ -161,13 +153,11 @@ export const fetchProviderModels = (payload: {
 export const listGroups = () => invoke<Group[]>("list_groups");
 export const createGroup = (payload: {
   name: string;
-  auto_failover: boolean;
   items: { provider_id: number; upstream_model: string }[];
 }) => invoke<Group>("create_group", { payload });
 export const updateGroup = (payload: {
   id: number;
   name: string;
-  auto_failover: boolean;
   items: { provider_id: number; upstream_model: string }[];
 }) => invoke<Group>("update_group", { payload });
 export const deleteGroup = (id: number) => invoke<void>("delete_group", { id });
@@ -197,7 +187,6 @@ export interface ExportToPiResult {
 /** 将指定分组 upsert 到 ~/.pi/agent/models.json 的 model-hub（固定占位 Key，无 Key 入参） */
 export const exportGroupToPiAgent = (groupId: number) =>
   invoke<ExportToPiResult>("export_group_to_pi_agent", { groupId });
-export const listHealth = () => invoke<HealthSnapshot[]>("list_health");
 
 /** OpenRouter 公共榜单模型（白名单字段）。 */
 export interface LeaderboardModel {

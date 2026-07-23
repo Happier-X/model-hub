@@ -8,7 +8,7 @@ import {
   type LogStatusClass,
   type RequestLog,
 } from "../api/tauri";
-import { statusCodeClass } from "../utils/health";
+import { statusCodeClass } from "../utils/statusCode";
 
 const items = ref<RequestLog[]>([]);
 const total = ref(0);

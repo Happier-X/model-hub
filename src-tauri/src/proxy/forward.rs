@@ -1,4 +1,6 @@
-//! 上游转发与故障转移（非流式读完 body；流式 prime 首包后透传）。
+//! 上游转发与顺序故障转移（非流式读完 body；流式 prime 首包后透传）。
+//!
+//! 响应尚未提交客户端前，当前候选项任意失败均换源；历史结果不影响下一次请求起点。
 
 use std::time::{Duration, Instant};
 
@@ -12,7 +14,6 @@ use serde_json::Value;
 use crate::domain::log::NewRequestLog;
 use crate::domain::provider::Provider;
 use crate::domain::Stores;
-use crate::proxy::circuit::CircuitRegistry;
 
 /// 流式首包超时。
 pub const STREAM_FIRST_BYTE_TIMEOUT: Duration = Duration::from_secs(60);
@@ -70,41 +71,152 @@ pub struct Candidate {
     pub upstream_model: String,
 }
 
+/// 单次候选项失败；响应提交前均可换源。
 #[derive(Debug)]
-pub enum AttemptError {
-    /// 可换源重试
-    Retryable {
-        status: Option<u16>,
-        message: String,
-    },
-    /// 不可换源（明确客户端错误）
-    NonRetryable {
+enum AttemptError {
+    /// 有上游 HTTP 响应（含非 2xx 与明确的 2xx 错误信封）；队列耗尽时透传最后一次。
+    Http {
         status: u16,
         body: Bytes,
         headers: HeaderMap,
+        message: String,
+    },
+    /// 无上游响应体（网络、超时、读失败等）。
+    Transport {
+        /// 建议网关状态：超时类 504，其它 502。
+        gateway_status: u16,
+        message: String,
     },
 }
 
-fn is_retryable_status(status: u16) -> bool {
-    matches!(status, 401 | 403 | 408 | 409 | 425 | 429) || (500..600).contains(&status)
+impl AttemptError {
+    fn message(&self) -> &str {
+        match self {
+            AttemptError::Http { message, .. } => message,
+            AttemptError::Transport { message, .. } => message,
+        }
+    }
 }
 
-fn classify_status_error(status: u16, body: Bytes, headers: HeaderMap) -> AttemptError {
-    if is_retryable_status(status) {
-        let msg = String::from_utf8_lossy(&body)
-            .chars()
-            .take(200)
-            .collect::<String>();
-        AttemptError::Retryable {
-            status: Some(status),
-            message: format!("上游 HTTP {status}: {msg}"),
+/// 从 JSON 错误信封提取截断摘要（不含完整 messages / Key）。
+fn error_message_from_json(v: &Value) -> String {
+    if let Some(s) = v.get("error").and_then(|e| e.as_str()) {
+        return s.chars().take(200).collect();
+    }
+    if let Some(s) = v
+        .get("error")
+        .and_then(|e| e.as_object())
+        .and_then(|e| e.get("message"))
+        .and_then(|m| m.as_str())
+    {
+        return s.chars().take(200).collect();
+    }
+    if let Some(s) = v.get("message").and_then(|m| m.as_str()) {
+        return s.chars().take(200).collect();
+    }
+    "上游返回错误信封".chars().take(200).collect()
+}
+
+/// 判断 body 是否为明确的结构化错误信封（非正常 chat completion / SSE）。
+///
+/// 识别：字符串 `error`、对象 `error.message`、`type: "error"`、以及无 `choices` 时的顶层 `message`。
+pub fn is_structured_error_body(bytes: &[u8]) -> Option<String> {
+    let trimmed = bytes
+        .iter()
+        .position(|&b| !b.is_ascii_whitespace())
+        .map(|i| &bytes[i..])
+        .unwrap_or(bytes);
+    if trimmed.is_empty() {
+        return None;
+    }
+    // 正常 SSE 首包以 data: / event: / : 注释 开头，不按 JSON 错误信封处理。
+    if trimmed.starts_with(b"data:")
+        || trimmed.starts_with(b"event:")
+        || trimmed.starts_with(b":")
+        || trimmed.starts_with(b"id:")
+    {
+        return None;
+    }
+
+    let v: Value = serde_json::from_slice(trimmed).ok()?;
+    let obj = v.as_object()?;
+
+    // 正常 chat completion 带 choices：默认不换源；
+    // 仅当同时声明 type=error 时仍按错误信封处理（极少数网关混用）。
+    if obj.get("choices").is_some() {
+        if obj.get("type").and_then(|t| t.as_str()) == Some("error") {
+            return Some(error_message_from_json(&v));
         }
-    } else {
-        AttemptError::NonRetryable {
-            status,
-            body,
-            headers,
+        return None;
+    }
+
+    let has_type_error = obj.get("type").and_then(|t| t.as_str()) == Some("error");
+    let has_error_string = obj
+        .get("error")
+        .and_then(|e| e.as_str())
+        .is_some_and(|s| !s.is_empty());
+    let has_error_object_msg = obj
+        .get("error")
+        .and_then(|e| e.as_object())
+        .and_then(|e| e.get("message"))
+        .and_then(|m| m.as_str())
+        .is_some_and(|s| !s.is_empty());
+    let has_top_message = obj
+        .get("message")
+        .and_then(|m| m.as_str())
+        .is_some_and(|s| !s.is_empty())
+        && obj.get("object").and_then(|o| o.as_str()) != Some("chat.completion");
+
+    if has_type_error || has_error_string || has_error_object_msg || has_top_message {
+        return Some(error_message_from_json(&v));
+    }
+    None
+}
+
+fn redact_sensitive_summary(message: &str, api_key: &str) -> String {
+    let mut safe: String = message.chars().take(200).collect();
+    if !api_key.is_empty() {
+        safe = safe.replace(api_key, "[REDACTED]");
+    }
+    // 防止常见 Bearer 值进入日志；只保留认证方案。
+    if let Some(index) = safe.to_ascii_lowercase().find("bearer ") {
+        let value_start = index + "bearer ".len();
+        let value_end = safe[value_start..]
+            .find(|c: char| c.is_whitespace() || matches!(c, '"' | '\'' | ',' | '}'))
+            .map(|offset| value_start + offset)
+            .unwrap_or(safe.len());
+        safe.replace_range(value_start..value_end, "[REDACTED]");
+    }
+    safe
+}
+
+fn body_error_summary(body: &[u8]) -> String {
+    if let Some(msg) = is_structured_error_body(body) {
+        return msg;
+    }
+
+    // JSON 错误体可能携带 messages、请求内容或其它敏感字段；仅保留常见的
+    // 简短诊断字段，不能把整个 JSON 当作日志摘要。
+    if let Ok(value) = serde_json::from_slice::<Value>(body) {
+        if let Some(code) = value.get("code").and_then(Value::as_str) {
+            return code.chars().take(80).collect();
         }
+        if let Some(error) = value.get("error").and_then(Value::as_str) {
+            return error.chars().take(200).collect();
+        }
+        return "上游返回未识别的 JSON 错误".into();
+    }
+
+    String::from_utf8_lossy(body).chars().take(200).collect()
+}
+
+fn http_failure(status: u16, body: Bytes, headers: HeaderMap) -> AttemptError {
+    let message = format!("上游 HTTP {status}: {}", body_error_summary(&body));
+    AttemptError::Http {
+        status,
+        body,
+        headers,
+        message,
     }
 }
 
@@ -161,9 +273,16 @@ async fn attempt_non_stream(
         .json(&payload)
         .send()
         .await
-        .map_err(|e| AttemptError::Retryable {
-            status: None,
-            message: format!("上游网络错误: {e}"),
+        .map_err(|e| {
+            let timeout = e.is_timeout();
+            AttemptError::Transport {
+                gateway_status: if timeout { 504 } else { 502 },
+                message: if timeout {
+                    format!("上游超时: {e}")
+                } else {
+                    format!("上游网络错误: {e}")
+                },
+            }
         })?;
 
     let status = response.status().as_u16();
@@ -171,13 +290,21 @@ async fn attempt_non_stream(
     let bytes = response
         .bytes()
         .await
-        .map_err(|e| AttemptError::Retryable {
-            status: Some(status),
+        .map_err(|e| AttemptError::Transport {
+            gateway_status: 502,
             message: format!("读取上游响应失败: {e}"),
         })?;
 
     if !(200..300).contains(&status) {
-        return Err(classify_status_error(status, bytes, headers));
+        return Err(http_failure(status, bytes, headers));
+    }
+    if let Some(msg) = is_structured_error_body(&bytes) {
+        return Err(AttemptError::Http {
+            status,
+            body: bytes,
+            headers,
+            message: format!("上游 HTTP {status}: {msg}"),
+        });
     }
     Ok((
         StatusCode::from_u16(status).unwrap_or(StatusCode::OK),
@@ -211,9 +338,16 @@ async fn attempt_stream_prime(
         .json(&payload)
         .send()
         .await
-        .map_err(|e| AttemptError::Retryable {
-            status: None,
-            message: format!("上游网络错误: {e}"),
+        .map_err(|e| {
+            let timeout = e.is_timeout();
+            AttemptError::Transport {
+                gateway_status: if timeout { 504 } else { 502 },
+                message: if timeout {
+                    format!("上游超时: {e}")
+                } else {
+                    format!("上游网络错误: {e}")
+                },
+            }
         })?;
 
     let status = response.status().as_u16();
@@ -221,22 +355,32 @@ async fn attempt_stream_prime(
 
     if !(200..300).contains(&status) {
         let bytes = response.bytes().await.unwrap_or_default();
-        return Err(classify_status_error(status, bytes, headers));
+        return Err(http_failure(status, bytes, headers));
     }
 
     let mut response = response;
     let first = tokio::time::timeout(STREAM_FIRST_BYTE_TIMEOUT, response.chunk())
         .await
-        .map_err(|_| AttemptError::Retryable {
-            status: Some(status),
+        .map_err(|_| AttemptError::Transport {
+            gateway_status: 504,
             message: "流式首包超时".into(),
         })?
-        .map_err(|e| AttemptError::Retryable {
-            status: Some(status),
+        .map_err(|e| AttemptError::Transport {
+            gateway_status: 502,
             message: format!("读取流式首包失败: {e}"),
         })?;
 
     let first_chunk = first.unwrap_or_else(Bytes::new);
+
+    // 首包本身是明确 JSON 错误信封（非 SSE）时换源，响应尚未提交客户端。
+    if let Some(msg) = is_structured_error_body(&first_chunk) {
+        return Err(AttemptError::Http {
+            status,
+            body: first_chunk,
+            headers,
+            message: format!("上游 HTTP {status}: {msg}"),
+        });
+    }
 
     Ok(StreamPrimeOk {
         status: StatusCode::from_u16(status).unwrap_or(StatusCode::OK),
@@ -256,7 +400,7 @@ struct StreamState {
     on_idle_timeout: Option<Box<dyn FnOnce() + Send>>,
     on_success: Option<Box<dyn FnOnce() + Send>>,
     on_error: Option<Box<dyn FnOnce(String) + Send>>,
-    /// 客户端提前断开：写日志但不记熔断失败（上游未必有问题）。
+    /// 客户端提前断开：写日志（不换源）。
     on_abort: Option<Box<dyn FnOnce() + Send>>,
 }
 
@@ -287,8 +431,7 @@ impl Drop for StreamState {
 }
 
 /// 从已成功 prime 的流构造 body；后续 chunk 使用 `idle` 静默超时。
-/// 超时后结束流并调用 `on_idle_timeout`（记失败/日志）；**不会**回到换源循环。
-/// 正常结束调用 `on_success`；中途读错误调用 `on_error`；body 被 drop 且未终态调用 `on_abort`。
+/// 超时后结束流并调用 `on_idle_timeout`；**不会**回到换源循环。
 fn stream_body_from_prime(
     first: Bytes,
     response: reqwest::Response,
@@ -320,7 +463,6 @@ fn stream_body_from_prime(
                 }
             }
             let Some(resp) = state.response.as_mut() else {
-                // 无后续响应体：视为正常结束（仅首包）。
                 if let Some(cb) = state.on_success.take() {
                     cb();
                 }
@@ -367,33 +509,15 @@ fn stream_body_from_prime(
     Body::from_stream(stream)
 }
 
-/// attempt 路径 RAII：任务取消时释放半开探测占用。
-struct ProbeReleaseGuard<'a> {
-    circuits: &'a CircuitRegistry,
-    provider_id: i64,
-    armed: bool,
-}
-
-impl<'a> ProbeReleaseGuard<'a> {
-    fn new(circuits: &'a CircuitRegistry, provider_id: i64) -> Self {
-        Self {
-            circuits,
-            provider_id,
-            armed: true,
-        }
+fn build_http_response(status: u16, headers: HeaderMap, body: Bytes) -> Response {
+    let mut builder =
+        Response::builder().status(StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY));
+    for (k, v) in headers.iter() {
+        builder = builder.header(k, v);
     }
-
-    fn disarm(&mut self) {
-        self.armed = false;
-    }
-}
-
-impl Drop for ProbeReleaseGuard<'_> {
-    fn drop(&mut self) {
-        if self.armed {
-            self.circuits.release_probe(self.provider_id);
-        }
-    }
+    builder
+        .body(Body::from(body))
+        .unwrap_or_else(|_| StatusCode::BAD_GATEWAY.into_response())
 }
 
 pub struct ForwardOutcome {
@@ -403,7 +527,7 @@ pub struct ForwardOutcome {
     pub failover_from: String,
     pub failover_to: String,
     pub failover_reason: String,
-    /// 最终响应若为上游错误（如不可重试 4xx），填入摘要供请求日志使用。
+    /// 最终响应若为上游错误，填入摘要供请求日志使用。
     pub error: String,
     /// 为 true 时最终 request_log 由流式 body 终态回调写入，server 不得再记成功。
     pub defer_request_log: bool,
@@ -411,10 +535,8 @@ pub struct ForwardOutcome {
 
 pub async fn forward_with_failover(
     stores: &Stores,
-    circuits: &CircuitRegistry,
     clients: &UpstreamClients,
     group_name: &str,
-    auto_failover: bool,
     candidates: &[Candidate],
     body: &Value,
     stream: bool,
@@ -425,29 +547,19 @@ pub async fn forward_with_failover(
     }
 
     let mut last_error = "无可用上游".to_string();
+    let mut last_http: Option<(u16, HeaderMap, Bytes, String, String, String)> = None;
+    let mut last_transport_status: u16 = 502;
     let mut failover_from = String::new();
     let mut failover_to = String::new();
     let mut failover_reason = String::new();
     let mut previous_name: Option<String> = None;
+    let mut tried_any = false;
 
-    let try_list: Vec<&Candidate> = if auto_failover {
-        candidates.iter().collect()
-    } else {
-        candidates.iter().take(1).collect()
-    };
-
-    for candidate in try_list {
+    for candidate in candidates {
         if !candidate.provider.enabled {
             continue;
         }
-        if !circuits.allow_request(candidate.provider.id) {
-            last_error = format!("供应商 {} 熔断中", candidate.provider.name);
-            continue;
-        }
-
-        // 若 future 在 attempt 中途被取消，Drop 时释放半开探测位，避免长期占锁。
-        // record_success / record_failure / release_probe 会清 probe；guard 再 release 幂等。
-        let mut probe_guard = ProbeReleaseGuard::new(circuits, candidate.provider.id);
+        tried_any = true;
 
         if let Some(prev) = &previous_name {
             failover_from = prev.clone();
@@ -457,11 +569,6 @@ pub async fn forward_with_failover(
         let attempt_err: AttemptError = if stream {
             match attempt_stream_prime(clients, candidate, body).await {
                 Ok(ok) => {
-                    // 首包成功仅表示可开始透传；熔断成功先记一笔。
-                    // 若随后静默超时会再 record_failure。最终 request_log 延迟到 body 终态。
-                    circuits.record_success(candidate.provider.id);
-                    probe_guard.disarm();
-                    let provider_id = candidate.provider.id;
                     let provider_name = candidate.provider.name.clone();
                     let upstream_model = candidate.upstream_model.clone();
                     let group = group_name.to_string();
@@ -472,9 +579,7 @@ pub async fn forward_with_failover(
                     let started = Instant::now();
                     let idle = policy.stream_idle_timeout;
 
-                    // 各终态回调独立克隆字段，避免 move 交叉与双写。
                     let on_idle = {
-                        let circuits = circuits.clone();
                         let stores = stores.clone();
                         let group = group.clone();
                         let name = provider_name.clone();
@@ -483,8 +588,7 @@ pub async fn forward_with_failover(
                         let fo_to = fo_to.clone();
                         let fo_reason = fo_reason.clone();
                         move || {
-                            // 响应已提交：仅记失败与日志，不得换源拼接。
-                            circuits.record_failure(provider_id);
+                            // 响应已提交：仅记日志，不得换源拼接。
                             stores.insert_log_best_effort(NewRequestLog {
                                 group_name: group,
                                 provider_name: name,
@@ -525,7 +629,6 @@ pub async fn forward_with_failover(
                         }
                     };
                     let on_error = {
-                        let circuits = circuits.clone();
                         let stores = stores.clone();
                         let group = group.clone();
                         let name = provider_name.clone();
@@ -534,7 +637,6 @@ pub async fn forward_with_failover(
                         let fo_to = fo_to.clone();
                         let fo_reason = fo_reason.clone();
                         move |message: String| {
-                            circuits.record_failure(provider_id);
                             let summary: String = message.chars().take(200).collect();
                             stores.insert_log_best_effort(NewRequestLog {
                                 group_name: group,
@@ -556,7 +658,6 @@ pub async fn forward_with_failover(
                                 group_name: group,
                                 provider_name,
                                 upstream_model,
-                                // 499：客户端关闭请求（nginx 惯例）；不记熔断失败。
                                 status_code: 499,
                                 use_time_ms: elapsed_ms(started),
                                 error: "流式响应未完整结束（客户端断开或中止）".into(),
@@ -599,8 +700,6 @@ pub async fn forward_with_failover(
         } else {
             match attempt_non_stream(clients, candidate, body).await {
                 Ok((status, headers, bytes)) => {
-                    circuits.record_success(candidate.provider.id);
-                    probe_guard.disarm();
                     let mut builder = Response::builder().status(status);
                     for (k, v) in headers.iter() {
                         builder = builder.header(k, v);
@@ -623,66 +722,78 @@ pub async fn forward_with_failover(
             }
         };
 
-        match attempt_err {
-            AttemptError::NonRetryable {
+        // 中间失败：写脱敏、截断后的尝试摘要，继续下一候选项。
+        let safe_error =
+            redact_sensitive_summary(attempt_err.message(), &candidate.provider.api_key);
+        last_error = safe_error.clone();
+        failover_reason = safe_error.clone();
+        match &attempt_err {
+            AttemptError::Http {
                 status,
                 body,
                 headers,
+                ..
             } => {
-                // 明确客户端/不可重试错误不推进熔断，但必须释放半开探测位。
-                circuits.release_probe(candidate.provider.id);
-                probe_guard.disarm();
-                let msg = String::from_utf8_lossy(&body)
-                    .chars()
-                    .take(200)
-                    .collect::<String>();
-                // 最终日志由 server 统一写入，避免双写。
-                let mut builder = Response::builder()
-                    .status(StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_REQUEST));
-                for (k, v) in headers.iter() {
-                    builder = builder.header(k, v);
-                }
-                let response = builder
-                    .body(Body::from(body))
-                    .unwrap_or_else(|_| StatusCode::BAD_REQUEST.into_response());
-                return Ok(ForwardOutcome {
-                    response,
-                    final_provider_name: candidate.provider.name.clone(),
-                    final_model: candidate.upstream_model.clone(),
-                    failover_from,
-                    failover_to,
-                    failover_reason: "不可重试错误".into(),
-                    error: msg,
-                    defer_request_log: false,
-                });
-            }
-            AttemptError::Retryable { status, message } => {
-                circuits.record_failure(candidate.provider.id);
-                probe_guard.disarm();
-                last_error = message.clone();
-                if previous_name.is_some() || auto_failover {
-                    failover_reason = message.clone();
-                }
+                last_http = Some((
+                    *status,
+                    headers.clone(),
+                    body.clone(),
+                    candidate.provider.name.clone(),
+                    candidate.upstream_model.clone(),
+                    safe_error.clone(),
+                ));
                 stores.insert_log_best_effort(NewRequestLog {
                     group_name: group_name.into(),
                     provider_name: candidate.provider.name.clone(),
                     upstream_model: candidate.upstream_model.clone(),
-                    status_code: status.unwrap_or(0) as i64,
+                    status_code: *status as i64,
                     use_time_ms: 0,
-                    error: message,
+                    error: safe_error.clone(),
                     failover_from: String::new(),
                     failover_to: String::new(),
                     failover_reason: String::new(),
                 });
-                previous_name = Some(candidate.provider.name.clone());
-                if !auto_failover {
-                    break;
-                }
+            }
+            AttemptError::Transport { gateway_status, .. } => {
+                last_transport_status = *gateway_status;
+                last_http = None; // 最后一次为无响应错误时透传逻辑以 transport 为准
+                stores.insert_log_best_effort(NewRequestLog {
+                    group_name: group_name.into(),
+                    provider_name: candidate.provider.name.clone(),
+                    upstream_model: candidate.upstream_model.clone(),
+                    status_code: *gateway_status as i64,
+                    use_time_ms: 0,
+                    error: safe_error.clone(),
+                    failover_from: String::new(),
+                    failover_to: String::new(),
+                    failover_reason: String::new(),
+                });
             }
         }
+        previous_name = Some(candidate.provider.name.clone());
     }
 
-    Err((StatusCode::BAD_GATEWAY, last_error))
+    if !tried_any {
+        return Err((StatusCode::BAD_GATEWAY, "分组无启用的上游".into()));
+    }
+
+    // 队列耗尽：有最后 HTTP 响应则透传；否则返回明确网关错误。
+    if let Some((status, headers, body, provider_name, model, safe_error)) = last_http {
+        let response = build_http_response(status, headers, body);
+        return Ok(ForwardOutcome {
+            response,
+            final_provider_name: provider_name,
+            final_model: model,
+            failover_from,
+            failover_to,
+            failover_reason: last_error.clone(),
+            error: safe_error,
+            defer_request_log: false,
+        });
+    }
+
+    let gw = StatusCode::from_u16(last_transport_status).unwrap_or(StatusCode::BAD_GATEWAY);
+    Err((gw, last_error))
 }
 
 pub fn elapsed_ms(start: Instant) -> i64 {
@@ -696,11 +807,58 @@ mod tests {
     use std::sync::Arc;
 
     #[test]
-    fn retryable_status_matrix() {
-        assert!(is_retryable_status(500));
-        assert!(is_retryable_status(401));
-        assert!(!is_retryable_status(400));
-        assert!(!is_retryable_status(404));
+    fn structured_error_string_error_field() {
+        let body = r#"{"error":"当前 API 不支持所选模型 gpt-5.6-sol","type":"error"}"#.as_bytes();
+        let msg = is_structured_error_body(body).expect("应识别错误信封");
+        assert!(msg.contains("不支持所选模型"));
+    }
+
+    #[test]
+    fn structured_error_object_message() {
+        let body = br#"{"error":{"message":"invalid model","type":"invalid_request_error"}}"#;
+        let msg = is_structured_error_body(body).expect("应识别 error.message");
+        assert!(msg.contains("invalid model"));
+    }
+
+    #[test]
+    fn structured_error_top_level_message() {
+        let body = br#"{"message":"bad request","code":"invalid"}"#;
+        assert!(is_structured_error_body(body).is_some());
+    }
+
+    #[test]
+    fn success_completion_not_error() {
+        let body = br#"{"id":"c1","object":"chat.completion","choices":[{"message":{"role":"assistant","content":"ok"}}]}"#;
+        assert!(is_structured_error_body(body).is_none());
+    }
+
+    #[test]
+    fn empty_choices_completion_not_error() {
+        let body = br#"{"id":"c1","object":"chat.completion","choices":[]}"#;
+        assert!(is_structured_error_body(body).is_none());
+    }
+
+    #[test]
+    fn redact_masks_api_key_and_bearer() {
+        let msg = "上游 HTTP 401: invalid key sk-secret-value bearer sk-other";
+        let safe = redact_sensitive_summary(msg, "sk-secret-value");
+        assert!(!safe.contains("sk-secret-value"));
+        assert!(safe.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn sse_first_chunk_not_error() {
+        let body = b"data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\n";
+        assert!(is_structured_error_body(body).is_none());
+    }
+
+    #[test]
+    fn non_envelope_json_error_summary_avoids_dumping_body() {
+        let body = br#"{"code":"model_not_found","messages":[{"role":"user","content":"secret"}]}"#;
+        let summary = body_error_summary(body);
+        assert_eq!(summary, "model_not_found");
+        assert!(!summary.contains("secret"));
+        assert!(!summary.contains("messages"));
     }
 
     #[test]
@@ -718,7 +876,6 @@ mod tests {
         assert_eq!(CONNECT_TIMEOUT, Duration::from_secs(10));
     }
 
-    /// 静默超时分支：对 never-ready 的 future 包 timeout，断言会触发回调语义。
     #[tokio::test]
     async fn idle_timeout_fires_callback_semantics() {
         let fired = Arc::new(AtomicBool::new(false));
@@ -726,7 +883,6 @@ mod tests {
         let idle = Duration::from_millis(30);
         let result = tokio::time::timeout(idle, std::future::pending::<()>()).await;
         assert!(result.is_err());
-        // 与 stream_body_from_prime 超时分支一致：超时后执行回调
         flag.store(true, Ordering::SeqCst);
         assert!(fired.load(Ordering::SeqCst));
     }

@@ -8,17 +8,13 @@ import {
   fetchProviderModels,
   getModelLeaderboard,
   listGroups,
-  listHealth,
   listProviders,
   updateGroup,
   type Group,
-  type HealthSnapshot,
   type ModelLeaderboardSnapshot,
   type Provider,
 } from "../api/tauri";
-import HealthBadge from "../components/HealthBadge.vue";
 import AppDialog from "../components/AppDialog.vue";
-import { findHealth } from "../utils/health";
 import {
   buildExternalScoreIndex,
   hybridSortKey,
@@ -33,7 +29,6 @@ import { getGroupSaveMode } from "../utils/groupSaveMode";
 
 const groups = ref<Group[]>([]);
 const providers = ref<Provider[]>([]);
-const health = ref<HealthSnapshot[]>([]);
 const error = ref("");
 const message = ref("");
 /** 正在导出到 Pi 的分组 id */
@@ -70,7 +65,6 @@ type QueueItemDraft = {
 
 const form = reactive({
   name: "",
-  auto_failover: true,
   items: [] as QueueItemDraft[],
 });
 
@@ -149,11 +143,7 @@ async function ensureLeaderboardForExternalSort() {
 
 async function refresh() {
   try {
-    [groups.value, providers.value, health.value] = await Promise.all([
-      listGroups(),
-      listProviders(),
-      listHealth(),
-    ]);
+    [groups.value, providers.value] = await Promise.all([listGroups(), listProviders()]);
     if (!bulkProviderId.value && providers.value.length > 0) {
       bulkProviderId.value = providers.value[0]?.id ?? 0;
     }
@@ -166,7 +156,6 @@ async function refresh() {
 function resetForm() {
   editingGroupId.value = null;
   form.name = "";
-  form.auto_failover = true;
   form.items = [];
   modelOptions.value = {};
   fetchingModels.value = {};
@@ -193,7 +182,6 @@ function startEdit(g: Group) {
   editingGroupId.value = g.id;
   dialogOpen.value = true;
   form.name = g.name;
-  form.auto_failover = g.auto_failover;
   form.items = g.items.map((i) => createQueueItem(i.provider_id, i.upstream_model));
   modelOptions.value = {};
   fetchingModels.value = {};
@@ -467,7 +455,6 @@ async function save() {
   try {
     const payload = {
       name: form.name,
-      auto_failover: form.auto_failover,
       items: form.items.filter((i) => i.provider_id > 0 && i.upstream_model.trim()),
     };
     if (mode === "update" && targetId !== null) {
@@ -535,10 +522,6 @@ onMounted(async () => {
         <label class="text-sm">
           <span class="mb-1 block text-slate-500">分组名（对外 model）</span>
           <input v-model="form.name" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
-        </label>
-        <label class="flex items-center gap-2 self-end text-sm">
-          <input v-model="form.auto_failover" type="checkbox" />
-          开启自动故障转移
         </label>
       </div>
 
@@ -734,9 +717,6 @@ onMounted(async () => {
         <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div>
             <span class="font-semibold">{{ g.name }}</span>
-            <span class="ml-2 text-xs text-slate-500">
-              {{ g.auto_failover ? "自动故障转移：开" : "自动故障转移：关" }}
-            </span>
           </div>
           <div class="space-x-2 text-sm">
             <button
@@ -756,7 +736,6 @@ onMounted(async () => {
             <span class="text-slate-400">{{ idx + 1 }}.</span>
             <span>{{ providerMap.get(item.provider_id)?.name || item.provider_name || item.provider_id }}</span>
             <span class="font-mono text-xs text-slate-500">{{ item.upstream_model }}</span>
-            <HealthBadge :snapshot="findHealth(health, item.provider_id)" />
           </li>
         </ol>
       </div>

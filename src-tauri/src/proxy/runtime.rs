@@ -11,7 +11,6 @@ use tokio::sync::oneshot;
 use crate::db::{default_db_path, open_db};
 use crate::domain::Stores;
 use crate::error::AppError;
-use crate::proxy::circuit::CircuitRegistry;
 use crate::proxy::forward::{ForwardPolicy, UpstreamClients};
 use crate::proxy::server::{self, AppState};
 use crate::settings::{self, DEFAULT_PORT};
@@ -61,7 +60,6 @@ struct RuntimeInner {
     port_note: Option<String>,
     live: Option<LiveProxy>,
     stores: Option<Stores>,
-    circuits: CircuitRegistry,
     clients: UpstreamClients,
 }
 
@@ -97,7 +95,6 @@ impl ProxyHandle {
                 port_note: None,
                 live: None,
                 stores: None,
-                circuits: CircuitRegistry::new(),
                 clients: UpstreamClients::new(),
             }),
             tokio_rt,
@@ -127,10 +124,6 @@ impl ProxyHandle {
         })
     }
 
-    pub fn circuits(&self) -> Result<CircuitRegistry, AppError> {
-        self.with_inner(|inner| Ok(inner.circuits.clone()))
-    }
-
     pub fn status_snapshot(&self) -> Result<ProxyStatus, AppError> {
         self.with_inner(|inner| Ok(status_of(inner)))
     }
@@ -149,12 +142,11 @@ impl ProxyHandle {
             }
         }
 
-        let (circuits, clients, host, preferred, config_dir) = self.with_inner(|inner| {
+        let (clients, host, preferred, config_dir) = self.with_inner(|inner| {
             inner.state = ProxyState::Starting;
             inner.last_error = None;
             inner.port_note = None;
             Ok((
-                inner.circuits.clone(),
                 inner.clients.clone(),
                 inner.host.clone(),
                 inner.port,
@@ -205,7 +197,6 @@ impl ProxyHandle {
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
         let state = AppState {
             stores,
-            circuits,
             clients,
             forward_policy: ForwardPolicy::default(),
         };

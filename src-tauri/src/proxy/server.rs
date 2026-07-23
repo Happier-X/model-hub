@@ -13,7 +13,6 @@ use tower_http::cors::CorsLayer;
 
 use crate::domain::log::NewRequestLog;
 use crate::domain::Stores;
-use crate::proxy::circuit::CircuitRegistry;
 use crate::proxy::forward::{
     elapsed_ms, forward_with_failover, Candidate, ForwardPolicy, UpstreamClients,
 };
@@ -21,7 +20,6 @@ use crate::proxy::forward::{
 #[derive(Clone)]
 pub struct AppState {
     pub stores: Stores,
-    pub circuits: CircuitRegistry,
     pub clients: UpstreamClients,
     pub forward_policy: ForwardPolicy,
 }
@@ -110,10 +108,8 @@ async fn chat_completions(State(state): State<AppState>, Json(body): Json<Value>
     let start = Instant::now();
     match forward_with_failover(
         &state.stores,
-        &state.circuits,
         &state.clients,
         &group_name,
-        group.auto_failover,
         &candidates,
         &body,
         stream,

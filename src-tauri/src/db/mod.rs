@@ -118,7 +118,6 @@ mod tests {
         let groups = stores.list_groups().unwrap();
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].name, "legacy-group");
-        assert!(groups[0].auto_failover);
         chrono::DateTime::parse_from_rfc3339(&groups[0].created_at).unwrap();
         assert_eq!(groups[0].items.len(), 1);
         assert_eq!(groups[0].items[0].upstream_model, "legacy-model");

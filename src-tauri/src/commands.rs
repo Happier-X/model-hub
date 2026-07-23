@@ -238,14 +238,6 @@ pub fn export_group_to_pi_agent(
     })
 }
 
-#[derive(Debug, Serialize)]
-pub struct HealthSnapshot {
-    pub provider_id: i64,
-    pub provider_name: String,
-    pub state: String,
-    pub consecutive_failures: u32,
-}
-
 /// 获取 OpenRouter 公共模型榜单（24h 缓存；可强制刷新；网络失败时 stale 回退）。
 #[tauri::command]
 pub async fn get_model_leaderboard(
@@ -257,28 +249,4 @@ pub async fn get_model_leaderboard(
     crate::domain::leaderboard::get_model_leaderboard(config_dir, force_refresh.unwrap_or(false))
         .await
         .map_err(Into::into)
-}
-
-#[tauri::command]
-pub fn list_health(proxy: State<'_, ProxyHandle>) -> Result<Vec<HealthSnapshot>, InvokeError> {
-    let stores = stores(&proxy)?;
-    let circuits = proxy.circuits().map_err(InvokeError::from)?;
-    let providers = stores.list_providers().map_err(InvokeError::from)?;
-    let mut out = Vec::new();
-    for p in providers {
-        let label = circuits.health_label(p.id);
-        let state = match label {
-            crate::proxy::circuit::HealthLabel::Healthy => "healthy",
-            crate::proxy::circuit::HealthLabel::Warning => "warning",
-            crate::proxy::circuit::HealthLabel::Open => "open",
-            crate::proxy::circuit::HealthLabel::HalfOpen => "half_open",
-        };
-        out.push(HealthSnapshot {
-            provider_id: p.id,
-            provider_name: p.name,
-            state: state.into(),
-            consecutive_failures: circuits.consecutive_failures(p.id),
-        });
-    }
-    Ok(out)
 }

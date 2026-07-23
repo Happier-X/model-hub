@@ -13,14 +13,12 @@ use model_hub_lib::db::open_db;
 use model_hub_lib::domain::group::{CreateGroupPayload, GroupItemInput};
 use model_hub_lib::domain::provider::CreateProviderPayload;
 use model_hub_lib::domain::Stores;
-use model_hub_lib::proxy::circuit::CircuitRegistry;
 use model_hub_lib::proxy::forward::{ForwardPolicy, UpstreamClients};
 use model_hub_lib::proxy::server::{build_router, AppState};
 
 struct Env {
     _dir: tempfile::TempDir,
     stores: Stores,
-    circuits: CircuitRegistry,
     router: axum::Router,
 }
 
@@ -28,18 +26,15 @@ fn setup_with_policy(policy: ForwardPolicy) -> Env {
     let dir = tempfile::tempdir().unwrap();
     let db = open_db(&dir.path().join("t.db")).unwrap();
     let stores = Stores::new(db);
-    let circuits = CircuitRegistry::new();
     let clients = UpstreamClients::new();
     let state = AppState {
         stores: stores.clone(),
-        circuits: circuits.clone(),
         clients,
         forward_policy: policy,
     };
     Env {
         _dir: dir,
         stores,
-        circuits,
         router: build_router(state),
     }
 }
@@ -54,7 +49,6 @@ async fn allows_missing_api_key() {
     env.stores
         .create_group(CreateGroupPayload {
             name: "open-local".into(),
-            auto_failover: true,
             items: vec![],
         })
         .unwrap();
@@ -94,7 +88,6 @@ async fn models_lists_groups() {
     env.stores
         .create_group(CreateGroupPayload {
             name: "demo-group".into(),
-            auto_failover: true,
             items: vec![],
         })
         .unwrap();
@@ -159,7 +152,6 @@ async fn failover_from_5xx_to_success() {
     env.stores
         .create_group(CreateGroupPayload {
             name: "g1".into(),
-            auto_failover: true,
             items: vec![
                 GroupItemInput {
                     provider_id: p_bad.id,
@@ -235,7 +227,7 @@ async fn spawn_hanging_after_first_chunk_upstream() -> String {
     format!("http://{addr}")
 }
 
-/// 流式：首包后静默超时只写一条失败日志（无误导性 200 空 error），并记熔断失败。
+/// 流式：首包后静默超时只写一条失败日志（无误导性 200 空 error），且不换源。
 #[tokio::test]
 async fn stream_idle_timeout_single_failure_log() {
     let base = spawn_hanging_after_first_chunk_upstream().await;
@@ -255,7 +247,6 @@ async fn stream_idle_timeout_single_failure_log() {
     env.stores
         .create_group(CreateGroupPayload {
             name: "g-stream".into(),
-            auto_failover: true,
             items: vec![GroupItemInput {
                 provider_id: provider.id,
                 upstream_model: "m-stream".into(),
@@ -306,12 +297,6 @@ async fn stream_idle_timeout_single_failure_log() {
     assert_eq!(log.upstream_model, "m-stream");
     assert!(!log.error.contains("sk-"));
     assert!(!log.error.contains("messages"));
-
-    // 首包 record_success 后 idle 会 record_failure → consecutive_failures >= 1
-    assert!(
-        env.circuits.consecutive_failures(provider.id) >= 1,
-        "静默超时应记录熔断失败"
-    );
 }
 
 /// 流式正常结束：记一条 200 成功日志。
@@ -339,7 +324,6 @@ async fn stream_success_single_ok_log() {
     env.stores
         .create_group(CreateGroupPayload {
             name: "g-ok".into(),
-            auto_failover: false,
             items: vec![GroupItemInput {
                 provider_id: provider.id,
                 upstream_model: "m-ok".into(),
@@ -409,7 +393,6 @@ async fn non_stream_success_writes_log_and_stats() {
     env.stores
         .create_group(CreateGroupPayload {
             name: "g-nonstream".into(),
-            auto_failover: false,
             items: vec![GroupItemInput {
                 provider_id: provider.id,
                 upstream_model: "m".into(),
@@ -473,7 +456,6 @@ async fn stream_abort_on_drop_writes_log() {
     env.stores
         .create_group(CreateGroupPayload {
             name: "g-abort".into(),
-            auto_failover: false,
             items: vec![GroupItemInput {
                 provider_id: provider.id,
                 upstream_model: "m".into(),
@@ -516,6 +498,4 @@ async fn stream_abort_on_drop_writes_log() {
     assert_eq!(logs.items[0].status_code, 499);
     assert!(logs.items[0].error.contains("断开"));
     assert_eq!(logs.items[0].provider_name, "hang");
-    // 不记熔断失败
-    assert_eq!(env.circuits.consecutive_failures(provider.id), 0);
 }

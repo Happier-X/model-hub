@@ -4,22 +4,17 @@ import {
   createProvider,
   deleteProvider,
   extractInvokeError,
-  listHealth,
   listProviders,
   updateProvider,
-  type HealthSnapshot,
   type Provider,
 } from "../api/tauri";
-import HealthBadge from "../components/HealthBadge.vue";
 import AppDialog from "../components/AppDialog.vue";
-import { findHealth } from "../utils/health";
 import {
   describeProviderPasteSource,
   parseProviderPaste,
 } from "../utils/providerPaste";
 
 const items = ref<Provider[]>([]);
-const health = ref<HealthSnapshot[]>([]);
 const error = ref("");
 const message = ref("");
 const editingProviderId = ref<number | null>(null);
@@ -35,7 +30,7 @@ const form = reactive({
 
 async function refresh() {
   try {
-    [items.value, health.value] = await Promise.all([listProviders(), listHealth()]);
+    items.value = await listProviders();
     error.value = "";
   } catch (e) {
     error.value = extractInvokeError(e);
@@ -227,7 +222,6 @@ onMounted(refresh);
               <th class="px-2 py-2">名称</th>
               <th class="px-2 py-2">Base URL</th>
               <th class="px-2 py-2">启用</th>
-              <th class="px-2 py-2">健康</th>
               <th class="px-2 py-2">操作</th>
             </tr>
           </thead>
@@ -236,9 +230,6 @@ onMounted(refresh);
               <td class="px-2 py-2 font-medium">{{ p.name }}</td>
               <td class="px-2 py-2 font-mono text-xs">{{ p.base_url }}</td>
               <td class="px-2 py-2">{{ p.enabled ? "启用" : "停用" }}</td>
-              <td class="px-2 py-2">
-                <HealthBadge :snapshot="findHealth(health, p.id)" />
-              </td>
               <td class="px-2 py-2 space-x-2">
                 <button type="button" class="text-cyan-700 hover:underline" @click="startEdit(p)">编辑</button>
                 <button type="button" class="text-rose-600 hover:underline" @click="remove(p.id)">删除</button>
