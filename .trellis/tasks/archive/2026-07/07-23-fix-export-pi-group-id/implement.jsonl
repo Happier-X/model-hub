@@ -1,0 +1,2 @@
+{"path":".trellis/spec/frontend/type-safety.md","reason":"跨层 IPC 类型与参数命名约定"}
+{"path":"src/api/tauri.ts","reason":"exportGroupToPiAgent 与同类 invoke 参数键"}

@@ -1,0 +1,2 @@
+{"path":".trellis/spec/frontend/type-safety.md","reason":"验收 camelCase 命令参数约定已写入"}
+{"path":"src/api/tauri.ts","reason":"验收 invoke 参数键修正范围"}
