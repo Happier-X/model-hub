@@ -389,3 +389,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: 重置发布为 v0.0.1
+
+**Date**: 2026-07-23
+**Task**: 重置发布为 v0.0.1
+**Branch**: `master`
+
+### Summary
+
+完整重置历史 tag/Release 与旧 release-notes，版本改回 0.0.1，改用 changelog 维护更新日志，推送 master 与 v0.0.1 触发 Windows 发布工作流。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f289196` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
