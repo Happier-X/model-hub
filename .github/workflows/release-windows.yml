@@ -48,6 +48,25 @@ jobs:
             throw "缺少 GitHub Secret TAURI_SIGNING_PRIVATE_KEY，拒绝发布未签名更新包。"
           }
 
+      - name: Read changelog for release body
+        id: changelog
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $version = $tag.TrimStart("v")
+          $path = "changelog/v$version.md"
+          if (Test-Path $path) {
+            $body = Get-Content $path -Raw
+          } else {
+            $body = "> 暂无更新日志`n`n本版本包含 Vue 3 管理台与 Tauri 进程内 Rust 代理。更新资产必须通过 Tauri 签名校验。"
+          }
+          $body += "`n`n---`n`n### 构建产物`n- Windows NSIS 安装包（见 Release 附件）`n- Updater 签名资产与 ``latest.json```n- ``SHA256SUMS.txt```n"
+          # softprops / tauri-action 通过 env 传入多行 body 更稳妥
+          "RELEASE_BODY<<EOF" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $body | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8 -NoNewline
+          "EOF" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+
       - name: Build and release Tauri updater assets
         uses: tauri-apps/tauri-action@v0
         env:
@@ -57,10 +76,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Model Hub ${{ github.ref_name }}
-          releaseBody: |
-            请先阅读随 Release 附件提供的中文发布说明与 SHA256SUMS.txt。
-            本版本包含 Vue 3 管理台与 Tauri 进程内 Rust 代理。
-            更新资产必须通过 Tauri 签名校验。
+          releaseBody: ${{ env.RELEASE_BODY }}
           releaseDraft: false
           prerelease: false
           uploadUpdaterJson: true
@@ -89,7 +105,7 @@ jobs:
           $assetName = [System.IO.Path]::GetFileName(([Uri]$windows.url).AbsolutePath)
           if ($names -notcontains $assetName) { throw "latest.json 引用的资产 $assetName 不在 Release 中" }
 
-      - name: Collect release notes and SHA-256
+      - name: Collect installers and SHA-256
         shell: pwsh
         run: |
           $bundleRoot = "src-tauri/target/release/bundle"
@@ -98,8 +114,11 @@ jobs:
           $nsis = Get-ChildItem -Path (Join-Path $bundleRoot "nsis") -Filter "*.exe" | Select-Object -First 1
           if (-not $nsis) { throw "未找到 NSIS 安装包" }
           Copy-Item -Force $nsis.FullName (Join-Path $outDir $nsis.Name)
-          $notes = "docs/release-notes-v$($env:GITHUB_REF_NAME.TrimStart('v')).md"
-          if (Test-Path $notes) { Copy-Item -Force $notes (Join-Path $outDir (Split-Path $notes -Leaf)) }
+          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          $changelog = "changelog/v$version.md"
+          if (Test-Path $changelog) {
+            Copy-Item -Force $changelog (Join-Path $outDir (Split-Path $changelog -Leaf))
+          }
           $lines = Get-ChildItem $outDir -File | ForEach-Object {
             $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $($_.Name)"
@@ -111,11 +130,6 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           files: release-assets/*
-          append_body: true
-          body: |
-
-            发布说明与 SHA-256 已作为附件上传。Updater 使用 Tauri 签名校验。
-            应用包含 Vue 3 管理台与 Tauri 进程内 Rust 代理。
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

@@ -56,7 +56,7 @@ TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 ## 发布步骤
 
 1. 同步修改 `package.json`、`src-tauri/Cargo.toml` 与 Tauri 配置中的版本号。
-2. 新增对应的 `docs/release-notes-vX.Y.Z.md`（例如 [v0.1.1](./release-notes-v0.1.1.md)）。
+2. 新增对应的 `changelog/vX.Y.Z.md`（例如 [v0.0.1](../changelog/v0.0.1.md)）；GitHub Release 正文读取该文件。
 3. 完成质量检查并推送代码。
 4. （可选）本机验证安装包构建：
 
@@ -68,8 +68,8 @@ pnpm release:windows
 5. 推送版本标签，例如：
 
 ```bash
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.0.1
+git push origin v0.0.1
 ```
 
 6. Windows 工作流只构建 `src-tauri` 中的 Tauri 应用（进程内代理，无需 `prepare:gateway-rust`），并发布：
@@ -77,8 +77,8 @@ git push origin v0.1.1
    - NSIS 签名；
    - `latest.json`；
    - `SHA256SUMS.txt`；
-   - 对应版本发布说明。
-7. 在 Release 页面确认 `latest.json` 的版本、URL、签名和资产名称一致。
+   - Release 正文（`changelog/vX.Y.Z.md`）。
+7. 在 Release 页面确认正文与 `latest.json` 的版本、URL、签名和资产名称一致。
 
 ## 失败处理
 
