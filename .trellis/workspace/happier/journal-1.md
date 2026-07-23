@@ -554,3 +554,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 16: 修复私有成员运行时错误
+
+**Date**: 2026-07-23
+**Task**: 修复私有成员运行时错误
+**Branch**: `master`
+
+### Summary
+
+修复 Vue 深层代理 Tauri Update 导致的 private member 错误，改用 shallowRef，增加资源释放逻辑和 23 项回归测试。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a2806ac` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

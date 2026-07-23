@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 15
+- **Total Sessions**: 16
 - **Last Active**: 2026-07-23
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~556 | Active |
+| `journal-1.md` | ~589 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 16 | 2026-07-23 | 修复私有成员运行时错误 | `a2806ac` | `master` |
 | 15 | 2026-07-23 | 发布 v0.0.2 | `5cc5855` | `master` |
 | 14 | 2026-07-23 | 发布 v0.0.2 | `5cc5855` | `master` |
 | 13 | 2026-07-23 | 默认端口改为 8888 | `7bc7272` | `master` |
