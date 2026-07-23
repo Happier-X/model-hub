@@ -33,7 +33,7 @@ export interface ModelLeaderboardSnapshot {
 
 export const getModelLeaderboard = (forceRefresh = false) =>
   invoke<ModelLeaderboardSnapshot>("get_model_leaderboard", {
-    force_refresh: forceRefresh,
+    forceRefresh,
   })
 ```
 

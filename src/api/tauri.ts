@@ -196,7 +196,7 @@ export interface ExportToPiResult {
 
 /** 将指定分组 upsert 到 ~/.pi/agent/models.json 的 model-hub（固定占位 Key，无 Key 入参） */
 export const exportGroupToPiAgent = (groupId: number) =>
-  invoke<ExportToPiResult>("export_group_to_pi_agent", { group_id: groupId });
+  invoke<ExportToPiResult>("export_group_to_pi_agent", { groupId });
 export const listHealth = () => invoke<HealthSnapshot[]>("list_health");
 
 /** OpenRouter 公共榜单模型（白名单字段）。 */
@@ -217,10 +217,10 @@ export interface ModelLeaderboardSnapshot {
   models: LeaderboardModel[];
 }
 
-/** 获取 OpenRouter 模型榜单；默认用 24h 缓存，force_refresh 时尝试网络。 */
+/** 获取 OpenRouter 模型榜单；默认用 24h 缓存，forceRefresh 时尝试网络。 */
 export const getModelLeaderboard = (forceRefresh = false) =>
   invoke<ModelLeaderboardSnapshot>("get_model_leaderboard", {
-    force_refresh: forceRefresh,
+    forceRefresh,
   });
 
 /** 浏览器 / 非 Tauri 壳内无法使用更新与进程插件 */
