@@ -1,0 +1,7 @@
+{"file":".trellis/spec/backend/error-handling.md","reason":"核验无熔断顺序故障转移与流式边界"}
+{"file":".trellis/spec/backend/upstream-access.md","reason":"核验未引入后台测活或额外用户上游请求"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"核验错误摘要脱敏、故障转移字段和流式日志语义"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"核验 auto_failover 删除迁移与数据保留"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"执行后端测试与静态检查门禁"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"核验健康徽章与上游访问相关前端约束清理"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"核验前端类型与 IPC 契约同步删除 auto_failover/list_health"}

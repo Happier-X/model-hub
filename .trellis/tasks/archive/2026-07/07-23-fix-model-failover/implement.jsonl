@@ -1,0 +1,10 @@
+{"file":".trellis/spec/backend/index.md","reason":"后端架构边界与本机代理基本约定"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"故障转移、流式提交前后错误处理和旧熔断规则，需按本任务改写实现"}
+{"file":".trellis/spec/backend/upstream-access.md","reason":"禁止后台测活；删除熔断后不得引入替代探测"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"请求日志字段、脱敏与流式单结论规则"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"groups schema、auto_failover 迁移兼容与数据保留"}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"proxy 模块边界与 circuit/forward 目录约定"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Rust 后端最低测试与检查门禁"}
+{"file":".trellis/spec/frontend/index.md","reason":"前端信息架构与页面职责"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"健康展示只读熔断内存与上游访问前端约束"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"IPC 字段与 Rust serde snake_case 契约"}
