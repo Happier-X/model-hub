@@ -1,0 +1,2 @@
+{"path":".github/workflows/release-windows.yml","reason":"验收 tag 发布、签名与资产"}
+{"path":"docs/in-app-updater.md","reason":"验收版本同步与发布步骤"}
