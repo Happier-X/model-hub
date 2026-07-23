@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "编辑态与保存按钮规范"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "稳定编辑 id 与异步状态"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "分组 IPC payload"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端回归测试门禁"}
