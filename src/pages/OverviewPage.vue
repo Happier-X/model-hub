@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, shallowRef } from "vue";
 import {
   checkForUpdate,
   downloadAndInstallUpdate,
@@ -34,7 +34,11 @@ const updatePhase = ref<UpdatePhase>("idle");
 const updateMessage = ref("");
 const updateError = ref("");
 const currentVersion = ref("");
-const pendingUpdate = ref<Update | null>(null);
+/**
+ * 必须用 shallowRef：Update 继承 Tauri Resource，内部依赖 JS 私有成员。
+ * 深层 ref 会把实例变成 Proxy，调用 downloadAndInstall 时触发 private member 错误。
+ */
+const pendingUpdate = shallowRef<Update | null>(null);
 const downloadLoaded = ref(0);
 const downloadTotal = ref<number | null>(null);
 const checkUpdateOnStartup = ref(false);
@@ -81,6 +85,17 @@ function onDownloadEvent(event: DownloadEvent) {
   }
 }
 
+async function releasePendingUpdate(options?: { closeResource?: boolean }) {
+  const current = pendingUpdate.value;
+  pendingUpdate.value = null;
+  if (!current || options?.closeResource === false) return;
+  try {
+    await current.close();
+  } catch {
+    /* 资源可能已由安装路径释放；忽略 close 失败以免挡住 UI */
+  }
+}
+
 async function checkUpdate(options?: { quietIfLatest?: boolean; softError?: boolean }) {
   if (updateBusy.value) return;
   const quietIfLatest = options?.quietIfLatest ?? false;
@@ -88,7 +103,7 @@ async function checkUpdate(options?: { quietIfLatest?: boolean; softError?: bool
   updatePhase.value = "checking";
   updateMessage.value = quietIfLatest ? "启动时检查更新…" : "正在检查更新…";
   updateError.value = "";
-  pendingUpdate.value = null;
+  await releasePendingUpdate();
   downloadLoaded.value = 0;
   downloadTotal.value = null;
   try {
@@ -157,7 +172,8 @@ async function confirmInstall() {
     await downloadAndInstallUpdate(update, onDownloadEvent);
     updatePhase.value = "installing";
     updateMessage.value = "安装完成，正在重启应用…";
-    pendingUpdate.value = null;
+    // downloadAndInstall 成功后 Rust 侧已释放资源，勿再 close
+    await releasePendingUpdate({ closeResource: false });
     await relaunchApp();
   } catch (e) {
     updatePhase.value = "error";
@@ -167,9 +183,9 @@ async function confirmInstall() {
   }
 }
 
-function cancelPendingUpdate() {
+async function cancelPendingUpdate() {
   if (updateBusy.value) return;
-  pendingUpdate.value = null;
+  await releasePendingUpdate();
   updatePhase.value = "idle";
   updateMessage.value = "";
   updateError.value = "";
