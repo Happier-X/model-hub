@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "导出失败错误文案"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "前后端 IPC 字段一致"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "无 Key UI、入口在分组页"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "门禁与质量底线"}
