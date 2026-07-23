@@ -290,3 +290,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: 新建供应商和分组使用对话框
+
+**Date**: 2026-07-23
+**Task**: 新建供应商和分组使用对话框
+**Branch**: `master`
+
+### Summary
+
+新增通用可访问对话框，将供应商与分组的新建、编辑表单改为按需打开的 Dialog；保存失败保留输入，保存成功刷新列表，分组对话框不自动访问上游。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `22c7cbf` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
