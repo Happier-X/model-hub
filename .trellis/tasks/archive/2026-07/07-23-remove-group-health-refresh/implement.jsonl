@@ -1,0 +1,2 @@
+{"path":".trellis/spec/frontend/component-guidelines.md","reason":"遵循分组页面上游访问、列表错误状态和组件交互规范"}
+{"path":"src/pages/GroupsPage.vue","reason":"移除刷新健康按钮、专用加载状态和处理函数，同时保留健康展示"}
