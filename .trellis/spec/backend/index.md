@@ -32,6 +32,7 @@
 | [Logging Guidelines](./logging-guidelines.md) | 日志与脱敏 | Current |
 | [Quality Guidelines](./quality-guidelines.md) | 质量门禁 | Current |
 | [Model Leaderboard](./model-leaderboard.md) | OpenRouter 榜单 IPC / 缓存 / 白名单 | Current |
+| [Upstream Access](./upstream-access.md) | 禁止用户上游测活；允许真实 Chat 与点击拉模型 | Current |
 
 ---
 

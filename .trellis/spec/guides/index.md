@@ -28,6 +28,13 @@ These guides help you **ask the right questions before coding**.
 
 ## Quick Reference: Thinking Triggers
 
+### When touching providers / proxy / upstream HTTP
+
+- [ ] 是否引入启动/定时/后台对**用户供应商**的请求？（禁止，见 [upstream-access.md](../backend/upstream-access.md)）
+- [ ] 「健康」是否只读熔断内存，而非打上游？
+- [ ] 拉 `/models` 是否仅用户点击？
+- [ ] AI 联调是否未经用户授权就请求真实上游？
+
 ### When to Think About Cross-Layer Issues
 
 - [ ] Feature touches 3+ layers (API, Service, Component, Database)

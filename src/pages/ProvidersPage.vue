@@ -4,7 +4,6 @@ import {
   createProvider,
   deleteProvider,
   extractInvokeError,
-  fetchProviderModels,
   listHealth,
   listProviders,
   updateProvider,
@@ -23,7 +22,6 @@ const health = ref<HealthSnapshot[]>([]);
 const error = ref("");
 const message = ref("");
 const healthLoading = ref(false);
-const testLoading = ref(false);
 const editing = ref<Provider | null>(null);
 const pasteText = ref("");
 const form = reactive({
@@ -115,31 +113,6 @@ async function save() {
   }
 }
 
-async function testConnection() {
-  message.value = "";
-  if (!form.base_url.trim() || !form.api_key.trim()) {
-    error.value = "请填写 Base URL 与上游 API Key 后再测试连接";
-    return;
-  }
-  testLoading.value = true;
-  try {
-    const ids = await fetchProviderModels({
-      base_url: form.base_url,
-      api_key: form.api_key,
-    });
-    error.value = "";
-    const preview = ids.slice(0, 5).join(", ");
-    message.value =
-      ids.length === 0
-        ? "连接成功，但上游返回空模型列表"
-        : `连接成功，共 ${ids.length} 个模型${preview ? `（如 ${preview}${ids.length > 5 ? "…" : ""}）` : ""}`;
-  } catch (e) {
-    error.value = extractInvokeError(e);
-  } finally {
-    testLoading.value = false;
-  }
-}
-
 async function remove(id: number) {
   if (!confirm("确认删除该供应商？")) return;
   try {
@@ -213,14 +186,6 @@ onMounted(refresh);
       <div class="mt-4 flex flex-wrap gap-2">
         <button type="button" class="rounded-lg bg-slate-800 px-4 py-2 text-sm text-white" @click="save">
           保存
-        </button>
-        <button
-          type="button"
-          class="rounded-lg border border-cyan-600 px-4 py-2 text-sm text-cyan-700 hover:bg-cyan-50 disabled:opacity-50"
-          :disabled="testLoading"
-          @click="testConnection"
-        >
-          {{ testLoading ? "测试中…" : "测试连接 / 拉取模型" }}
         </button>
         <button
           v-if="editing"
