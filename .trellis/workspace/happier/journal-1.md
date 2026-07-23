@@ -123,3 +123,38 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: 分组页配置到 Pi 与 v0.1.1 发布
+
+**Date**: 2026-07-23
+**Task**: 分组页配置到 Pi 与 v0.1.1 发布
+**Branch**: `master`
+
+### Summary
+
+完成 OpenRouter 榜单排序与 v0.1.1 发版推送；将 Pi 配置入口迁到分组页，按分组 upsert model-hub、固定占位 Key、移除 API 密钥页全局导出。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8719a09` | (see git log) |
+| `a3a2302` | (see git log) |
+| `579e60d` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
