@@ -17,6 +17,7 @@ import {
   type Provider,
 } from "../api/tauri";
 import HealthBadge from "../components/HealthBadge.vue";
+import AppDialog from "../components/AppDialog.vue";
 import { findHealth } from "../utils/health";
 import {
   buildExternalScoreIndex,
@@ -47,6 +48,7 @@ const editingGroupName = computed(() => {
   return g?.name ?? form.name;
 });
 const saving = ref(false);
+const dialogOpen = ref(false);
 /** 每条队列条目拉取到的上游模型 id 列表 */
 const modelOptions = ref<Record<number, string[]>>({});
 const fetchingModels = ref<Record<number, boolean>>({});
@@ -183,10 +185,26 @@ function resetForm() {
   fetchingModels.value = {};
   bulkProviderId.value = providers.value[0]?.id ?? 0;
   bulkMessage.value = "";
+  error.value = "";
+  message.value = "";
+}
+
+function openCreate() {
+  resetForm();
+  dialogOpen.value = true;
+}
+
+function closeDialog() {
+  if (saving.value) return;
+  dialogOpen.value = false;
+  resetForm();
 }
 
 function startEdit(g: Group) {
+  error.value = "";
+  message.value = "";
   editingGroupId.value = g.id;
+  dialogOpen.value = true;
   form.name = g.name;
   form.auto_failover = g.auto_failover;
   form.items = g.items.map((i) => createQueueItem(i.provider_id, i.upstream_model));
@@ -470,6 +488,7 @@ async function save() {
     } else {
       await createGroup(payload);
     }
+    dialogOpen.value = false;
     resetForm();
     await refresh();
   } catch (e) {
@@ -512,7 +531,15 @@ onMounted(async () => {
 <template>
   <div class="space-y-6">
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 class="mb-4 text-base font-semibold">{{ isEditing ? "编辑分组" : "新建分组" }}</h2>
+      <div class="flex items-center justify-between gap-2">
+        <h2 class="text-base font-semibold">分组管理</h2>
+        <button type="button" class="rounded-lg bg-slate-800 px-4 py-2 text-sm text-white" @click="openCreate">新建分组</button>
+      </div>
+    </section>
+
+    <AppDialog :open="dialogOpen" :title="isEditing ? '编辑分组' : '新建分组'" size="wide" :close-disabled="saving" @close="closeDialog">
+    <section>
+      <h2 class="sr-only">{{ isEditing ? "编辑分组" : "新建分组" }}</h2>
       <p v-if="isEditing" class="mb-2 text-sm text-cyan-800">
         正在编辑：{{ editingGroupName || form.name || `分组 #${editingGroupId}` }}
       </p>
@@ -690,17 +717,17 @@ onMounted(async () => {
           {{ saving ? "保存中…" : isEditing ? "保存修改" : "创建分组" }}
         </button>
         <button
-          v-if="isEditing"
           type="button"
           class="rounded-lg border border-slate-300 px-4 py-2 text-sm disabled:opacity-50"
           :disabled="saving"
-          @click="resetForm"
+          @click="closeDialog"
         >
           取消
         </button>
       </div>
       <p v-if="error" class="mt-3 text-sm text-rose-600">{{ error }}</p>
     </section>
+    </AppDialog>
 
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -722,7 +749,7 @@ onMounted(async () => {
         （固定占位 Key，无需客户端密钥）。
       </p>
       <p v-if="message" class="mb-3 whitespace-pre-line text-sm text-emerald-700">{{ message }}</p>
-      <p v-if="error" class="mb-3 text-sm text-rose-600">{{ error }}</p>
+      <p v-if="error && !dialogOpen" class="mb-3 text-sm text-rose-600">{{ error }}</p>
       <div v-if="groups.length === 0" class="text-sm text-slate-500">暂无分组</div>
       <div v-for="g in groups" :key="g.id" class="mb-4 rounded-lg border border-slate-100 p-4 last:mb-0">
         <div class="mb-2 flex flex-wrap items-center justify-between gap-2">

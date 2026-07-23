@@ -11,6 +11,7 @@ import {
   type Provider,
 } from "../api/tauri";
 import HealthBadge from "../components/HealthBadge.vue";
+import AppDialog from "../components/AppDialog.vue";
 import { findHealth } from "../utils/health";
 import {
   describeProviderPasteSource,
@@ -22,7 +23,9 @@ const health = ref<HealthSnapshot[]>([]);
 const error = ref("");
 const message = ref("");
 const healthLoading = ref(false);
-const editing = ref<Provider | null>(null);
+const editingProviderId = ref<number | null>(null);
+const dialogOpen = ref(false);
+const saving = ref(false);
 const pasteText = ref("");
 const form = reactive({
   name: "",
@@ -53,12 +56,14 @@ async function refreshHealth() {
 }
 
 function resetForm() {
-  editing.value = null;
+  editingProviderId.value = null;
   form.name = "";
   form.base_url = "https://api.openai.com/v1";
   form.api_key = "";
   form.enabled = true;
   pasteText.value = "";
+  error.value = "";
+  message.value = "";
 }
 
 function applyPaste() {
@@ -73,7 +78,7 @@ function applyPaste() {
   if (parsed.baseUrl) form.base_url = parsed.baseUrl;
   if (parsed.apiKey) form.api_key = parsed.apiKey;
   // 编辑时保留原名称；新建且名称为空时用域名建议名。
-  if (!editing.value && !form.name.trim() && parsed.suggestedName) {
+  if (editingProviderId.value === null && !form.name.trim() && parsed.suggestedName) {
     form.name = parsed.suggestedName;
   }
   const sourceLabel = describeProviderPasteSource(parsed.source);
@@ -84,20 +89,37 @@ function applyPaste() {
   }
 }
 
+function openCreate() {
+  resetForm();
+  dialogOpen.value = true;
+}
+
 function startEdit(p: Provider) {
-  editing.value = p;
+  error.value = "";
+  message.value = "";
+  editingProviderId.value = p.id;
+  dialogOpen.value = true;
   form.name = p.name;
   form.base_url = p.base_url;
   form.api_key = p.api_key;
   form.enabled = p.enabled;
 }
 
+function closeDialog() {
+  if (saving.value) return;
+  dialogOpen.value = false;
+  resetForm();
+}
+
 async function save() {
+  if (saving.value) return;
   message.value = "";
+  saving.value = true;
   try {
-    if (editing.value) {
+    const targetId = editingProviderId.value;
+    if (targetId !== null) {
       await updateProvider({
-        id: editing.value.id,
+        id: targetId,
         name: form.name,
         base_url: form.base_url,
         api_key: form.api_key,
@@ -106,10 +128,13 @@ async function save() {
     } else {
       await createProvider({ ...form });
     }
+    dialogOpen.value = false;
     resetForm();
     await refresh();
   } catch (e) {
     error.value = extractInvokeError(e);
+  } finally {
+    saving.value = false;
   }
 }
 
@@ -129,7 +154,15 @@ onMounted(refresh);
 <template>
   <div class="space-y-6">
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 class="mb-4 text-base font-semibold">{{ editing ? "编辑供应商" : "新建供应商" }}</h2>
+      <div class="flex items-center justify-between gap-2">
+        <h2 class="text-base font-semibold">供应商管理</h2>
+        <button type="button" class="rounded-lg bg-slate-800 px-4 py-2 text-sm text-white" @click="openCreate">新建供应商</button>
+      </div>
+    </section>
+
+    <AppDialog :open="dialogOpen" :title="editingProviderId === null ? '新建供应商' : '编辑供应商'" :close-disabled="saving" @close="closeDialog">
+      <section>
+      <p v-if="editingProviderId !== null" class="mb-4 text-sm text-cyan-800">正在编辑供应商</p>
       <div class="mb-4 rounded-lg border border-dashed border-cyan-300 bg-cyan-50/40 p-3">
         <div class="mb-2 text-sm font-medium text-slate-700">粘贴快速添加</div>
         <p class="mb-2 text-xs text-slate-500">
@@ -184,21 +217,15 @@ onMounted(refresh);
         </label>
       </div>
       <div class="mt-4 flex flex-wrap gap-2">
-        <button type="button" class="rounded-lg bg-slate-800 px-4 py-2 text-sm text-white" @click="save">
-          保存
+        <button type="button" class="rounded-lg bg-slate-800 px-4 py-2 text-sm text-white disabled:opacity-50" :disabled="saving" @click="save">
+          {{ saving ? "保存中…" : "保存" }}
         </button>
-        <button
-          v-if="editing"
-          type="button"
-          class="rounded-lg border border-slate-300 px-4 py-2 text-sm"
-          @click="resetForm"
-        >
-          取消
-        </button>
+        <button type="button" class="rounded-lg border border-slate-300 px-4 py-2 text-sm" :disabled="saving" @click="closeDialog">取消</button>
       </div>
       <p v-if="message" class="mt-3 text-sm text-emerald-700">{{ message }}</p>
       <p v-if="error" class="mt-3 text-sm text-rose-600">{{ error }}</p>
-    </section>
+      </section>
+    </AppDialog>
 
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -212,6 +239,7 @@ onMounted(refresh);
           {{ healthLoading ? "刷新中…" : "刷新健康" }}
         </button>
       </div>
+      <p v-if="error && !dialogOpen" class="mb-3 text-sm text-rose-600">{{ error }}</p>
       <div v-if="items.length === 0" class="text-sm text-slate-500">暂无供应商</div>
       <div v-else class="overflow-x-auto">
         <table class="min-w-full text-left text-sm">

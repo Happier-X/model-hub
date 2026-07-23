@@ -22,6 +22,25 @@
 - 异步加载在 `onMounted` 中触发；定时器和事件订阅在 `onUnmounted` 中清理。
 - 提交期间禁用重复操作，并在失败时保留用户可修正的输入。
 - 编辑已有分组表单必须使用稳定的 `editingGroupId: number | null` 表达编辑目标；保存时先快照 id，id 非空只能调用更新，只有新建态才调用创建。添加条目、拉取模型、批量添加、排序、健康刷新等异步/局部操作不得清空编辑 id。
+- 新建/编辑供应商与分组复用 `AppDialog`，页面以稳定实体 id 区分创建和更新。打开新建 Dialog 前重置默认值；保存失败保留 Dialog 与输入；保存成功后关闭并刷新列表；保存期间禁止重复提交和关闭。
+
+## 对话框合同
+
+- 通用外壳使用 `src/components/AppDialog.vue`，页面保留表单和领域保存逻辑，不引入页面专用遮罩实现。
+- 必须提供语义化标题、`role="dialog"`、`aria-modal="true"`、Escape/遮罩/关闭按钮、焦点循环及关闭后的焦点恢复。
+- 普通表单使用 `size="default"`；分组等长表单使用 `size="wide"`，限制视口高度并在内容区内部滚动。
+- 对话框打开不得隐式触发上游请求；分组拉模型仍只允许用户点击。
+
+```vue
+<AppDialog
+  :open="dialogOpen"
+  :title="editingId === null ? '新建' : '编辑'"
+  :close-disabled="saving"
+  @close="closeDialog"
+>
+  <!-- 页面拥有表单与保存逻辑 -->
+</AppDialog>
+```
 
 ## 文案
 
