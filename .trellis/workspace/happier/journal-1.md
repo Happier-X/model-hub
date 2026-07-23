@@ -455,3 +455,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: 默认端口改为 8888
+
+**Date**: 2026-07-23
+**Task**: 默认端口改为 8888
+**Branch**: `master`
+
+### Summary
+
+将代理 DEFAULT_PORT 与概览页/文档/规范默认端口从 8080 改为 8888，保留已持久化 shell.json 端口不被覆盖。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7bc7272` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
