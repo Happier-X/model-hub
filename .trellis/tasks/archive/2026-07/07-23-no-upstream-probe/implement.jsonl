@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "熔断与测活区分"}
+{"file": ".trellis/spec/backend/index.md", "reason": "索引新上游访问约定"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "UI 禁止自动拉上游"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端索引"}
