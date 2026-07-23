@@ -340,4 +340,67 @@ mod tests {
         assert_eq!(g.items[1].upstream_model, "m1");
         assert!(s.get_group_by_name("missing").unwrap().is_none());
     }
+
+    /// 编辑已有分组并加入第二供应商模型时，不得新增 groups 行，仅扩展 items。
+    #[test]
+    fn update_group_adds_second_provider_item_without_new_group() {
+        let dir = tempdir().unwrap();
+        let s = Stores::new(open_db(&dir.path().join("t.db")).unwrap());
+        let p1 = s
+            .create_provider(CreateProviderPayload {
+                name: "provider-a".into(),
+                base_url: "https://a.example/v1".into(),
+                api_key: "k".into(),
+                enabled: true,
+            })
+            .unwrap();
+        let p2 = s
+            .create_provider(CreateProviderPayload {
+                name: "provider-b".into(),
+                base_url: "https://b.example/v1".into(),
+                api_key: "k".into(),
+                enabled: true,
+            })
+            .unwrap();
+        let g = s
+            .create_group(CreateGroupPayload {
+                name: "routing".into(),
+                auto_failover: true,
+                items: vec![GroupItemInput {
+                    provider_id: p1.id,
+                    upstream_model: "model-a".into(),
+                }],
+            })
+            .unwrap();
+        assert_eq!(s.list_groups().unwrap().len(), 1);
+        assert_eq!(g.items.len(), 1);
+
+        let updated = s
+            .update_group(UpdateGroupPayload {
+                id: g.id,
+                name: g.name.clone(),
+                auto_failover: true,
+                items: vec![
+                    GroupItemInput {
+                        provider_id: p1.id,
+                        upstream_model: "model-a".into(),
+                    },
+                    GroupItemInput {
+                        provider_id: p2.id,
+                        upstream_model: "model-b".into(),
+                    },
+                ],
+            })
+            .unwrap();
+
+        let all = s.list_groups().unwrap();
+        assert_eq!(all.len(), 1, "update 不得插入新 groups 行");
+        assert_eq!(updated.id, g.id);
+        assert_eq!(updated.name, "routing");
+        assert_eq!(updated.items.len(), 2);
+        assert_eq!(updated.items[0].provider_id, p1.id);
+        assert_eq!(updated.items[0].upstream_model, "model-a");
+        assert_eq!(updated.items[1].provider_id, p2.id);
+        assert_eq!(updated.items[1].upstream_model, "model-b");
+    }
 }

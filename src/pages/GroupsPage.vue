@@ -28,6 +28,7 @@ import {
   type MatchedExternalScore,
   type QueueSortMode,
 } from "../utils/modelCapability";
+import { getGroupSaveMode } from "../utils/groupSaveMode";
 
 const groups = ref<Group[]>([]);
 const providers = ref<Provider[]>([]);
@@ -37,7 +38,15 @@ const message = ref("");
 const healthLoading = ref(false);
 /** 正在导出到 Pi 的分组 id */
 const exportingPiId = ref<number | null>(null);
-const editing = ref<Group | null>(null);
+/** 稳定编辑目标 id；null 表示新建态。不得依赖列表对象引用。 */
+const editingGroupId = ref<number | null>(null);
+const isEditing = computed(() => editingGroupId.value !== null);
+const editingGroupName = computed(() => {
+  if (editingGroupId.value === null) return "";
+  const g = groups.value.find((item) => item.id === editingGroupId.value);
+  return g?.name ?? form.name;
+});
+const saving = ref(false);
 /** 每条队列条目拉取到的上游模型 id 列表 */
 const modelOptions = ref<Record<number, string[]>>({});
 const fetchingModels = ref<Record<number, boolean>>({});
@@ -166,7 +175,7 @@ async function refreshHealth() {
 }
 
 function resetForm() {
-  editing.value = null;
+  editingGroupId.value = null;
   form.name = "";
   form.auto_failover = true;
   form.items = [];
@@ -177,7 +186,7 @@ function resetForm() {
 }
 
 function startEdit(g: Group) {
-  editing.value = g;
+  editingGroupId.value = g.id;
   form.name = g.name;
   form.auto_failover = g.auto_failover;
   form.items = g.items.map((i) => createQueueItem(i.provider_id, i.upstream_model));
@@ -445,21 +454,29 @@ async function bulkAddProviderModels() {
 }
 
 async function save() {
+  if (saving.value) return;
+  // 快照编辑 id，避免异步期间状态漂移误走 create
+  const targetId = editingGroupId.value;
+  const mode = getGroupSaveMode(targetId);
+  saving.value = true;
   try {
     const payload = {
       name: form.name,
       auto_failover: form.auto_failover,
       items: form.items.filter((i) => i.provider_id > 0 && i.upstream_model.trim()),
     };
-    if (editing.value) {
-      await updateGroup({ id: editing.value.id, ...payload });
+    if (mode === "update" && targetId !== null) {
+      await updateGroup({ id: targetId, ...payload });
     } else {
       await createGroup(payload);
     }
     resetForm();
     await refresh();
   } catch (e) {
+    // 失败保留编辑态与表单，便于重试
     error.value = extractInvokeError(e);
+  } finally {
+    saving.value = false;
   }
 }
 
@@ -495,7 +512,10 @@ onMounted(async () => {
 <template>
   <div class="space-y-6">
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 class="mb-4 text-base font-semibold">{{ editing ? "编辑分组" : "新建分组" }}</h2>
+      <h2 class="mb-4 text-base font-semibold">{{ isEditing ? "编辑分组" : "新建分组" }}</h2>
+      <p v-if="isEditing" class="mb-2 text-sm text-cyan-800">
+        正在编辑：{{ editingGroupName || form.name || `分组 #${editingGroupId}` }}
+      </p>
       <p class="mb-3 text-sm text-slate-500">分组名 = 客户端 model；队列顺序即故障转移优先级。</p>
       <div class="grid gap-3 md:grid-cols-2">
         <label class="text-sm">
@@ -661,13 +681,19 @@ onMounted(async () => {
       </div>
 
       <div class="mt-4 flex gap-2">
-        <button type="button" class="rounded-lg bg-slate-800 px-4 py-2 text-sm text-white" @click="save">
-          保存
+        <button
+          type="button"
+          class="rounded-lg bg-slate-800 px-4 py-2 text-sm text-white disabled:opacity-50"
+          :disabled="saving"
+          @click="save"
+        >
+          {{ saving ? "保存中…" : isEditing ? "保存修改" : "创建分组" }}
         </button>
         <button
-          v-if="editing"
+          v-if="isEditing"
           type="button"
-          class="rounded-lg border border-slate-300 px-4 py-2 text-sm"
+          class="rounded-lg border border-slate-300 px-4 py-2 text-sm disabled:opacity-50"
+          :disabled="saving"
           @click="resetForm"
         >
           取消
