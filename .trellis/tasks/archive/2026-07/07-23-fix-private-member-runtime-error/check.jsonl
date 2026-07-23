@@ -1,0 +1,2 @@
+{"path":".trellis/spec/frontend/state-management.md","reason":"验收 Tauri Resource 不被深层代理"}
+{"path":"src/pages/OverviewPage.vue","reason":"验收更新检查、下载、重试和取消生命周期"}

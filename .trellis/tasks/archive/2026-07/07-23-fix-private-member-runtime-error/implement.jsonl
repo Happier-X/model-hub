@@ -1,0 +1,3 @@
+{"path":".trellis/spec/frontend/state-management.md","reason":"Vue 响应式状态与类实例边界"}
+{"path":"src/pages/OverviewPage.vue","reason":"Updater Update 实例的存储和生命周期"}
+{"path":"node_modules/@tauri-apps/plugin-updater/dist-js/index.js","reason":"Update 继承 Resource 并依赖私有资源 id 的直接证据"}
