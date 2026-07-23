@@ -23,7 +23,7 @@ import {
 
 const status = ref<ProxyStatus | null>(null);
 const paths = ref<AppPaths | null>(null);
-const portInput = ref(8080);
+const portInput = ref(8888);
 const loading = ref(false);
 const message = ref("");
 const error = ref("");
@@ -254,7 +254,7 @@ async function copyBaseUrl() {
 }
 
 const exampleCurl = () => {
-  const base = status.value?.base_url || "http://127.0.0.1:8080";
+  const base = status.value?.base_url || "http://127.0.0.1:8888";
   return `curl ${base}/v1/chat/completions \\
   -H "Content-Type: application/json" \\
   -d '{"model":"你的分组名","messages":[{"role":"user","content":"hi"}]}'`;

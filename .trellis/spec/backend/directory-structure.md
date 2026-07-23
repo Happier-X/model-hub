@@ -87,7 +87,7 @@
 |------|------|
 | `state` | `idle` \| `starting` \| `running` \| `stopping` \| `error` |
 | `host` | 默认 `127.0.0.1` |
-| `port` | 默认 `8080` |
+| `port` | 默认 `8888` |
 | `last_error` | 可行动错误 |
 | `base_url` | `http://{host}:{port}` |
 | `data_dir` | 代理数据目录 |

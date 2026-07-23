@@ -12,7 +12,7 @@ use crate::error::AppError;
 pub const PI_PROVIDER_ID: &str = "model-hub";
 pub const DEFAULT_PLACEHOLDER_KEY: &str = "model-hub";
 
-/// 将代理 Base URL（如 `http://127.0.0.1:8080`）规范为 Pi 需要的 OpenAI 兼容根（含 `/v1`）。
+/// 将代理 Base URL（如 `http://127.0.0.1:8888`）规范为 Pi 需要的 OpenAI 兼容根（含 `/v1`）。
 pub fn normalize_openai_base_url(base_url: &str) -> String {
     let base = base_url.trim().trim_end_matches('/');
     if base.is_empty() {
@@ -201,12 +201,12 @@ mod tests {
     #[test]
     fn normalize_base_url_appends_v1() {
         assert_eq!(
-            normalize_openai_base_url("http://127.0.0.1:8080"),
-            "http://127.0.0.1:8080/v1"
+            normalize_openai_base_url("http://127.0.0.1:8888"),
+            "http://127.0.0.1:8888/v1"
         );
         assert_eq!(
-            normalize_openai_base_url("http://127.0.0.1:8080/v1/"),
-            "http://127.0.0.1:8080/v1"
+            normalize_openai_base_url("http://127.0.0.1:8888/v1/"),
+            "http://127.0.0.1:8888/v1"
         );
     }
 
@@ -214,12 +214,12 @@ mod tests {
     fn upsert_creates_provider_and_model() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("models.json");
-        let count = upsert_model_hub_group(&path, "http://127.0.0.1:8080", "coding").unwrap();
+        let count = upsert_model_hub_group(&path, "http://127.0.0.1:8888", "coding").unwrap();
         assert_eq!(count, 1);
         let v: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(
             v["providers"][PI_PROVIDER_ID]["baseUrl"],
-            "http://127.0.0.1:8080/v1"
+            "http://127.0.0.1:8888/v1"
         );
         assert_eq!(
             v["providers"][PI_PROVIDER_ID]["apiKey"],
@@ -237,7 +237,7 @@ mod tests {
     fn upsert_same_id_replaces_and_refreshes_base_url() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("models.json");
-        upsert_model_hub_group(&path, "http://127.0.0.1:8080", "coding").unwrap();
+        upsert_model_hub_group(&path, "http://127.0.0.1:8888", "coding").unwrap();
         let count = upsert_model_hub_group(&path, "http://127.0.0.1:9090", "coding").unwrap();
         assert_eq!(count, 1);
         let v: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
@@ -270,7 +270,7 @@ mod tests {
                   "models": [{"id": "llama"}]
                 },
                 "model-hub": {
-                  "baseUrl": "http://127.0.0.1:8080/v1",
+                  "baseUrl": "http://127.0.0.1:8888/v1",
                   "api": "openai-completions",
                   "apiKey": "sk-old-real-key",
                   "models": [{"id": "chat", "name": "chat"}]
@@ -280,7 +280,7 @@ mod tests {
         )
         .unwrap();
 
-        let count = upsert_model_hub_group(&path, "http://127.0.0.1:8080", "coding").unwrap();
+        let count = upsert_model_hub_group(&path, "http://127.0.0.1:8888", "coding").unwrap();
         assert_eq!(count, 2);
 
         let v: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
@@ -306,7 +306,7 @@ mod tests {
     fn upsert_rejects_empty_name() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("models.json");
-        let err = upsert_model_hub_group(&path, "http://127.0.0.1:8080", "  ").unwrap_err();
+        let err = upsert_model_hub_group(&path, "http://127.0.0.1:8888", "  ").unwrap_err();
         assert!(err.to_string().contains("分组名不能为空"));
     }
 

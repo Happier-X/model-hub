@@ -12,12 +12,12 @@
    - 多个条目按从上到下的顺序尝试；
    - 需要失败后自动尝试下一条时，开启自动故障转移。
 4. （可选）对接 Pi 时在「分组」页对目标分组点「配置到 Pi」（固定占位 Key，无需客户端密钥管理）。
-5. 在「概览」页确认代理为「运行中」，复制 Base URL。默认地址是 `http://127.0.0.1:8080`。
+5. 在「概览」页确认代理为「运行中」，复制 Base URL。默认地址是 `http://127.0.0.1:8888`。
 
 ## 验证模型列表
 
 ```bash
-curl -i http://127.0.0.1:8080/v1/models
+curl -i http://127.0.0.1:8888/v1/models
 ```
 
 期望返回 HTTP 200，`data[].id` 是已配置的分组名。带任意 `Authorization` 也不会因客户端 Key 返回 401。
@@ -25,7 +25,7 @@ curl -i http://127.0.0.1:8080/v1/models
 ## 验证非流式 Chat
 
 ```bash
-curl http://127.0.0.1:8080/v1/chat/completions \
+curl http://127.0.0.1:8888/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"你的分组名","messages":[{"role":"user","content":"你好"}]}'
 ```
@@ -35,7 +35,7 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 ## 验证流式 Chat
 
 ```bash
-curl -N http://127.0.0.1:8080/v1/chat/completions \
+curl -N http://127.0.0.1:8888/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"你的分组名","stream":true,"messages":[{"role":"user","content":"你好"}]}'
 ```

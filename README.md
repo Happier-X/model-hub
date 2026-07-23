@@ -36,13 +36,13 @@ cargo check
 ## 客户端用法
 
 1. 配置供应商与分组队列（分组名 = 客户端 `model`）
-2. 客户端 Base URL 使用概览页展示的地址，例如 `http://127.0.0.1:8080`（OpenAI SDK 用 `.../v1`）
+2. 客户端 Base URL 使用概览页展示的地址，例如 `http://127.0.0.1:8888`（OpenAI SDK 用 `.../v1`）
 3. 对接 Pi：在「分组」页对目标分组点「配置到 Pi」，按分组名 upsert 写入 `~/.pi/agent/models.json` 的 `model-hub`（固定占位 Key，无需用户管理客户端 Key）
 
 ```bash
-curl http://127.0.0.1:8080/v1/models
+curl http://127.0.0.1:8888/v1/models
 
-curl http://127.0.0.1:8080/v1/chat/completions \
+curl http://127.0.0.1:8888/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"你的分组名","messages":[{"role":"user","content":"hi"}]}'
 ```

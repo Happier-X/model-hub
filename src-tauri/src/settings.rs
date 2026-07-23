@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
 
-pub const DEFAULT_PORT: u16 = 8080;
+pub const DEFAULT_PORT: u16 = 8888;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShellConfig {
@@ -132,10 +132,10 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn load_missing_defaults_to_8080() {
+    fn load_missing_defaults_to_8888() {
         let dir = tempdir().unwrap();
         let cfg = load_shell_config(dir.path()).unwrap();
-        assert_eq!(cfg.gateway_port, 8080);
+        assert_eq!(cfg.gateway_port, 8888);
     }
 
     #[test]
@@ -170,7 +170,7 @@ mod tests {
         save_shell_config(
             dir.path(),
             &ShellConfig {
-                gateway_port: 8080,
+                gateway_port: 8888,
                 check_update_on_startup: true,
             },
         )
