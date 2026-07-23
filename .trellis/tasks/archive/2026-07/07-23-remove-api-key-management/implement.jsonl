@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "删除客户端 Key 401 语义"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "api_keys 表与迁移"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "删除 API 密钥页约定"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "删除 IPC 类型"}

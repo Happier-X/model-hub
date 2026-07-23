@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "代理不再客户端鉴权"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "旧库兼容"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "无 API Key 页"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "质量门禁"}
