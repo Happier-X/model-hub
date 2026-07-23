@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 16
-- **Last Active**: 2026-07-23
+- **Total Sessions**: 17
+- **Last Active**: 2026-07-24
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~589 | Active |
+| `journal-1.md` | ~623 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 17 | 2026-07-24 | 取消熔断与 auto_failover，错误即顺序故障转移 | `e9aa28b`, `413ed89` | `master` |
 | 16 | 2026-07-23 | 修复私有成员运行时错误 | `a2806ac` | `master` |
 | 15 | 2026-07-23 | 发布 v0.0.2 | `5cc5855` | `master` |
 | 14 | 2026-07-23 | 发布 v0.0.2 | `5cc5855` | `master` |

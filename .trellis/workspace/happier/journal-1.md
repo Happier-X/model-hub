@@ -587,3 +587,37 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 17: 取消熔断与 auto_failover，错误即顺序故障转移
+
+**Date**: 2026-07-24
+**Task**: 取消熔断与 auto_failover，错误即顺序故障转移
+**Branch**: `master`
+
+### Summary
+
+删除供应商熔断与分组 auto_failover；响应提交前任意错误按队列顺序换源；清理 list_health/健康徽章；同步 backend/frontend spec 与迁移删列契约；集成测覆盖模型不支持、普通 4xx、2xx 错误信封与全失败透传。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e9aa28b` | (see git log) |
+| `413ed89` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
