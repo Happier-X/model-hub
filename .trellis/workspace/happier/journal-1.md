@@ -224,3 +224,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: 修复退出后端口占用与单实例
+
+**Date**: 2026-07-23
+**Task**: 修复退出后端口占用与单实例
+**Branch**: `master`
+
+### Summary
+
+修复 stop 超时未 abort 导致端口残留；ProxyHandle Drop 时 best-effort stop；接入 tauri-plugin-single-instance 防止多开；托盘/概览文案区分关窗隐藏与退出停代理。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `98bbd10` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
