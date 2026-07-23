@@ -22,7 +22,6 @@ const items = ref<Provider[]>([]);
 const health = ref<HealthSnapshot[]>([]);
 const error = ref("");
 const message = ref("");
-const healthLoading = ref(false);
 const editingProviderId = ref<number | null>(null);
 const dialogOpen = ref(false);
 const saving = ref(false);
@@ -40,18 +39,6 @@ async function refresh() {
     error.value = "";
   } catch (e) {
     error.value = extractInvokeError(e);
-  }
-}
-
-async function refreshHealth() {
-  healthLoading.value = true;
-  try {
-    health.value = await listHealth();
-    error.value = "";
-  } catch (e) {
-    error.value = extractInvokeError(e);
-  } finally {
-    healthLoading.value = false;
   }
 }
 
@@ -230,14 +217,6 @@ onMounted(refresh);
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h2 class="text-base font-semibold">供应商列表</h2>
-        <button
-          type="button"
-          class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
-          :disabled="healthLoading"
-          @click="refreshHealth"
-        >
-          {{ healthLoading ? "刷新中…" : "刷新健康" }}
-        </button>
       </div>
       <p v-if="error && !dialogOpen" class="mb-3 text-sm text-rose-600">{{ error }}</p>
       <div v-if="items.length === 0" class="text-sm text-slate-500">暂无供应商</div>
