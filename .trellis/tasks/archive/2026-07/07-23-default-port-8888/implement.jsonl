@@ -1,0 +1,2 @@
+{"path":"src-tauri/src/settings.rs","reason":"DEFAULT_PORT 与默认 shell 配置"}
+{"path":".trellis/spec/backend/directory-structure.md","reason":"端口默认值规范"}

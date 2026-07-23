@@ -1,0 +1,2 @@
+{"path":"src-tauri/src/settings.rs","reason":"验收默认端口与单测"}
+{"path":"src/pages/OverviewPage.vue","reason":"验收前端默认端口与回退 Base URL"}
