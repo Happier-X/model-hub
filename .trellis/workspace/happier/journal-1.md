@@ -356,3 +356,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 10: 移除分组刷新健康功能
+
+**Date**: 2026-07-23
+**Task**: 移除分组刷新健康功能
+**Branch**: `master`
+
+### Summary
+
+移除分组页面的刷新健康按钮、专用加载状态与点击处理，保留初始健康快照加载和健康状态展示，并同步前端规范。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `baa31df` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
