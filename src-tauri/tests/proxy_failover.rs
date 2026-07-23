@@ -1,4 +1,4 @@
-//! 集成测试：鉴权 + 故障转移换源 + 流式静默超时日志。
+//! 集成测试：本机无鉴权访问 + 故障转移换源 + 流式静默超时日志。
 
 use std::time::Duration;
 
@@ -10,7 +10,6 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use model_hub_lib::db::open_db;
-use model_hub_lib::domain::apikey::CreateApiKeyPayload;
 use model_hub_lib::domain::group::{CreateGroupPayload, GroupItemInput};
 use model_hub_lib::domain::provider::CreateProviderPayload;
 use model_hub_lib::domain::Stores;
@@ -23,7 +22,6 @@ struct Env {
     stores: Stores,
     circuits: CircuitRegistry,
     router: axum::Router,
-    raw_key: String,
 }
 
 fn setup_with_policy(policy: ForwardPolicy) -> Env {
@@ -32,12 +30,6 @@ fn setup_with_policy(policy: ForwardPolicy) -> Env {
     let stores = Stores::new(db);
     let circuits = CircuitRegistry::new();
     let clients = UpstreamClients::new();
-    let created = stores
-        .create_api_key(CreateApiKeyPayload {
-            name: "t".into(),
-            enabled: true,
-        })
-        .unwrap();
     let state = AppState {
         stores: stores.clone(),
         circuits: circuits.clone(),
@@ -49,7 +41,6 @@ fn setup_with_policy(policy: ForwardPolicy) -> Env {
         stores,
         circuits,
         router: build_router(state),
-        raw_key: created.raw_key,
     }
 }
 
@@ -81,38 +72,14 @@ async fn allows_missing_api_key() {
 }
 
 #[tokio::test]
-async fn rejects_invalid_api_key() {
+async fn ignores_arbitrary_authorization_header() {
     let env = setup();
     let res = env
         .router
         .oneshot(
             Request::builder()
                 .uri("/v1/models")
-                .header("Authorization", "Bearer sk-modelhub-invalid")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
-}
-
-#[tokio::test]
-async fn allows_pi_placeholder_api_key() {
-    let env = setup();
-    env.stores
-        .create_group(CreateGroupPayload {
-            name: "pi-open".into(),
-            auto_failover: true,
-            items: vec![],
-        })
-        .unwrap();
-    let res = env
-        .router
-        .oneshot(
-            Request::builder()
-                .uri("/v1/models")
-                .header("Authorization", "Bearer model-hub")
+                .header("Authorization", "Bearer arbitrary-value")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -137,7 +104,6 @@ async fn models_lists_groups() {
         .oneshot(
             Request::builder()
                 .uri("/v1/models")
-                .header("Authorization", format!("Bearer {}", env.raw_key))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -218,7 +184,6 @@ async fn failover_from_5xx_to_success() {
             Request::builder()
                 .method("POST")
                 .uri("/v1/chat/completions")
-                .header("Authorization", format!("Bearer {}", env.raw_key))
                 .header("Content-Type", "application/json")
                 .body(Body::from(serde_json::to_vec(&body).unwrap()))
                 .unwrap(),
@@ -309,7 +274,6 @@ async fn stream_idle_timeout_single_failure_log() {
             Request::builder()
                 .method("POST")
                 .uri("/v1/chat/completions")
-                .header("Authorization", format!("Bearer {}", env.raw_key))
                 .header("Content-Type", "application/json")
                 .body(Body::from(serde_json::to_vec(&body).unwrap()))
                 .unwrap(),
@@ -401,7 +365,6 @@ async fn stream_success_single_ok_log() {
             Request::builder()
                 .method("POST")
                 .uri("/v1/chat/completions")
-                .header("Authorization", format!("Bearer {}", env.raw_key))
                 .header("Content-Type", "application/json")
                 .body(Body::from(serde_json::to_vec(&body).unwrap()))
                 .unwrap(),

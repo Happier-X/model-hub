@@ -256,7 +256,6 @@ async function copyBaseUrl() {
 const exampleCurl = () => {
   const base = status.value?.base_url || "http://127.0.0.1:8080";
   return `curl ${base}/v1/chat/completions \\
-  -H "Authorization: Bearer sk-modelhub-..." \\
   -H "Content-Type: application/json" \\
   -d '{"model":"你的分组名","messages":[{"role":"user","content":"hi"}]}'`;
 };
@@ -501,12 +500,8 @@ onMounted(async () => {
           ：分组名即客户端 model；按优先级添加供应商与上游模型，按需开启自动故障转移。
         </li>
         <li>
-          <span class="font-medium">创建 API Key</span>
-          ：明文仅创建成功时展示一次，请立即保存。
-        </li>
-        <li>
           <span class="font-medium">客户端 / curl 调用</span>
-          ：Base URL 用本机地址，Authorization 用客户端 Key，body 中 model 填分组名。
+          ：Base URL 用本机地址，Authorization 可省略，body 中 model 填分组名。
         </li>
       </ol>
       <p class="mt-3 text-xs text-slate-500">
@@ -518,7 +513,7 @@ onMounted(async () => {
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 class="mb-3 text-base font-semibold">调用示例</h2>
       <p class="mb-2 text-sm text-slate-500">
-        客户端使用统一 Base URL + 客户端 API Key；请求体中的 model 填分组名。
+        客户端使用统一 Base URL；请求体中的 model 填分组名，无需配置客户端密钥。
       </p>
       <pre class="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-100">{{ exampleCurl() }}</pre>
     </section>

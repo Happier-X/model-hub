@@ -1,13 +1,13 @@
 # Model Hub
 
-本机 **Vue 3 + Tauri 2** 管理台与 **进程内 Rust 代理**：统一 Base URL + 客户端 API Key，按分组故障转移队列转发 OpenAI 兼容 Chat。
+本机 **Vue 3 + Tauri 2** 管理台与 **进程内 Rust 代理**：统一 Base URL，按分组故障转移队列转发 OpenAI 兼容 Chat。本机 `/v1/*` **不校验**客户端 API Key。
 
 ## 能力（MVP）
 
-- 多供应商（Provider）配置
+- 多供应商（Provider）配置（上游 API Key 保留在供应商配置中）
 - 分组 = 客户端 `model`，组内有序故障转移队列
 - 默认熔断（连续失败阈值 / 恢复等待 / 半开）
-- 客户端 API Key 可选（本机默认可不带；携带时须有效）
+- 本机 `/v1/*` 无客户端鉴权（有无 `Authorization` 均放行；代理忽略客户端鉴权头）
 - `POST /v1/chat/completions`（非流式 + SSE）、`GET /v1/models`
 
 ## 开发
@@ -36,11 +36,8 @@ cargo check
 ## 客户端用法
 
 1. 配置供应商与分组队列（分组名 = 客户端 `model`）
-2. （可选）在「API 密钥」页创建客户端 Key；本机默认可不带 Key
-3. 客户端 Base URL 使用概览页展示的地址，例如 `http://127.0.0.1:8080`（OpenAI SDK 用 `.../v1`）
-4. 对接 Pi：在「分组」页对目标分组点「配置到 Pi」，按分组名 upsert 写入 `~/.pi/agent/models.json` 的 `model-hub`（无需客户端 Key）
-
-无 Key：
+2. 客户端 Base URL 使用概览页展示的地址，例如 `http://127.0.0.1:8080`（OpenAI SDK 用 `.../v1`）
+3. 对接 Pi：在「分组」页对目标分组点「配置到 Pi」，按分组名 upsert 写入 `~/.pi/agent/models.json` 的 `model-hub`（固定占位 Key，无需用户管理客户端 Key）
 
 ```bash
 curl http://127.0.0.1:8080/v1/models
@@ -50,20 +47,13 @@ curl http://127.0.0.1:8080/v1/chat/completions \
   -d '{"model":"你的分组名","messages":[{"role":"user","content":"hi"}]}'
 ```
 
-带 Key（可选）：
-
-```bash
-curl http://127.0.0.1:8080/v1/chat/completions \
-  -H "Authorization: Bearer sk-modelhub-..." \
-  -H "Content-Type: application/json" \
-  -d '{"model":"你的分组名","messages":[{"role":"user","content":"hi"}]}'
-```
+OpenAI SDK 若要求非空 `api_key`，可填任意占位（如 `model-hub`）；代理不会校验该字段。
 
 ## 架构
 
 - 管理面：Tauri commands（IPC）
-- 客户端面：本机 HTTP `/v1/*`
-- 数据：应用数据目录下 SQLite（新 schema，不兼容旧版）
+- 客户端面：本机 HTTP `/v1/*`（无客户端 Key 鉴权）
+- 数据：应用数据目录下 SQLite（新 schema 不含 `api_keys` 表，不兼容旧版客户端 Key 结构）
 - **无**外部 `model-hub-gateway` / octopus 侧车进程
 
 详细组件边界、路由与安全设计见 [当前架构](docs/current-architecture.md)。
@@ -73,7 +63,7 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 | 文档 | 说明 |
 |------|------|
 | [当前架构](docs/current-architecture.md) | 组件与安全边界 |
-| [客户端对接](docs/client-integration.md) | Base URL、Key、SDK |
+| [客户端对接](docs/client-integration.md) | Base URL、SDK |
 | [Chat 上手](docs/chat-onboarding.md) | 联调与排错 |
 | [本机验收](docs/local-acceptance.md) | 可勾选联调清单 |
 | [MVP 验收](docs/mvp-acceptance.md) | 自动化 + 手工 AC |

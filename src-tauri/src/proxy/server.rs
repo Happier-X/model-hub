@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use axum::extract::State;
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -26,57 +26,6 @@ pub struct AppState {
     pub forward_policy: ForwardPolicy,
 }
 
-fn extract_client_key(headers: &HeaderMap) -> Option<String> {
-    if let Some(auth) = headers.get("authorization").and_then(|v| v.to_str().ok()) {
-        let auth = auth.trim();
-        if let Some(rest) = auth
-            .strip_prefix("Bearer ")
-            .or_else(|| auth.strip_prefix("bearer "))
-        {
-            let key = rest.trim();
-            if !key.is_empty() {
-                return Some(key.to_string());
-            }
-        }
-    }
-    if let Some(key) = headers
-        .get("x-api-key")
-        .or_else(|| headers.get("api-key"))
-        .and_then(|v| v.to_str().ok())
-    {
-        let key = key.trim();
-        if !key.is_empty() {
-            return Some(key.to_string());
-        }
-    }
-    None
-}
-
-/// 本机默认：可不带客户端 Key。
-/// 若请求携带了 Key，则必须有效且启用。
-/// 一键导出到 Pi 时的占位 `model-hub` 视为未提供 Key（避免假 Key 被校验拒绝）。
-async fn require_key(state: &AppState, headers: &HeaderMap) -> Result<(), Response> {
-    let Some(raw) = extract_client_key(headers) else {
-        return Ok(());
-    };
-    if raw == crate::pi_export::DEFAULT_PLACEHOLDER_KEY || raw.eq_ignore_ascii_case("none") {
-        return Ok(());
-    }
-    match state.stores.validate_raw_key(&raw) {
-        Ok(true) => Ok(()),
-        Ok(false) => Err((
-            StatusCode::UNAUTHORIZED,
-            Json(json!({"message":"无效或已停用的 API Key","error":{"code":"UNAUTHORIZED","message":"无效或已停用的 API Key"}})),
-        )
-            .into_response()),
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"message":e.to_string()})),
-        )
-            .into_response()),
-    }
-}
-
 async fn health() -> impl IntoResponse {
     Json(json!({
         "status": "ok",
@@ -85,10 +34,7 @@ async fn health() -> impl IntoResponse {
     }))
 }
 
-async fn list_models(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    if let Err(resp) = require_key(&state, &headers).await {
-        return resp;
-    }
+async fn list_models(State(state): State<AppState>) -> Response {
     match state.stores.list_group_names() {
         Ok(names) => {
             let data: Vec<Value> = names
@@ -113,12 +59,8 @@ async fn list_models(State(state): State<AppState>, headers: HeaderMap) -> Respo
 
 async fn chat_completions(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Response {
-    if let Err(resp) = require_key(&state, &headers).await {
-        return resp;
-    }
 
     let group_name = body
         .get("model")

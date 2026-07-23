@@ -9,7 +9,6 @@ const nav = [
   { to: "/", label: "概览" },
   { to: "/providers", label: "供应商" },
   { to: "/groups", label: "分组" },
-  { to: "/api-keys", label: "API Key" },
   { to: "/logs", label: "日志" },
 ];
 </script>

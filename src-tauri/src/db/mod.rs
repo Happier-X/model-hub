@@ -80,14 +80,6 @@ mod tests {
                 upstream_model TEXT NOT NULL,
                 sort_order INTEGER NOT NULL DEFAULT 0
             );
-            CREATE TABLE api_keys (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                key_hash TEXT NOT NULL UNIQUE,
-                masked TEXT NOT NULL,
-                enabled INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL
-            );
             CREATE TABLE request_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 time INTEGER NOT NULL,
@@ -110,11 +102,6 @@ mod tests {
             INSERT INTO group_items
                 (group_id, provider_id, upstream_model, sort_order)
             VALUES (1, 1, 'legacy-model', 7);
-            INSERT INTO api_keys
-                (name, key_hash, masked, enabled, created_at)
-            VALUES
-                ('legacy-key', 'legacy-hash', 'sk-modelhub-...abcd', 0,
-                 '2024-01-02T00:00:00Z');
             INSERT INTO request_logs
                 (time, group_name, provider_name, upstream_model, status_code,
                  use_time_ms, error, failover_from, failover_to, failover_reason)
@@ -157,12 +144,6 @@ mod tests {
         let provider = stores.get_provider(1).unwrap().unwrap();
         assert_eq!(provider.created_at, "2024-01-01T00:00:00Z");
 
-        let api_keys = stores.list_api_keys().unwrap();
-        assert_eq!(api_keys.len(), 1);
-        assert_eq!(api_keys[0].name, "legacy-key");
-        assert_eq!(api_keys[0].masked, "sk-modelhub-...abcd");
-        assert!(!api_keys[0].enabled);
-
         let logs = stores
             .list_logs(crate::domain::log::LogQuery {
                 page: 1,
@@ -176,15 +157,5 @@ mod tests {
         assert_eq!(logs.items[0].use_time_ms, 321);
         assert_eq!(logs.items[0].failover_to, "backup-provider");
 
-        stores
-            .with_conn(|conn| {
-                let key_hash: String = conn
-                    .query_row("SELECT key_hash FROM api_keys WHERE id = 1", [], |row| {
-                        row.get(0)
-                    })
-                    .map_err(|e| AppError::Database(e.to_string()))?;
-                Ok(assert_eq!(key_hash, "legacy-hash"))
-            })
-            .unwrap();
     }
 }

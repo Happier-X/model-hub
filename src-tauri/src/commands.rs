@@ -3,7 +3,6 @@
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
-use crate::domain::apikey::{CreateApiKeyPayload, UpdateApiKeyPayload};
 use crate::domain::group::{CreateGroupPayload, Group, UpdateGroupPayload};
 use crate::domain::leaderboard::ModelLeaderboardSnapshot;
 use crate::domain::provider::{CreateProviderPayload, Provider, UpdateProviderPayload};
@@ -172,34 +171,6 @@ pub fn update_group(
 #[tauri::command]
 pub fn delete_group(proxy: State<'_, ProxyHandle>, id: i64) -> Result<(), InvokeError> {
     stores(&proxy)?.delete_group(id).map_err(Into::into)
-}
-
-#[tauri::command]
-pub fn list_api_keys(
-    proxy: State<'_, ProxyHandle>,
-) -> Result<Vec<crate::domain::apikey::ApiKeyPublic>, InvokeError> {
-    stores(&proxy)?.list_api_keys().map_err(Into::into)
-}
-
-#[tauri::command]
-pub fn create_api_key(
-    proxy: State<'_, ProxyHandle>,
-    payload: CreateApiKeyPayload,
-) -> Result<crate::domain::apikey::ApiKeyCreated, InvokeError> {
-    stores(&proxy)?.create_api_key(payload).map_err(Into::into)
-}
-
-#[tauri::command]
-pub fn update_api_key(
-    proxy: State<'_, ProxyHandle>,
-    payload: UpdateApiKeyPayload,
-) -> Result<crate::domain::apikey::ApiKeyPublic, InvokeError> {
-    stores(&proxy)?.update_api_key(payload).map_err(Into::into)
-}
-
-#[tauri::command]
-pub fn delete_api_key(proxy: State<'_, ProxyHandle>, id: i64) -> Result<(), InvokeError> {
-    stores(&proxy)?.delete_api_key(id).map_err(Into::into)
 }
 
 #[tauri::command]

@@ -18,13 +18,13 @@
 │   │   ├── commands.rs        # IPC：代理 + 领域 CRUD
 │   │   ├── tray.rs
 │   │   ├── db/                # SQLite 打开与 migrate
-│   │   ├── domain/            # provider / group / apikey / log
+│   │   ├── domain/            # provider / group / log / leaderboard
 │   │   └── proxy/             # 进程内 HTTP 代理
 │   │       ├── runtime.rs     # ProxyHandle 启停/状态
 │   │       ├── server.rs      # axum 路由 /health /v1/*
 │   │       ├── forward.rs     # 上游转发 + 故障转移
 │   │       └── circuit.rs     # 默认熔断
-│   ├── tests/                 # 集成测（鉴权/故障转移）
+│   ├── tests/                 # 集成测（无鉴权访问/故障转移）
 │   ├── Cargo.toml
 │   ├── tauri.conf.json
 │   └── tauri.release.conf.json
@@ -38,7 +38,7 @@
 
 | 区域 | 放什么 | 不放什么 |
 |------|--------|----------|
-| `proxy/` | 监听、鉴权、转发、熔断、流式 prime | Vue UI |
+| `proxy/` | 监听、转发、熔断、流式 prime（无客户端 Key 鉴权） | Vue UI |
 | `domain/` | CRUD 与 SQLite 读写 | HTTP 路由细节 |
 | `commands.rs` | Tauri invoke 薄封装 | 长业务逻辑（下沉 domain/proxy） |
 | `paths.rs` / `settings.rs` | 目录与端口持久化 | 业务表 |
@@ -50,7 +50,7 @@
 1. **业务真源**：SQLite 在 `gateway_dir`（或应用数据目录下约定路径）；壳不复制第二份业务库。
 2. **管理 vs 客户端**：管理走 IPC；外部客户端只走本机 HTTP `/v1/*`。
 3. **Windows 路径**：用 Tauri `path` / `get_paths`，禁止写死用户家目录。
-4. **密钥**：上游 Provider Key 本机可明文；客户端 Key 仅哈希+脱敏；日志禁打完整 Key。
+4. **密钥**：上游 Provider Key 本机可明文；不存不校验客户端 Key；日志禁打完整 Key。
 
 ---
 
@@ -79,7 +79,7 @@
 ### Signatures
 
 - `proxy_start` / `proxy_stop` / `proxy_status` / `proxy_set_port`
-- 领域：`list_providers` / `create_provider` / … / `list_groups` / … / `list_api_keys` / … / `list_logs` / `clear_logs` / `list_health`
+- 领域：`list_providers` / `create_provider` / … / `list_groups` / … / `list_logs` / `clear_logs` / `list_health`
 
 ### ProxyStatus（snake_case）
 
@@ -103,8 +103,8 @@
 | 路径 | 鉴权 | 行为 |
 |------|------|------|
 | `GET /health` | 无 | 200 JSON |
-| `GET /v1/models` | 客户端 Key | 分组名列表 |
-| `POST /v1/chat/completions` | 客户端 Key | `model`=分组名；故障转移队列转发 |
+| `GET /v1/models` | 无（忽略客户端鉴权头） | 分组名列表 |
+| `POST /v1/chat/completions` | 无（忽略客户端鉴权头） | `model`=分组名；故障转移队列转发 |
 
 ---
 

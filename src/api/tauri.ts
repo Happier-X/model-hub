@@ -48,18 +48,6 @@ export interface Group {
   created_at: string;
 }
 
-export interface ApiKeyPublic {
-  id: number;
-  name: string;
-  masked: string;
-  enabled: boolean;
-  created_at: string;
-}
-
-export interface ApiKeyCreated extends ApiKeyPublic {
-  raw_key: string;
-}
-
 export interface RequestLog {
   id: number;
   time: number;
@@ -183,13 +171,6 @@ export const updateGroup = (payload: {
   items: { provider_id: number; upstream_model: string }[];
 }) => invoke<Group>("update_group", { payload });
 export const deleteGroup = (id: number) => invoke<void>("delete_group", { id });
-
-export const listApiKeys = () => invoke<ApiKeyPublic[]>("list_api_keys");
-export const createApiKey = (payload: { name: string; enabled: boolean }) =>
-  invoke<ApiKeyCreated>("create_api_key", { payload });
-export const updateApiKey = (payload: { id: number; name: string; enabled: boolean }) =>
-  invoke<ApiKeyPublic>("update_api_key", { payload });
-export const deleteApiKey = (id: number) => invoke<void>("delete_api_key", { id });
 
 export const listLogs = (query: LogQuery = {}) =>
   invoke<LogPage>("list_logs", {

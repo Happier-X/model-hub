@@ -1,4 +1,3 @@
-pub mod apikey;
 pub mod group;
 pub mod leaderboard;
 pub mod log;

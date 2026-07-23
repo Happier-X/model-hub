@@ -13,10 +13,11 @@
 ## 0. 概览与代理生命周期
 
 - [ ] 打开 **概览**，可见状态、Base URL、监听地址、数据目录
-- [ ] 页面有「本机接入步骤」说明（启动代理 → 供应商 → 分组 → Key → curl）
-- [ ] 可复制 Base URL；示例 curl 中 `model` 为分组名
+- [ ] 页面有「本机接入步骤」说明（启动代理 → 供应商 → 分组 → curl）
+- [ ] 可复制 Base URL；示例 curl 中 `model` 为分组名，**无**客户端 Key 要求
 - [ ] 修改端口并保存后，启停正常；`running` / `idle` / `error` 状态可读
 - [ ] 代理未运行时状态明确，最后错误（如有）可行动
+- [ ] 导航中**无**「API Key / API 密钥」入口
 
 ## 1. 供应商
 
@@ -33,25 +34,18 @@
 - [ ] 列表中队列条目展示供应商名、上游模型、**健康徽章 + 连续失败次数**
 - [ ] 「刷新健康」可用；上移/下移后顺序保持
 
-## 3. API Key 鉴权
+## 3. 本机访问（无客户端鉴权）
 
-- [ ] 创建客户端 Key；**明文仅创建成功时展示一次**，列表仅脱敏
-- [ ] 无 `Authorization` 也可调用（本机开放）：
+- [ ] 无 `Authorization` 可调用：
   ```bash
   curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:<端口>/v1/models
   # 期望 200（已有分组时）
   ```
-- [ ] 错误 Key → **401**
+- [ ] 带任意 Bearer **不**返回 401：
   ```bash
   curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:<端口>/v1/models \
-    -H "Authorization: Bearer sk-modelhub-invalid"
-  # 期望 401
-  ```
-- [ ] 有效 Key 仍可用：
-  ```bash
-  curl -s http://127.0.0.1:<端口>/v1/models \
-    -H "Authorization: Bearer <客户端Key>"
-  # 期望 JSON 列表含分组名
+    -H "Authorization: Bearer arbitrary-value"
+  # 期望 200
   ```
 
 ## 4. Models 与 Chat
@@ -60,7 +54,6 @@
 - [ ] 非流式 Chat（`model` = 分组名）成功返回：
   ```bash
   curl http://127.0.0.1:<端口>/v1/chat/completions \
-    -H "Authorization: Bearer <客户端Key>" \
     -H "Content-Type: application/json" \
     -d '{"model":"<分组名>","messages":[{"role":"user","content":"hi"}]}'
   ```
@@ -78,22 +71,20 @@
 
 - [ ] 可见：时间、分组、供应商、上游模型、状态码、耗时、错误、故障转移字段
 - [ ] 状态码有基础视觉区分：**2xx 绿 / 4xx 琥珀 / 5xx 红 / 其他灰**
-- [ ] 日志不含完整客户端 Key、上游 Key 或 messages 正文
+- [ ] 日志不含完整上游 Key 或 messages 正文
 - [ ] 清空日志可用
 
 ## 7. 安全与边界速查
 
 - [ ] 默认监听 `127.0.0.1`
 - [ ] 上游 Key 不在日志/列表完整泄露（供应商表单内编辑除外）
-- [ ] 客户端 Key 创建后无法再次查看明文
 
 ## 推荐最小联调路径（约 10 分钟）
 
 1. 概览启动代理，复制 Base URL  
 2. 建两个供应商 + 一个双队列分组（自动故障转移开）  
-3. 建客户端 Key 并保存明文（仅此一次）  
-4. `models` 鉴权 401 → 带 Key 成功  
-5. Chat 走故障转移成功，日志核对转移字段  
-6. 供应商/分组页核对健康徽章与连续失败次数，手动刷新健康  
+3. 无 Key 调用 `models` 与 Chat 成功；带任意 Bearer 也不 401  
+4. Chat 走故障转移成功，日志核对转移字段  
+5. 供应商/分组页核对健康徽章与连续失败次数，手动刷新健康  
 
 完成上述勾选即可视为本机端到端体验验收通过。

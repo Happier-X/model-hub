@@ -34,15 +34,6 @@ CREATE TABLE IF NOT EXISTS group_items (
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE IF NOT EXISTS api_keys (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  key_hash TEXT NOT NULL UNIQUE,
-  masked TEXT NOT NULL,
-  enabled INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS request_logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   time INTEGER NOT NULL,
@@ -103,48 +94,6 @@ fn ensure_group_columns(conn: &Connection) -> Result<(), AppError> {
             [],
         )
         .map_err(|e| AppError::Database(format!("添加 groups.created_at 字段失败: {e}")))?;
-    }
-    Ok(())
-}
-
-/// 兼容旧 gateway-rust 的 api_keys(api_key_masked, key_hash, ...)。
-fn ensure_api_keys_columns(conn: &Connection) -> Result<(), AppError> {
-    let columns = table_column_names(conn, "api_keys")?;
-
-    // key_hash 若完全缺失，无法从脱敏值恢复原始 Key；补空值仅保证 schema 可读，
-    // 用户需重建该类更早明文 schema 的 Key（本任务不迁移 octopus 明文表）。
-    let required: &[(&str, &str)] = &[
-        ("name", "name TEXT NOT NULL DEFAULT ''"),
-        ("key_hash", "key_hash TEXT NOT NULL DEFAULT ''"),
-        ("masked", "masked TEXT NOT NULL DEFAULT ''"),
-        ("enabled", "enabled INTEGER NOT NULL DEFAULT 1"),
-    ];
-    for (name, ddl) in required {
-        if columns.contains(*name) {
-            continue;
-        }
-        conn.execute(&format!("ALTER TABLE api_keys ADD COLUMN {ddl}"), [])
-            .map_err(|e| AppError::Database(format!("添加 api_keys.{name} 字段失败: {e}")))?;
-    }
-
-    if columns.contains("api_key_masked") {
-        conn.execute(
-            "UPDATE api_keys SET masked = api_key_masked WHERE masked = ''",
-            [],
-        )
-        .map_err(|e| AppError::Database(format!("回填 api_keys.masked 失败: {e}")))?;
-    }
-
-    if !columns.contains("created_at") {
-        let now = chrono::Utc::now().to_rfc3339();
-        let escaped_now = now.replace('\'', "''");
-        conn.execute(
-            &format!(
-                "ALTER TABLE api_keys ADD COLUMN created_at TEXT NOT NULL DEFAULT '{escaped_now}'"
-            ),
-            [],
-        )
-        .map_err(|e| AppError::Database(format!("添加 api_keys.created_at 字段失败: {e}")))?;
     }
     Ok(())
 }
@@ -304,7 +253,6 @@ pub fn migrate(conn: &Connection) -> Result<(), AppError> {
     conn.execute_batch(MIGRATION_V1)
         .map_err(|e| AppError::Database(format!("执行 schema v1 失败: {e}")))?;
     ensure_group_columns(conn)?;
-    ensure_api_keys_columns(conn)?;
     ensure_group_items_columns(conn)?;
     ensure_request_logs_columns(conn)?;
     apply_version(conn, 1)?;
@@ -325,7 +273,6 @@ mod tests {
             "providers",
             "groups",
             "group_items",
-            "api_keys",
             "request_logs",
         ] {
             let n: i64 = conn
@@ -375,82 +322,6 @@ mod tests {
             .unwrap();
         assert_eq!(value, 1);
         assert_eq!(created_at, group.2);
-    }
-
-    #[test]
-    fn migrate_adds_and_backfills_api_keys_current_columns() {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE api_keys (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                api_key_masked TEXT NOT NULL,
-                key_hash TEXT NOT NULL UNIQUE,
-                enabled INTEGER NOT NULL DEFAULT 1,
-                expire_at TEXT,
-                max_cost REAL,
-                supported_models_json TEXT
-            );
-            INSERT INTO api_keys
-                (name, api_key_masked, key_hash, enabled)
-            VALUES ('legacy', 'sk-modelhub-****abcd', 'legacy-hash', 0);",
-        )
-        .unwrap();
-
-        migrate(&conn).unwrap();
-
-        let row: (String, String, String, i64, String) = conn
-            .query_row(
-                "SELECT name, masked, key_hash, enabled, created_at FROM api_keys WHERE id = 1",
-                [],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
-            )
-            .unwrap();
-        assert_eq!(row.0, "legacy");
-        assert_eq!(row.1, "sk-modelhub-****abcd");
-        assert_eq!(row.2, "legacy-hash");
-        assert_eq!(row.3, 0);
-        assert!(!row.4.is_empty());
-        chrono::DateTime::parse_from_rfc3339(&row.4).unwrap();
-
-        migrate(&conn).unwrap();
-        let row2: (String, String) = conn
-            .query_row(
-                "SELECT masked, created_at FROM api_keys WHERE id = 1",
-                [],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
-            .unwrap();
-        assert_eq!(row2, (row.1, row.4));
-    }
-
-    #[test]
-    fn migrate_preserves_existing_api_key_current_values() {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE api_keys (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                api_key_masked TEXT NOT NULL,
-                key_hash TEXT NOT NULL UNIQUE,
-                masked TEXT NOT NULL DEFAULT '',
-                enabled INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL
-            );
-            INSERT INTO api_keys
-                (name, api_key_masked, key_hash, masked, enabled, created_at)
-            VALUES ('k', 'legacy-mask', 'hash', 'current-mask', 1, '2024-01-01T00:00:00Z');",
-        )
-        .unwrap();
-        migrate(&conn).unwrap();
-        let row: (String, String, String) = conn
-            .query_row(
-                "SELECT masked, key_hash, created_at FROM api_keys",
-                [],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
-            )
-            .unwrap();
-        assert_eq!(row, ("current-mask".into(), "hash".into(), "2024-01-01T00:00:00Z".into()));
     }
 
     #[test]
