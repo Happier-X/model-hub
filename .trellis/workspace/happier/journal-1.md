@@ -795,7 +795,7 @@
 ## 2026-07-24 - 发布 v0.0.4
 
 **Task**: 发布新版本
-**Branch**: 
+**Branch**: `master`
 
 ### Summary
 
@@ -805,8 +805,8 @@
 
 | Hash | Message |
 |------|---------|
-|  | chore(release): v0.0.4 |
-|  | chore(task): 落入 release-new-version 任务文档 |
+| `8357e88` | chore(release): v0.0.4 |
+| `4cd7817` | chore(task): 落入 release-new-version 任务文档 |
 
 ### Testing
 
