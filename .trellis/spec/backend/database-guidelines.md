@@ -23,7 +23,7 @@
 | `providers` | 上游供应商；`api_key` 本机可明文 |
 | `groups` | 对外模型名（**无** `auto_failover`；故障转移始终按队列顺序） |
 | `group_items` | 有序队列；`sort_order` 越小越优先 |
-| `request_logs` | 请求/故障转移摘要；不存 messages/完整密钥；**默认保留 30 天**（`LOG_RETENTION_DAYS`），启动/写日志/列表时 best-effort 清理过期 |
+| `request_logs` | 请求/故障转移摘要；不存 messages/完整密钥；**默认保留最近 7 天内的最新 1000 条**（`LOG_RETENTION_DAYS` + `LOG_MAX_ROWS`），启动/写日志/列表时 best-effort 清理过期或超量 |
 
 **已移除**：
 
@@ -55,6 +55,78 @@
 ## Verification
 
 - migrate 幂等；`cargo test` 含 domain CRUD 与临时库。
+
+## 场景：请求日志保留策略
+
+### 1. Scope / Trigger
+
+当修改请求日志存储、列表、手动清理或 UI 展示时，必须保持同一套保留策略：只保留最近 7 天内的最新 1000 条。该策略控制本地 SQLite 体积，且不能影响代理请求主路径。
+
+### 2. Signatures
+
+- Rust：`pub const LOG_RETENTION_DAYS: i64 = 7`
+- Rust：`pub const LOG_MAX_ROWS: i64 = 1000`
+- Rust：`Stores::purge_expired_logs() -> Result<LogPurgeResult, AppError>`
+- Rust：`Stores::purge_logs(retention_days: i64, max_rows: i64) -> Result<LogPurgeResult, AppError>`
+- IPC response：`LogPage { retention_days, max_rows, stored_total, ... }`
+- IPC response：`LogPurgeResult { deleted, retained, retention_days, max_rows, cutoff_unix }`
+
+### 3. Contracts
+
+- 默认清理必须同时执行时间窗口和数量上限：`time < now - LOG_RETENTION_DAYS * 86400` 的行删除；剩余行再按 `id DESC` 仅保留最新 `LOG_MAX_ROWS` 条。
+- 自动清理入口包括启动打开库、写日志成功后、日志列表查询前；这些入口必须 best-effort，失败只写 tracing warn，不阻断请求或 UI 列表。
+- 手动清理 `purge_expired_logs` 与自动清理使用同一默认策略，不得只按天数清理。
+- `list_logs` 返回的 `retention_days` 与 `max_rows` 是 UI 展示的唯一来源；前端可有兼容旧后端的本地回退值，但文案不得写旧的 30 天策略。
+- `purge_logs_older_than_days` 仅用于按天数测试或特殊调用；默认路径不得绕过 `LOG_MAX_ROWS`。
+
+### 4. Validation & Error Matrix
+
+| 条件 | 行为 |
+|------|------|
+| 日志超过 7 天 | 删除 |
+| 日志在 7 天内但不属于最新 1000 条 | 删除 |
+| 日志在 7 天内且属于最新 1000 条 | 保留 |
+| `retention_days <= 0` | 按 1 天处理 |
+| `max_rows <= 0` | 按 1 条处理 |
+| SQLite `DELETE` / `COUNT` 失败 | 返回 `AppError::Database`；best-effort 入口只 warn |
+
+### 5. Good / Base / Bad Cases
+
+- Good：1 条 8 天前记录 + 1002 条当天记录，默认清理后删除 3 条、保留 1000 条。
+- Base：空日志表清理成功，`deleted = 0`、`retained = 0`。
+- Bad：只改 `LOG_RETENTION_DAYS` 为 7，未加 `LOG_MAX_ROWS`，导致 7 天内高频请求无限增长。
+
+### 6. Tests Required
+
+- 领域测试：`purge_logs(7, 1000)` 同时删除过期行和超出最新 1000 条的行，断言 `deleted`、`retained`、`retention_days`、`max_rows`。
+- 领域测试：`purge_expired_logs()` 使用 `LOG_RETENTION_DAYS` 与 `LOG_MAX_ROWS` 默认值。
+- 领域测试：`list_logs` 返回 `max_rows == LOG_MAX_ROWS` 与 `retention_days == LOG_RETENTION_DAYS`。
+- 前端类型检查：`LogPage` 与 `LogPurgeResult` 包含 `max_rows`，日志页文案展示 7 天和 1000 条。
+
+### 7. Wrong vs Correct
+
+#### 错误
+
+```rust
+pub const LOG_RETENTION_DAYS: i64 = 7;
+
+conn.execute("DELETE FROM request_logs WHERE time < ?1", params![cutoff])?;
+```
+
+只按天数删除，无法限制 7 天内的日志数量。
+
+#### 正确
+
+```rust
+pub const LOG_RETENTION_DAYS: i64 = 7;
+pub const LOG_MAX_ROWS: i64 = 1000;
+
+stores.purge_logs(LOG_RETENTION_DAYS, LOG_MAX_ROWS)?;
+```
+
+默认路径同时应用时间窗口和最新条数上限，UI 从 IPC 响应展示当前策略。
+
+---
 
 ## 场景：为既有 SQLite 表补充字段
 

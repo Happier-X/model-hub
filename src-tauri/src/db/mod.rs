@@ -106,7 +106,7 @@ mod tests {
                 (time, group_name, provider_name, upstream_model, status_code,
                  use_time_ms, error, failover_from, failover_to, failover_reason)
             VALUES
-                -- time 用近期秒级时间戳，避免 list_logs 默认 30 天保留策略清掉测试行
+                -- time 用近期秒级时间戳，避免 list_logs 默认保留策略清掉测试行
                 ({recent_ts}, 'legacy-group', 'legacy-provider', 'legacy-model', 503,
                  321, 'upstream unavailable', 'legacy-provider', 'backup-provider',
                  'server error');"

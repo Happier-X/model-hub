@@ -1,0 +1,3 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "SQLite 请求日志保留和清理约定"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "业务请求日志字段和脱敏约束"}

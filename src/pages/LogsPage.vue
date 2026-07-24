@@ -14,7 +14,8 @@ import { statusCodeClass } from "../utils/statusCode";
 const items = ref<RequestLog[]>([]);
 const total = ref(0);
 const storedTotal = ref(0);
-const retentionDays = ref(30);
+const retentionDays = ref(7);
+const maxRows = ref(1000);
 const page = ref(1);
 const pageSize = ref(50);
 const groupName = ref("");
@@ -49,7 +50,8 @@ async function refresh() {
     items.value = result.items;
     total.value = result.total;
     storedTotal.value = result.stored_total ?? result.total;
-    retentionDays.value = result.retention_days ?? 30;
+    retentionDays.value = result.retention_days ?? 7;
+    maxRows.value = result.max_rows ?? 1000;
     page.value = result.page;
     pageSize.value = result.page_size;
     error.value = "";
@@ -94,7 +96,7 @@ async function clear() {
 async function purgeExpired() {
   try {
     const result = await purgeExpiredLogs();
-    message.value = `已清理 ${result.deleted} 条超过 ${result.retention_days} 天的日志，库内剩余 ${result.retained} 条`;
+    message.value = `已按最近 ${result.retention_days} 天、最新 ${result.max_rows} 条策略清理 ${result.deleted} 条日志，库内剩余 ${result.retained} 条`;
     page.value = 1;
     await refresh();
   } catch (e) {
@@ -180,7 +182,7 @@ onUnmounted(() => {
         <HButton variant="danger" type="button" @click="clear">清空全部</HButton>
       </div>
       <p class="mt-3 text-xs text-slate-500">
-        默认保留 {{ retentionDays }} 天；打开列表/写入日志时会自动清理更早记录。库内现有
+        默认仅保留最近 {{ retentionDays }} 天内的最新 {{ maxRows }} 条；打开列表/写入日志时会自动清理。库内现有
         {{ storedTotal }} 条。
       </p>
     </section>

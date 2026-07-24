@@ -81,12 +81,15 @@ export interface LogPage {
   stored_total: number;
   /** 保留天数 */
   retention_days: number;
+  /** 保留条数上限 */
+  max_rows: number;
 }
 
 export interface LogPurgeResult {
   deleted: number;
   retained: number;
   retention_days: number;
+  max_rows: number;
   cutoff_unix: number;
 }
 

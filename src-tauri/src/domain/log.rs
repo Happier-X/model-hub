@@ -57,7 +57,10 @@ impl Default for LogQuery {
 }
 
 /// 默认保留天数（删除更早的 `time`）。
-pub const LOG_RETENTION_DAYS: i64 = 30;
+pub const LOG_RETENTION_DAYS: i64 = 7;
+
+/// 默认保留的最大条数（仅保留最新的 N 条，按 id 倒序）。
+pub const LOG_MAX_ROWS: i64 = 1000;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct LogPage {
@@ -70,6 +73,8 @@ pub struct LogPage {
     pub stored_total: i64,
     /// 当前保留策略天数
     pub retention_days: i64,
+    /// 当前保留策略的最大条数
+    pub max_rows: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -77,6 +82,7 @@ pub struct LogPurgeResult {
     pub deleted: i64,
     pub retained: i64,
     pub retention_days: i64,
+    pub max_rows: i64,
     pub cutoff_unix: i64,
 }
 
@@ -335,6 +341,7 @@ impl Stores {
                 page_size,
                 stored_total,
                 retention_days: LOG_RETENTION_DAYS,
+                max_rows: LOG_MAX_ROWS,
             })
         })
     }
@@ -347,29 +354,52 @@ impl Stores {
         })
     }
 
-    /// 删除 `time < now - retention_days` 的行。
+    /// 按默认策略清理：删除超过 `LOG_RETENTION_DAYS` 天，或超出最新 `LOG_MAX_ROWS` 条的行。
+    /// 时间窗口与条数上限同时生效，满足任一淘汰条件的记录都会被删除。
     pub fn purge_expired_logs(&self) -> Result<LogPurgeResult, AppError> {
-        self.purge_logs_older_than_days(LOG_RETENTION_DAYS)
+        self.purge_logs(LOG_RETENTION_DAYS, LOG_MAX_ROWS)
     }
 
+    /// 仅按时间清理（条数不限）；保留供测试与按天调用。
     pub fn purge_logs_older_than_days(
         &self,
         retention_days: i64,
     ) -> Result<LogPurgeResult, AppError> {
+        self.purge_logs(retention_days, i64::MAX)
+    }
+
+    /// 组合清理：先删超时行，再删超出最新 `max_rows` 的行。
+    pub fn purge_logs(
+        &self,
+        retention_days: i64,
+        max_rows: i64,
+    ) -> Result<LogPurgeResult, AppError> {
         let days = retention_days.max(1);
+        let rows = max_rows.max(1);
         let now = chrono::Utc::now().timestamp();
         let cutoff = now.saturating_sub(days.saturating_mul(86_400));
         self.with_conn(|conn| {
-            let deleted = conn
-                .execute("DELETE FROM request_logs WHERE time < ?1", params![cutoff])
+            // 1) 超过时间窗口的行。
+            let deleted_by_time =
+                conn.execute("DELETE FROM request_logs WHERE time < ?1", params![cutoff])
+                    .map_err(|e| AppError::Database(e.to_string()))? as i64;
+            // 2) 时间窗口内仍超出最新 rows 条的行（按 id 倒序保留最新）。
+            let deleted_by_rows =
+                conn.execute(
+                    "DELETE FROM request_logs WHERE id NOT IN (
+                        SELECT id FROM request_logs ORDER BY id DESC LIMIT ?1
+                    )",
+                    params![rows],
+                )
                 .map_err(|e| AppError::Database(e.to_string()))? as i64;
             let retained: i64 = conn
                 .query_row("SELECT COUNT(*) FROM request_logs", [], |row| row.get(0))
                 .map_err(|e| AppError::Database(e.to_string()))?;
             Ok(LogPurgeResult {
-                deleted,
+                deleted: deleted_by_time + deleted_by_rows,
                 retained,
                 retention_days: days,
+                max_rows: rows,
                 cutoff_unix: cutoff,
             })
         })
@@ -693,6 +723,7 @@ mod tests {
         assert_eq!(result.deleted, 1);
         assert_eq!(result.retained, 1);
         assert_eq!(result.retention_days, 30);
+        assert_eq!(result.max_rows, i64::MAX);
         assert!(result.cutoff_unix <= now - 30 * 86_400 + 5);
 
         // 再 purge 不应再删
@@ -703,6 +734,52 @@ mod tests {
         let page = stores.list_logs(LogQuery::default()).unwrap();
         assert_eq!(page.stored_total, 1);
         assert_eq!(page.retention_days, LOG_RETENTION_DAYS);
+        assert_eq!(page.max_rows, LOG_MAX_ROWS);
+    }
+
+    #[test]
+    fn purge_logs_enforces_time_and_row_limits() {
+        let (_dir, stores) = setup();
+        let now = chrono::Utc::now().timestamp();
+        insert_at(&stores, now - 8 * 86_400, 200, "", "", "");
+        for _ in 0..1002 {
+            insert_at(&stores, now, 200, "", "", "");
+        }
+
+        let result = stores.purge_logs(7, 1000).unwrap();
+        assert_eq!(result.deleted, 3);
+        assert_eq!(result.retained, 1000);
+        assert_eq!(result.retention_days, 7);
+        assert_eq!(result.max_rows, 1000);
+
+        stores
+            .with_conn(|conn| {
+                let (count, oldest_time): (i64, i64) = conn
+                    .query_row("SELECT COUNT(*), MIN(time) FROM request_logs", [], |row| {
+                        Ok((row.get(0)?, row.get(1)?))
+                    })
+                    .map_err(|e| AppError::Database(e.to_string()))?;
+                assert_eq!(count, 1000);
+                assert_eq!(oldest_time, now);
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn default_purge_uses_seven_days_and_one_thousand_rows() {
+        let (_dir, stores) = setup();
+        let now = chrono::Utc::now().timestamp();
+        insert_at(&stores, now - 8 * 86_400, 200, "", "", "");
+        for _ in 0..1001 {
+            insert_at(&stores, now, 200, "", "", "");
+        }
+
+        let result = stores.purge_expired_logs().unwrap();
+        assert_eq!(result.deleted, 2);
+        assert_eq!(result.retained, LOG_MAX_ROWS);
+        assert_eq!(result.retention_days, LOG_RETENTION_DAYS);
+        assert_eq!(result.max_rows, LOG_MAX_ROWS);
     }
 
     #[test]
