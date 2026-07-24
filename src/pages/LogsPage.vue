@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { HButton, HCheckbox, HEmpty, HInput } from "happier-ui";
+import { HButton, HCard, HCheckbox, HEmpty, HInput } from "happier-ui";
 import {
   clearLogs,
   extractInvokeError,
@@ -130,7 +130,7 @@ onUnmounted(() => {
 
 <template>
   <div class="space-y-4">
-    <section class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <HCard variant="outlined" padding="md">
       <div class="flex flex-wrap items-end gap-3">
         <div class="w-40" @keydown.enter="applyFilters">
           <HInput
@@ -185,12 +185,12 @@ onUnmounted(() => {
         默认仅保留最近 {{ retentionDays }} 天内的最新 {{ maxRows }} 条；打开列表/写入日志时会自动清理。库内现有
         {{ storedTotal }} 条。
       </p>
-    </section>
+    </HCard>
 
     <p v-if="message" class="text-sm text-emerald-700">{{ message }}</p>
     <p v-if="error" class="text-sm text-rose-600">{{ error }}</p>
 
-    <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <HCard variant="outlined" padding="md">
       <div class="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
         <span
           >筛选 {{ total }} 条 · 库内 {{ storedTotal }} 条 · 第 {{ page }} / {{ totalPages }} 页</span
@@ -259,6 +259,6 @@ onUnmounted(() => {
           </tbody>
         </table>
       </div>
-    </section>
+    </HCard>
   </div>
 </template>

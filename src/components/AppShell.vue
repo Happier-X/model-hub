@@ -1,20 +1,22 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { X } from "@lucide/vue";
-import { useRoute, RouterLink, RouterView } from "vue-router";
+import { useRoute, useRouter, RouterLink, RouterView } from "vue-router";
+import { HSidebar, type HSidebarItem } from "happier-ui";
 import { checkForUpdate, getShellPrefs } from "../api/tauri";
 import AppTitleBar from "./AppTitleBar.vue";
 
 const route = useRoute();
+const router = useRouter();
 const title = computed(() => (route.meta.title as string) || "Model Hub");
 const availableVersion = ref("");
 
-const nav = [
-  { to: "/", label: "首页" },
-  { to: "/providers", label: "供应商" },
-  { to: "/groups", label: "分组" },
-  { to: "/logs", label: "日志" },
-  { to: "/settings", label: "设置" },
+const navItems: HSidebarItem[] = [
+  { key: "/", label: "首页" },
+  { key: "/providers", label: "供应商" },
+  { key: "/groups", label: "分组" },
+  { key: "/logs", label: "日志" },
+  { key: "/settings", label: "设置" },
 ];
 
 async function checkUpdateOnAppStartup() {
@@ -41,27 +43,18 @@ onMounted(checkUpdateOnAppStartup);
   <div class="flex min-h-screen flex-col bg-slate-100 text-slate-900">
     <AppTitleBar />
     <div class="flex min-h-0 flex-1">
-      <aside class="flex w-56 shrink-0 flex-col border-r border-slate-200 bg-slate-900 text-slate-100">
-        <div class="border-b border-slate-700 px-5 py-4">
+      <HSidebar
+        :items="navItems"
+        :model-value="route.path"
+        :show-collapse-toggle="false"
+        aria-label="主导航"
+        @update:model-value="(key: string) => router.push(key)"
+      >
+        <template #header>
           <div class="text-lg font-semibold tracking-wide">Model Hub</div>
           <div class="mt-1 text-xs text-slate-400">Vue3 · 内嵌代理</div>
-        </div>
-        <nav class="flex flex-1 flex-col gap-1 p-3">
-          <RouterLink
-            v-for="item in nav"
-            :key="item.to"
-            :to="item.to"
-            class="rounded-lg px-3 py-2 text-sm transition"
-            :class="
-              route.path === item.to
-                ? 'bg-cyan-500/20 text-cyan-200'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            "
-          >
-            {{ item.label }}
-          </RouterLink>
-        </nav>
-      </aside>
+        </template>
+      </HSidebar>
       <main class="flex min-w-0 flex-1 flex-col">
         <div
           v-if="availableVersion"

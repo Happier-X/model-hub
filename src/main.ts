@@ -3,7 +3,7 @@ import App from "./App.vue";
 import OverlayApp from "./OverlayApp.vue";
 import { router } from "./router";
 import "happier-ui/tokens.css";
-import "happier-ui/style.css";
+import "happier-ui/styles.css";
 import "./index.css";
 
 const isOverlay = new URLSearchParams(window.location.search).get("overlay") === "1";

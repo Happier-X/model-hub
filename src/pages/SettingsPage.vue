@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef } from "vue";
-import { HButton, HCheckbox, HInput } from "happier-ui";
+import { HButton, HCard, HCheckbox, HInput } from "happier-ui";
 import {
   checkForUpdate,
   downloadAndInstallUpdate,
@@ -245,8 +245,10 @@ onUnmounted(() => {
 
 <template>
   <div class="space-y-6">
-    <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 class="mb-4 text-base font-semibold">代理配置</h2>
+    <HCard variant="outlined" padding="md">
+      <template #header>
+        <h2 class="text-base font-semibold">代理配置</h2>
+      </template>
       <div class="grid gap-3 text-sm md:grid-cols-2">
         <div>
           <div class="text-slate-500">当前监听</div>
@@ -290,10 +292,12 @@ onUnmounted(() => {
         若首选端口被占用，会自动向后寻找可用端口并写入配置，不会结束占用进程。改口后若用
         Pi，请到「分组」页重新「配置到 Pi」。
       </p>
-    </section>
+    </HCard>
 
-    <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 class="mb-3 text-base font-semibold">桌面悬浮条</h2>
+    <HCard variant="outlined" padding="md">
+      <template #header>
+        <h2 class="text-base font-semibold">桌面悬浮条</h2>
+      </template>
       <div class="mb-3">
         <HCheckbox
           :model-value="overlayEnabled"
@@ -305,10 +309,12 @@ onUnmounted(() => {
       <p class="text-sm text-slate-500">
         开启后会在主显示器任务栏上方显示无边框状态条；关闭主窗口时代理仍继续运行，托盘「退出」才会停止代理。
       </p>
-    </section>
+    </HCard>
 
-    <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 class="mb-3 text-base font-semibold">应用更新</h2>
+    <HCard variant="outlined" padding="md">
+      <template #header>
+        <h2 class="text-base font-semibold">应用更新</h2>
+      </template>
       <p class="mb-3 text-sm text-slate-500">
         检查 GitHub Release 上的更新清单；发现新版本后须确认才会下载安装并重启。默认不在启动时自动检查。
       </p>
@@ -374,6 +380,6 @@ onUnmounted(() => {
         {{ updateMessage }}
       </p>
       <p v-if="updateError" class="mt-3 text-sm text-rose-600">{{ updateError }}</p>
-    </section>
+    </HCard>
   </div>
 </template>

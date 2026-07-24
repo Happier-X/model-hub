@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { HButton } from "happier-ui";
+import { HButton, HCard } from "happier-ui";
 import {
   extractInvokeError,
   getLastSuccessRequest,
@@ -108,11 +108,13 @@ onMounted(refresh);
 
 <template>
   <div class="space-y-6">
-    <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 class="text-base font-semibold">今日请求（本地日）</h2>
-        <HButton variant="outline" size="sm" type="button" @click="refreshStats">刷新统计</HButton>
-      </div>
+    <HCard variant="outlined" padding="md">
+      <template #header>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h2 class="text-base font-semibold">今日请求（本地日）</h2>
+          <HButton variant="outline" size="sm" type="button" @click="refreshStats">刷新统计</HButton>
+        </div>
+      </template>
       <p class="mb-3 text-xs text-slate-500">
         基于请求日志；成功 = 2xx 且无 error；失败 = 状态 ≥400 或有 error；故障转移 = 记录了换源。
       </p>
@@ -166,10 +168,12 @@ onMounted(refresh);
         <p v-else-if="!lastSuccessError" class="mt-3 text-sm text-slate-500">暂无成功请求</p>
         <p v-if="lastSuccessError" class="mt-3 text-sm text-rose-600">{{ lastSuccessError }}</p>
       </div>
-    </section>
+    </HCard>
 
-    <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 class="mb-4 text-base font-semibold">本地代理</h2>
+    <HCard variant="outlined" padding="md">
+      <template #header>
+        <h2 class="text-base font-semibold">本地代理</h2>
+      </template>
       <div class="grid gap-3 text-sm md:grid-cols-2">
         <div>
           <div class="text-slate-500">状态</div>
@@ -220,10 +224,12 @@ onMounted(refresh);
       <p class="mt-2 text-xs text-slate-500">
         关闭窗口会隐藏到系统托盘，代理继续运行；仅托盘菜单「退出」会停止代理并释放端口。若首选端口被占用，会自动向后寻找可用端口；若意外多开旧实例，请在旧进程托盘选择「退出」。端口配置和数据目录可在「设置」页查看。
       </p>
-    </section>
+    </HCard>
 
-    <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 class="mb-3 text-base font-semibold">本机接入步骤</h2>
+    <HCard variant="outlined" padding="md">
+      <template #header>
+        <h2 class="text-base font-semibold">本机接入步骤</h2>
+      </template>
       <ol class="list-decimal space-y-2 pl-5 text-sm text-slate-700">
         <li>
           <span class="font-medium">启动代理</span>
@@ -246,14 +252,16 @@ onMounted(refresh);
         完整可勾选验收步骤见仓库
         <code class="rounded bg-slate-100 px-1">docs/local-acceptance.md</code>。
       </p>
-    </section>
+    </HCard>
 
-    <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 class="mb-3 text-base font-semibold">调用示例</h2>
+    <HCard variant="outlined" padding="md">
+      <template #header>
+        <h2 class="text-base font-semibold">调用示例</h2>
+      </template>
       <p class="mb-2 text-sm text-slate-500">
         客户端使用统一 Base URL；请求体中的 model 填分组名，无需配置客户端密钥。
       </p>
       <pre class="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-100">{{ exampleCurl() }}</pre>
-    </section>
+    </HCard>
   </div>
 </template>

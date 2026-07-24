@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useForm } from "@tanstack/vue-form";
-import { HButton, HCheckbox, HEmpty, HInput } from "happier-ui";
+import { HButton, HCard, HCheckbox, HEmpty, HInput } from "happier-ui";
 import {
   createProvider,
   deleteProvider,
@@ -152,12 +152,12 @@ onMounted(refresh);
 
 <template>
   <div class="space-y-6">
-    <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <HCard variant="outlined" padding="md">
       <div class="flex items-center justify-between gap-2">
         <h2 class="text-base font-semibold">供应商管理</h2>
         <HButton variant="primary" type="button" @click="openCreate">新建供应商</HButton>
       </div>
-    </section>
+    </HCard>
 
     <AppDialog
       :open="dialogOpen"
@@ -247,10 +247,10 @@ onMounted(refresh);
       </section>
     </AppDialog>
 
-    <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+    <HCard variant="outlined" padding="md">
+      <template #header>
         <h2 class="text-base font-semibold">供应商列表</h2>
-      </div>
+      </template>
       <p v-if="error && !dialogOpen" class="mb-3 text-sm text-rose-600">{{ error }}</p>
       <HEmpty v-if="items.length === 0" class="app-empty-compact" title="暂无供应商" />
       <div v-else class="overflow-x-auto">
@@ -280,6 +280,6 @@ onMounted(refresh);
           </tbody>
         </table>
       </div>
-    </section>
+    </HCard>
   </div>
 </template>

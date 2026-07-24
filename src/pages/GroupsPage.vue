@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useForm } from "@tanstack/vue-form";
-import { HButton, HEmpty, HInput } from "happier-ui";
+import { HButton, HCard, HEmpty, HInput } from "happier-ui";
 import {
   createGroup,
   deleteGroup,
@@ -538,12 +538,12 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-6">
-    <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <HCard variant="outlined" padding="md">
       <div class="flex items-center justify-between gap-2">
         <h2 class="text-base font-semibold">分组管理</h2>
         <HButton variant="primary" type="button" @click="openCreate">新建分组</HButton>
       </div>
-    </section>
+    </HCard>
 
     <AppDialog
       :open="dialogOpen"
@@ -763,10 +763,10 @@ onMounted(async () => {
       </section>
     </AppDialog>
 
-    <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+    <HCard variant="outlined" padding="md">
+      <template #header>
         <h2 class="text-base font-semibold">分组列表</h2>
-      </div>
+      </template>
       <p class="mb-3 text-xs text-slate-500">
         「配置到 Pi」会将该分组名写入本机
         <code class="rounded bg-slate-100 px-1">~/.pi/agent/models.json</code>
@@ -816,6 +816,6 @@ onMounted(async () => {
           </li>
         </ol>
       </div>
-    </section>
+    </HCard>
   </div>
 </template>

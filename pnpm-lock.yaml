@@ -24,8 +24,8 @@ importers:
         specifier: 2.10.1
         version: 2.10.1
       happier-ui:
-        specifier: 0.0.1
-        version: 0.0.1(@lucide/vue@1.26.0(vue@3.5.18(typescript@5.9.2)))(vue@3.5.18(typescript@5.9.2))
+        specifier: 0.0.2
+        version: 0.0.2(@lucide/vue@1.26.0(vue@3.5.18(typescript@5.9.2)))(tailwindcss@4.1.13)(vue@3.5.18(typescript@5.9.2))
       vue:
         specifier: 3.5.18
         version: 3.5.18(typescript@5.9.2)
@@ -1065,11 +1065,12 @@ packages:
   graphemer@1.4.0:
     resolution: {integrity: sha512-EtKwoO6kxCL9WO5xipiHTZlSzBm7WLT627TqC/uVRd0HKmq8NXyebnNYxDoBi7wt8eTWrUrKXCOVaFq9x1kgag==}
 
-  happier-ui@0.0.1:
-    resolution: {integrity: sha512-emfJnDExm3y9SoyaW37WB/F8A/bK3wt78KNpHZ+fYlV/EGJVaHPSJGOIJnU2ekSzMQRd+c6ZpXJfsHdpw6z4Xg==}
+  happier-ui@0.0.2:
+    resolution: {integrity: sha512-g7ErK1g48oRynKX2DKiYbfSJVc6OF7fLj/CKFD9aP7K9MfYHwDOGtinQDsLGRp68jhO22HvajJzS07M9uqzzSA==}
     engines: {node: '>=18'}
     peerDependencies:
       '@lucide/vue': ^1.25.0
+      tailwindcss: ^4
       vue: ^3.5.0
 
   has-flag@4.0.0:
@@ -2385,9 +2386,10 @@ snapshots:
 
   graphemer@1.4.0: {}
 
-  happier-ui@0.0.1(@lucide/vue@1.26.0(vue@3.5.18(typescript@5.9.2)))(vue@3.5.18(typescript@5.9.2)):
+  happier-ui@0.0.2(@lucide/vue@1.26.0(vue@3.5.18(typescript@5.9.2)))(tailwindcss@4.1.13)(vue@3.5.18(typescript@5.9.2)):
     dependencies:
       '@lucide/vue': 1.26.0(vue@3.5.18(typescript@5.9.2))
+      tailwindcss: 4.1.13
       vue: 3.5.18(typescript@5.9.2)
 
   has-flag@4.0.0: {}
