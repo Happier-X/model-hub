@@ -688,3 +688,37 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 20: 概览展示最近成功模型
+
+**Date**: 2026-07-24
+**Task**: 概览展示最近成功模型
+**Branch**: `master`
+
+### Summary
+
+新增 get_last_success_request IPC 与请求日志查询，概览展示全局最近一次成功请求的分组、供应商、上游模型和时间；无成功记录显示空态，与今日统计并行刷新；补充 Rust 测试、前后端类型接线及相关 spec。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bdebbb7` | (see git log) |
+| `f870b4f` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
