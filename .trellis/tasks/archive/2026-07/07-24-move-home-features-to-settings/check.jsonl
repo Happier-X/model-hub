@@ -1,0 +1,8 @@
+{"file":".trellis/spec/frontend/index.md","reason":"核验信息架构、技术栈和导航约定"}
+{"file":".trellis/spec/frontend/directory-structure.md","reason":"核验新增页面和页面职责是否符合目录规范"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"核验组件、表单和页面展示约定"}
+{"file":".trellis/spec/frontend/hook-guidelines.md","reason":"核验启动检查生命周期是否安全且不重复触发"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"核验首页、设置页和壳层状态边界是否清晰"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"核验 Tauri invoke 类型和 TS 安全"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"核验质量底线、lint/typecheck/test 要求"}
+{"file":".trellis/spec/guides/index.md","reason":"核验是否遗漏跨层/复用风险"}

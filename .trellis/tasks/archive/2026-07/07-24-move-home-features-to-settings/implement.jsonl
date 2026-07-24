@@ -1,0 +1,8 @@
+{"file":".trellis/spec/frontend/index.md","reason":"前端技术栈、信息架构和导航职责基线"}
+{"file":".trellis/spec/frontend/directory-structure.md","reason":"新增 SettingsPage 与页面职责拆分需遵守目录规范"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"页面组件、表单状态和业务展示约定"}
+{"file":".trellis/spec/frontend/hook-guidelines.md","reason":"应用启动检查与页面生命周期逻辑需要遵守组合式函数/生命周期规范"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"首页、设置页和壳层状态边界拆分约定"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Tauri invoke 类型与 Vue TypeScript 安全约定"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"前端质量底线和验证命令"}
+{"file":".trellis/spec/guides/index.md","reason":"共享思考指南入口，避免跨层和状态边界遗漏"}
