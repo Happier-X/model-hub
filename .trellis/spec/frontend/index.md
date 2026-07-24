@@ -37,6 +37,7 @@
 | [分组队列模型排序](./model-queue-sort.md) | 本地/外部混合排序与匹配 | |
 | [上游访问（backend）](../backend/upstream-access.md) | 禁止测活；拉取模型仅点击 | |
 | [桌面悬浮条（backend）](../backend/desktop-overlay.md) | overlay 窗口入口分流、轮询与位置持久化契约 | |
+| [主窗口无边框标题栏](./desktop-titlebar.md) | 无边框主窗口自定义标题栏的窗口控制与权限契约 | |
 
 ---
 
