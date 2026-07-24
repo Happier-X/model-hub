@@ -9,6 +9,7 @@
 - 上游错误即按队列顺序故障转移（无熔断 / 无 `auto_failover` 开关）
 - 本机 `/v1/*` 无客户端鉴权（有无 `Authorization` 均放行；代理忽略客户端鉴权头）
 - `POST /v1/chat/completions`（非流式 + SSE）、`GET /v1/models`
+- 首页聚焦代理状态、请求统计与接入指引；设置页管理端口、数据目录和应用更新
 
 ## 开发
 

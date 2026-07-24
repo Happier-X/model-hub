@@ -8,7 +8,7 @@
 2. Props 使用 `defineProps` 声明明确类型；事件使用 `defineEmits` 声明名称和参数。
 3. 页面负责加载与提交，通用组件负责展示和用户交互；复杂领域操作下沉到 `src/api/tauri.ts` 或组合式函数。
 3.1 **happier-ui（渐进）**：入口导入 `happier-ui/tokens.css` 与 `happier-ui/style.css`；peer 提供 `@lucide/vue`。按钮 → `HButton`；单行输入 → `HInput`；布尔 → `HSwitch`/`HCheckbox`；空列表 → `HEmpty`。表格、`select`、`textarea`、侧栏壳、卡片分区继续 Tailwind。不在本仓库扩展库组件面。
-3.2 **业务对话框表单（TanStack Form）**：供应商/分组等对话框表单用 `@tanstack/vue-form` 的 `useForm` + `form.Field` 管理字段与提交；控件仍用 `HInput`/`HCheckbox` 等，绑定 `field.state.value` + `field.handleChange`（或 `:model-value` + `@update:model-value`），**禁止**再用独立 `reactive` 作为提交字段真源。粘贴识别、拖拽排序、批量添加等通过 `form.setFieldValue` / 整体替换数组写回。保存走 `form.handleSubmit` / `onSubmit`；打开新建 `form.reset(defaults)`，打开编辑 `form.reset(entityFields)`；保存失败保留 values 与 `editing*Id`。日志筛选、首页端口/偏好等非对话框表单可用 `ref`，不强制迁 Form。不强制 Zod。
+3.2 **业务对话框表单（TanStack Form）**：供应商/分组等对话框表单用 `@tanstack/vue-form` 的 `useForm` + `form.Field` 管理字段与提交；控件仍用 `HInput`/`HCheckbox` 等，绑定 `field.state.value` + `field.handleChange`（或 `:model-value` + `@update:model-value`），**禁止**再用独立 `reactive` 作为提交字段真源。粘贴识别、拖拽排序、批量添加等通过 `form.setFieldValue` / 整体替换数组写回。保存走 `form.handleSubmit` / `onSubmit`；打开新建 `form.reset(defaults)`，打开编辑 `form.reset(entityFields)`；保存失败保留 values 与 `editing*Id`。日志筛选、设置页端口/偏好等非对话框表单可用 `ref`，不强制迁 Form。不强制 Zod。
 4. 代理运行状态、Base URL 和最后错误必须使用清晰、可行动的中文文案。
 5. 列表必须覆盖加载、空数据和错误状态。
 6. 表单中的上游 Key 输入使用密码类型；不向用户展示完整上游 Key。
@@ -19,6 +19,8 @@
 11. **上游访问**：禁止供应商页「测试连接」及任何自动/后台对用户上游的测活；**不**展示供应商熔断健康徽章，**不**调用 `listHealth`（已删除）；分组页「拉取模型」**仅**用户点击触发，不得在 `onMounted`/保存时自动拉取。合同见 backend [upstream-access.md](../backend/upstream-access.md)。
 12. **故障转移**：分组队列始终按顺序故障转移，UI **无** `auto_failover` 开关；创建/更新分组 payload 不得再传该字段。
 13. **首页「最近成功请求」**：展示全局最近一次成功日志的分组 / 供应商 / 上游模型 / 时间（日志态，非队列首选）；调用 `getLastSuccessRequest()`；空态「暂无成功请求」；与今日统计一并刷新，独立错误文案；不轮询、不按分组展开。成功语义见 backend [logging-guidelines.md](../backend/logging-guidelines.md)。
+14. **页面职责**：首页只承载代理运行状态、Base URL、启停/刷新、请求统计与接入指引；端口修改、数据目录、应用更新和自动检查偏好统一放在设置页。
+15. **启动更新检查**：应用壳层仅在挂载时读取一次 `check_update_on_startup`；发现新版本只展示可关闭提示和设置页入口，探测后立即关闭 `Update` 资源，不自动下载或安装。
 
 ## 状态与生命周期
 

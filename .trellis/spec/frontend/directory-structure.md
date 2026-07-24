@@ -11,10 +11,11 @@ src/
 │   └── AppShell.vue
 ├── composables/          # 仅在确有复用时创建
 ├── pages/
-│   ├── HomePage.vue      # 代理状态、Base URL、端口
+│   ├── HomePage.vue      # 代理运行状态、Base URL、统计、接入指引
 │   ├── ProvidersPage.vue
 │   ├── GroupsPage.vue
-│   └── LogsPage.vue
+│   ├── LogsPage.vue
+│   └── SettingsPage.vue  # 端口、数据目录、应用更新、自动检查偏好
 └── router/
     └── index.ts
 ```

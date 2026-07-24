@@ -6,17 +6,18 @@
 
 ### 管理台检查更新
 
-首页提供 **「检查更新」** 入口，以及可选的 **「进入首页时自动检查更新」**（写入 `config/shell.json` 的 `check_update_on_startup`，**默认 false**）。
+设置页提供 **「检查更新」** 入口，以及可选的 **「应用启动时自动检查更新」**（写入 `config/shell.json` 的 `check_update_on_startup`，**默认 false**）。
 
 流程如下：
 
 1. 调用 `@tauri-apps/plugin-updater` 的 `check()`，对照 `latest.json`。
-2. **无更新**：手动检查时提示当前已是最新；启动自动检查时保持安静（不打扰）。
+2. **无更新**：手动检查时提示当前已是最新；应用启动时的自动检查保持安静（不打扰）。
 3. **有更新**：展示新版本号与可选发布说明（body）；**须用户点击确认**后才执行 `downloadAndInstall`（从不静默安装）。
 4. 下载过程可展示进度（Started / Progress / Finished）；安装成功后调用 `@tauri-apps/plugin-process` 的 `relaunch()` 重启应用。
-5. 失败时：手动检查展示中文错误并可重试；启动自动检查失败仅短提示，不阻断使用。
+5. 失败时：手动检查展示中文错误并可重试；应用启动时的自动检查失败保持静默，不阻断使用。
 6. 浏览器开发态（`pnpm dev`，无 Tauri 壳）会提示「请在桌面应用内检查更新」。
 7. 修改监听端口并保存时，会保留 `check_update_on_startup` 字段，不会被擦除。
+8. 应用启动时的自动检查在应用壳层执行一次：仅探测版本，发现新版本时在壳顶部显示可关闭提示并提供「前往设置」入口，探测后立即释放 `Update` 资源；下载与安装仍在设置页手动确认。路由切换不重复触发。
 
 权限沿用 default capability 中的 `updater:default` 与 `process:allow-restart`，无需额外配置。
 
