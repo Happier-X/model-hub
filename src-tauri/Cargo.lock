@@ -2326,7 +2326,7 @@ dependencies = [
 
 [[package]]
 name = "model-hub"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "axum",
  "bytes",
