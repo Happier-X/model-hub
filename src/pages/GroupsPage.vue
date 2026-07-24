@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
+import { useForm } from "@tanstack/vue-form";
 import { HButton, HEmpty, HInput } from "happier-ui";
 import {
   createGroup,
@@ -28,6 +29,22 @@ import {
 } from "../utils/modelCapability";
 import { getGroupSaveMode } from "../utils/groupSaveMode";
 
+type QueueItemDraft = {
+  uid: number;
+  provider_id: number;
+  upstream_model: string;
+};
+
+type GroupFormValues = {
+  name: string;
+  items: QueueItemDraft[];
+};
+
+const defaultFormValues: GroupFormValues = {
+  name: "",
+  items: [],
+};
+
 const groups = ref<Group[]>([]);
 const providers = ref<Provider[]>([]);
 const error = ref("");
@@ -37,11 +54,6 @@ const exportingPiId = ref<number | null>(null);
 /** 稳定编辑目标 id；null 表示新建态。不得依赖列表对象引用。 */
 const editingGroupId = ref<number | null>(null);
 const isEditing = computed(() => editingGroupId.value !== null);
-const editingGroupName = computed(() => {
-  if (editingGroupId.value === null) return "";
-  const g = groups.value.find((item) => item.id === editingGroupId.value);
-  return g?.name ?? form.name;
-});
 const saving = ref(false);
 const dialogOpen = ref(false);
 /** 每条队列条目拉取到的上游模型 id 列表 */
@@ -58,15 +70,46 @@ const leaderboardLoading = ref(false);
 const leaderboardError = ref("");
 let nextItemUid = 1;
 
-type QueueItemDraft = {
-  uid: number;
-  provider_id: number;
-  upstream_model: string;
-};
+const form = useForm({
+  defaultValues: {
+    name: defaultFormValues.name,
+    items: [] as QueueItemDraft[],
+  },
+  onSubmit: async ({ value }) => {
+    if (saving.value) return;
+    // 快照编辑 id，避免异步期间状态漂移误走 create
+    const targetId = editingGroupId.value;
+    const mode = getGroupSaveMode(targetId);
+    saving.value = true;
+    try {
+      const payload = {
+        name: value.name,
+        items: value.items.filter((i) => i.provider_id > 0 && i.upstream_model.trim()),
+      };
+      if (mode === "update" && targetId !== null) {
+        await updateGroup({ id: targetId, ...payload });
+      } else {
+        await createGroup(payload);
+      }
+      dialogOpen.value = false;
+      resetForm();
+      await refresh();
+    } catch (e) {
+      // 失败保留编辑态与表单，便于重试
+      error.value = extractInvokeError(e);
+    } finally {
+      saving.value = false;
+    }
+  },
+});
 
-const form = reactive({
-  name: "",
-  items: [] as QueueItemDraft[],
+/** 订阅表单 values，供队列操作与模板读取 */
+const formValues = form.useSelector((s) => s.values);
+
+const editingGroupName = computed(() => {
+  if (editingGroupId.value === null) return "";
+  const g = groups.value.find((item) => item.id === editingGroupId.value);
+  return g?.name ?? formValues.value.name;
 });
 
 function createQueueItem(providerId: number, upstreamModel: string): QueueItemDraft {
@@ -75,6 +118,22 @@ function createQueueItem(providerId: number, upstreamModel: string): QueueItemDr
     provider_id: providerId,
     upstream_model: upstreamModel,
   };
+}
+
+function setItems(next: QueueItemDraft[]) {
+  form.setFieldValue("items", next);
+}
+
+function updateItemAt(
+  index: number,
+  patch: Partial<Pick<QueueItemDraft, "provider_id" | "upstream_model">>,
+) {
+  const items = formValues.value.items;
+  const current = items[index];
+  if (!current) return;
+  const next = items.slice();
+  next[index] = { ...current, ...patch };
+  setItems(next);
 }
 
 const providerMap = computed(() => new Map(providers.value.map((p) => [p.id, p])));
@@ -106,7 +165,7 @@ const leaderboardStatusText = computed(() => {
 
 /** 每条队列的展示分（按 index 缓存，避免模板内多次调用 displayScoreOf）。 */
 const queueDisplayScores = computed(() =>
-  form.items.map((item) => displayScoreOf(item.upstream_model)),
+  formValues.value.items.map((item) => displayScoreOf(item.upstream_model)),
 );
 
 function formatUnix(unix: number): string {
@@ -156,8 +215,7 @@ async function refresh() {
 
 function resetForm() {
   editingGroupId.value = null;
-  form.name = "";
-  form.items = [];
+  form.reset({ name: "", items: [] });
   modelOptions.value = {};
   fetchingModels.value = {};
   bulkProviderId.value = providers.value[0]?.id ?? 0;
@@ -182,8 +240,10 @@ function startEdit(g: Group) {
   message.value = "";
   editingGroupId.value = g.id;
   dialogOpen.value = true;
-  form.name = g.name;
-  form.items = g.items.map((i) => createQueueItem(i.provider_id, i.upstream_model));
+  form.reset({
+    name: g.name,
+    items: g.items.map((i) => createQueueItem(i.provider_id, i.upstream_model)),
+  });
   modelOptions.value = {};
   fetchingModels.value = {};
   dragFromIndex.value = null;
@@ -193,25 +253,20 @@ function startEdit(g: Group) {
 
 function addItem() {
   const first = providers.value[0];
-  form.items.push(createQueueItem(first?.id ?? 0, "gpt-4o-mini"));
+  setItems([...formValues.value.items, createQueueItem(first?.id ?? 0, "gpt-4o-mini")]);
 }
 
 function reorderQueue(from: number, to: number) {
-  if (
-    from === to ||
-    from < 0 ||
-    to < 0 ||
-    from >= form.items.length ||
-    to >= form.items.length
-  ) {
+  const items = formValues.value.items;
+  if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) {
     return;
   }
 
-  const nextItems = form.items.slice();
+  const nextItems = items.slice();
   const [movedItem] = nextItems.splice(from, 1);
   nextItems.splice(to, 0, movedItem);
 
-  const indexOrder = form.items.map((_, i) => i);
+  const indexOrder = items.map((_, i) => i);
   const [movedIndex] = indexOrder.splice(from, 1);
   indexOrder.splice(to, 0, movedIndex);
 
@@ -226,7 +281,7 @@ function reorderQueue(from: number, to: number) {
     }
   });
 
-  form.items.splice(0, form.items.length, ...nextItems);
+  setItems(nextItems);
   modelOptions.value = nextOptions;
   fetchingModels.value = nextFetching;
   bulkMessage.value = "队列顺序已调整，点击“保存”后生效";
@@ -237,16 +292,19 @@ function moveItem(index: number, delta: number) {
 }
 
 function removeItem(index: number) {
-  form.items.splice(index, 1);
+  const items = formValues.value.items;
+  setItems(items.filter((_, i) => i !== index));
   const nextOptions: Record<number, string[]> = {};
   const nextFetching: Record<number, boolean> = {};
-  form.items.forEach((_, newIndex) => {
-    const oldIndex = newIndex >= index ? newIndex + 1 : newIndex;
+  items.forEach((_, newIndex) => {
+    if (newIndex === index) return;
+    const mapped = newIndex > index ? newIndex - 1 : newIndex;
+    const oldIndex = newIndex;
     if (modelOptions.value[oldIndex]) {
-      nextOptions[newIndex] = modelOptions.value[oldIndex];
+      nextOptions[mapped] = modelOptions.value[oldIndex];
     }
     if (fetchingModels.value[oldIndex]) {
-      nextFetching[newIndex] = fetchingModels.value[oldIndex];
+      nextFetching[mapped] = fetchingModels.value[oldIndex];
     }
   });
   modelOptions.value = nextOptions;
@@ -318,8 +376,9 @@ function displayScoreOf(modelId: string): {
   };
 }
 
-function applySortedItems(sorted: typeof form.items, message: string) {
-  const oldIndexByUid = new Map(form.items.map((item, index) => [item.uid, index]));
+function applySortedItems(sorted: QueueItemDraft[], msg: string) {
+  const items = formValues.value.items;
+  const oldIndexByUid = new Map(items.map((item, index) => [item.uid, index]));
   const nextOptions: Record<number, string[]> = {};
   const nextFetching: Record<number, boolean> = {};
   sorted.forEach((item, newIndex) => {
@@ -329,16 +388,17 @@ function applySortedItems(sorted: typeof form.items, message: string) {
     if (fetchingModels.value[oldIndex]) nextFetching[newIndex] = fetchingModels.value[oldIndex];
   });
 
-  form.items.splice(0, form.items.length, ...sorted);
+  setItems(sorted);
   modelOptions.value = nextOptions;
   fetchingModels.value = nextFetching;
   dragFromIndex.value = null;
   dragOverIndex.value = null;
-  bulkMessage.value = message;
+  bulkMessage.value = msg;
 }
 
 async function sortQueueByCapability() {
-  if (form.items.length < 2) {
+  const items = formValues.value.items;
+  if (items.length < 2) {
     bulkMessage.value = "队列条目少于 2 条，无需排序";
     return;
   }
@@ -352,11 +412,11 @@ async function sortQueueByCapability() {
     }
   }
 
-  const before = form.items.map((item) => item.uid);
+  const before = items.map((item) => item.uid);
   const sorted =
     sortMode.value === "local"
-      ? sortByModelCapability(form.items, (item) => item.upstream_model)
-      : sortByHybridCapability(form.items, (item) => item.upstream_model, externalIndex.value);
+      ? sortByModelCapability(items, (item) => item.upstream_model)
+      : sortByHybridCapability(items, (item) => item.upstream_model, externalIndex.value);
 
   const after = sorted.map((item) => item.uid);
   if (before.every((uid, index) => uid === after[index])) {
@@ -377,7 +437,7 @@ async function sortQueueByCapability() {
 }
 
 async function pullModels(index: number) {
-  const item = form.items[index];
+  const item = formValues.value.items[index];
   if (!item || !item.provider_id) {
     error.value = "请先选择供应商，再拉取模型";
     return;
@@ -398,9 +458,7 @@ async function pullModels(index: number) {
 }
 
 function pickModel(index: number, modelId: string) {
-  const item = form.items[index];
-  if (!item) return;
-  item.upstream_model = modelId;
+  updateItemAt(index, { upstream_model: modelId });
 }
 
 async function bulkAddProviderModels() {
@@ -418,8 +476,9 @@ async function bulkAddProviderModels() {
       return;
     }
 
+    const items = formValues.value.items.slice();
     const existing = new Set(
-      form.items.map((item) => `${item.provider_id}\u0000${item.upstream_model.trim()}`),
+      items.map((item) => `${item.provider_id}\u0000${item.upstream_model.trim()}`),
     );
     let added = 0;
     let skipped = 0;
@@ -434,43 +493,17 @@ async function bulkAddProviderModels() {
         skipped += 1;
         continue;
       }
-      form.items.push(createQueueItem(providerId, modelId));
+      items.push(createQueueItem(providerId, modelId));
       existing.add(key);
       added += 1;
     }
+    setItems(items);
     error.value = "";
     bulkMessage.value = `已添加 ${added} 个模型${skipped > 0 ? `，跳过 ${skipped} 个重复或空模型` : ""}；点击“保存”后生效`;
   } catch (e) {
     error.value = extractInvokeError(e);
   } finally {
     bulkAddingModels.value = false;
-  }
-}
-
-async function save() {
-  if (saving.value) return;
-  // 快照编辑 id，避免异步期间状态漂移误走 create
-  const targetId = editingGroupId.value;
-  const mode = getGroupSaveMode(targetId);
-  saving.value = true;
-  try {
-    const payload = {
-      name: form.name,
-      items: form.items.filter((i) => i.provider_id > 0 && i.upstream_model.trim()),
-    };
-    if (mode === "update" && targetId !== null) {
-      await updateGroup({ id: targetId, ...payload });
-    } else {
-      await createGroup(payload);
-    }
-    dialogOpen.value = false;
-    resetForm();
-    await refresh();
-  } catch (e) {
-    // 失败保留编辑态与表单，便于重试
-    error.value = extractInvokeError(e);
-  } finally {
-    saving.value = false;
   }
 }
 
@@ -512,184 +545,222 @@ onMounted(async () => {
       </div>
     </section>
 
-    <AppDialog :open="dialogOpen" :title="isEditing ? '编辑分组' : '新建分组'" size="wide" :close-disabled="saving" @close="closeDialog">
-    <section>
-      <h2 class="sr-only">{{ isEditing ? "编辑分组" : "新建分组" }}</h2>
-      <p v-if="isEditing" class="mb-2 text-sm text-cyan-800">
-        正在编辑：{{ editingGroupName || form.name || `分组 #${editingGroupId}` }}
-      </p>
-      <p class="mb-3 text-sm text-slate-500">分组名 = 客户端 model；队列顺序即故障转移优先级。</p>
-      <div class="grid gap-3 md:grid-cols-2">
-        <HInput v-model="form.name" label="分组名（对外 model）" />
-      </div>
-
-      <div class="mt-4 space-y-2">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <h3 class="text-sm font-medium">故障转移队列</h3>
-          <div class="flex flex-wrap items-center gap-3">
-            <label class="flex items-center gap-1.5 text-sm text-slate-600">
-              <span class="text-slate-500">排序方式</span>
-              <select
-                v-model="sortMode"
-                class="rounded border border-slate-300 bg-white px-2 py-1 text-sm"
-              >
-                <option value="local">本地启发式</option>
-                <option value="external_intelligence">外部通用能力</option>
-                <option value="external_coding">外部编码能力</option>
-              </select>
-            </label>
-            <HButton
-              variant="ghost"
-              size="sm"
-              type="button"
-              :disabled="form.items.length < 2 || leaderboardLoading"
-              @click="sortQueueByCapability"
-            >
-              按模型能力排序
-            </HButton>
-            <HButton
-              variant="ghost"
-              size="sm"
-              type="button"
-              :disabled="leaderboardLoading"
-              @click="loadLeaderboard(true)"
-            >
-              {{ leaderboardLoading ? "刷新榜单中…" : "强制刷新榜单" }}
-            </HButton>
-            <HButton variant="ghost" size="sm" type="button" @click="addItem">添加条目</HButton>
-          </div>
-        </div>
-        <p class="text-xs text-slate-500">{{ leaderboardStatusText }}</p>
-        <div class="flex flex-wrap items-end gap-2 rounded-lg border border-cyan-100 bg-cyan-50/60 p-3">
-          <label class="text-sm">
-            <span class="mb-1 block text-slate-600">批量添加供应商全部模型</span>
-            <select
-              v-model.number="bulkProviderId"
-              class="min-w-48 rounded border border-slate-300 bg-white px-2 py-1.5 text-sm"
-            >
-              <option :value="0">选择供应商</option>
-              <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
-            </select>
-          </label>
-          <HButton
-            variant="outline"
-            size="sm"
-            type="button"
-            :disabled="!bulkProviderId || bulkAddingModels"
-            @click="bulkAddProviderModels"
-          >
-            {{ bulkAddingModels ? "拉取添加中…" : "拉取并全部添加" }}
-          </HButton>
-          <span class="pb-1 text-xs text-slate-500">按供应商 + 模型名去重，仅修改当前表单。</span>
-        </div>
-        <p v-if="bulkMessage" class="text-sm text-emerald-700">{{ bulkMessage }}</p>
-        <p class="text-xs text-slate-500">
-          可拖动左侧手柄调整故障转移优先级；上移/下移与「按模型能力排序」仅作用于当前表单，需点保存写入。本地分来自模型名启发式；外部分为 OpenRouter 公开指标，未匹配回退本地。
+    <AppDialog
+      :open="dialogOpen"
+      :title="isEditing ? '编辑分组' : '新建分组'"
+      size="wide"
+      :close-disabled="saving"
+      @close="closeDialog"
+    >
+      <section>
+        <h2 class="sr-only">{{ isEditing ? "编辑分组" : "新建分组" }}</h2>
+        <p v-if="isEditing" class="mb-2 text-sm text-cyan-800">
+          正在编辑：{{ editingGroupName || formValues.name || `分组 #${editingGroupId}` }}
         </p>
-        <div
-          v-for="(item, index) in form.items"
-          :key="item.uid"
-          class="flex flex-wrap items-center gap-2 rounded-lg border p-3 transition"
-          :class="
-            dragOverIndex === index
-              ? 'border-cyan-400 bg-cyan-50'
-              : dragFromIndex === index
-                ? 'border-slate-300 bg-slate-50 opacity-80'
-                : 'border-slate-200 bg-white'
-          "
-          @dragover="onDragOver(index, $event)"
-          @drop="onDrop(index, $event)"
-        >
-          <button
-            type="button"
-            class="cursor-grab select-none rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-500 active:cursor-grabbing"
-            title="拖动排序"
-            draggable="true"
-            @dragstart="onDragStart(index, $event)"
-            @dragend="onDragEnd"
-          >
-            ⋮⋮
-          </button>
-          <span class="w-8 text-xs text-slate-400">#{{ index + 1 }}</span>
-          <span
-            class="rounded-full px-2 py-0.5 text-[11px] tabular-nums"
-            :class="
-              queueDisplayScores[index]?.source === 'openrouter'
-                ? 'bg-emerald-50 text-emerald-800'
-                : queueDisplayScores[index]?.recognized
-                  ? 'bg-violet-50 text-violet-700'
-                  : 'bg-slate-100 text-slate-500'
-            "
-            :title="
-              queueDisplayScores[index]?.source === 'openrouter'
-                ? `OpenRouter 分数 ${queueDisplayScores[index]?.score}（本地启发式 ${capabilityOf(item.upstream_model).score}）`
-                : `本地启发式能力分 ${queueDisplayScores[index]?.score}`
-            "
-          >
-            {{ queueDisplayScores[index]?.source === "openrouter" ? "OpenRouter" : "本地" }}
-            ·
-            {{ queueDisplayScores[index]?.label }}
-            ·
-            {{ queueDisplayScores[index]?.score }}
-          </span>
-          <select v-model.number="item.provider_id" class="rounded border border-slate-300 px-2 py-1 text-sm">
-            <option :value="0">选择供应商</option>
-            <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
-          </select>
-          <div class="flex min-w-[200px] flex-1 flex-col gap-1">
-            <div class="flex flex-wrap items-center gap-2">
-              <input
-                v-model="item.upstream_model"
-                :list="`upstream-models-${index}`"
-                placeholder="上游模型名"
-                class="min-w-[160px] flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
-              />
-              <datalist :id="`upstream-models-${index}`">
-                <option v-for="mid in modelOptions[index] || []" :key="mid" :value="mid" />
-              </datalist>
+        <p class="mb-3 text-sm text-slate-500">分组名 = 客户端 model；队列顺序即故障转移优先级。</p>
+        <form class="space-y-3" @submit.prevent="form.handleSubmit()">
+          <div class="grid gap-3 md:grid-cols-2">
+            <form.Field name="name">
+              <template #default="{ field }">
+                <HInput
+                  :model-value="field.state.value"
+                  label="分组名（对外 model）"
+                  @update:model-value="field.handleChange"
+                />
+              </template>
+            </form.Field>
+          </div>
+
+          <div class="mt-4 space-y-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h3 class="text-sm font-medium">故障转移队列</h3>
+              <div class="flex flex-wrap items-center gap-3">
+                <label class="flex items-center gap-1.5 text-sm text-slate-600">
+                  <span class="text-slate-500">排序方式</span>
+                  <select
+                    v-model="sortMode"
+                    class="rounded border border-slate-300 bg-white px-2 py-1 text-sm"
+                  >
+                    <option value="local">本地启发式</option>
+                    <option value="external_intelligence">外部通用能力</option>
+                    <option value="external_coding">外部编码能力</option>
+                  </select>
+                </label>
+                <HButton
+                  variant="ghost"
+                  size="sm"
+                  type="button"
+                  :disabled="formValues.items.length < 2 || leaderboardLoading"
+                  @click="sortQueueByCapability"
+                >
+                  按模型能力排序
+                </HButton>
+                <HButton
+                  variant="ghost"
+                  size="sm"
+                  type="button"
+                  :disabled="leaderboardLoading"
+                  @click="loadLeaderboard(true)"
+                >
+                  {{ leaderboardLoading ? "刷新榜单中…" : "强制刷新榜单" }}
+                </HButton>
+                <HButton variant="ghost" size="sm" type="button" @click="addItem">添加条目</HButton>
+              </div>
+            </div>
+            <p class="text-xs text-slate-500">{{ leaderboardStatusText }}</p>
+            <div
+              class="flex flex-wrap items-end gap-2 rounded-lg border border-cyan-100 bg-cyan-50/60 p-3"
+            >
+              <label class="text-sm">
+                <span class="mb-1 block text-slate-600">批量添加供应商全部模型</span>
+                <select
+                  v-model.number="bulkProviderId"
+                  class="min-w-48 rounded border border-slate-300 bg-white px-2 py-1.5 text-sm"
+                >
+                  <option :value="0">选择供应商</option>
+                  <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
+                </select>
+              </label>
               <HButton
                 variant="outline"
                 size="sm"
                 type="button"
-                class="shrink-0"
-                :disabled="!item.provider_id || fetchingModels[index]"
-                @click="pullModels(index)"
+                :disabled="!bulkProviderId || bulkAddingModels"
+                @click="bulkAddProviderModels"
               >
-                {{ fetchingModels[index] ? "拉取中…" : "拉取模型" }}
+                {{ bulkAddingModels ? "拉取添加中…" : "拉取并全部添加" }}
               </HButton>
+              <span class="pb-1 text-xs text-slate-500">按供应商 + 模型名去重，仅修改当前表单。</span>
             </div>
+            <p v-if="bulkMessage" class="text-sm text-emerald-700">{{ bulkMessage }}</p>
+            <p class="text-xs text-slate-500">
+              可拖动左侧手柄调整故障转移优先级；上移/下移与「按模型能力排序」仅作用于当前表单，需点保存写入。本地分来自模型名启发式；外部分为
+              OpenRouter 公开指标，未匹配回退本地。
+            </p>
             <div
-              v-if="modelOptions[index]?.length"
-              class="flex max-h-28 flex-wrap gap-1 overflow-y-auto"
+              v-for="(item, index) in formValues.items"
+              :key="item.uid"
+              class="flex flex-wrap items-center gap-2 rounded-lg border p-3 transition"
+              :class="
+                dragOverIndex === index
+                  ? 'border-cyan-400 bg-cyan-50'
+                  : dragFromIndex === index
+                    ? 'border-slate-300 bg-slate-50 opacity-80'
+                    : 'border-slate-200 bg-white'
+              "
+              @dragover="onDragOver(index, $event)"
+              @drop="onDrop(index, $event)"
             >
               <button
-                v-for="mid in modelOptions[index]"
-                :key="mid"
                 type="button"
-                class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-700 hover:bg-cyan-100"
-                :title="mid"
-                @click="pickModel(index, mid)"
+                class="cursor-grab select-none rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-500 active:cursor-grabbing"
+                title="拖动排序"
+                draggable="true"
+                @dragstart="onDragStart(index, $event)"
+                @dragend="onDragEnd"
               >
-                {{ mid }}
+                ⋮⋮
               </button>
+              <span class="w-8 text-xs text-slate-400">#{{ index + 1 }}</span>
+              <span
+                class="rounded-full px-2 py-0.5 text-[11px] tabular-nums"
+                :class="
+                  queueDisplayScores[index]?.source === 'openrouter'
+                    ? 'bg-emerald-50 text-emerald-800'
+                    : queueDisplayScores[index]?.recognized
+                      ? 'bg-violet-50 text-violet-700'
+                      : 'bg-slate-100 text-slate-500'
+                "
+                :title="
+                  queueDisplayScores[index]?.source === 'openrouter'
+                    ? `OpenRouter 分数 ${queueDisplayScores[index]?.score}（本地启发式 ${capabilityOf(item.upstream_model).score}）`
+                    : `本地启发式能力分 ${queueDisplayScores[index]?.score}`
+                "
+              >
+                {{ queueDisplayScores[index]?.source === "openrouter" ? "OpenRouter" : "本地" }}
+                ·
+                {{ queueDisplayScores[index]?.label }}
+                ·
+                {{ queueDisplayScores[index]?.score }}
+              </span>
+              <select
+                :value="item.provider_id"
+                class="rounded border border-slate-300 px-2 py-1 text-sm"
+                @change="
+                  updateItemAt(index, {
+                    provider_id: Number(($event.target as HTMLSelectElement).value),
+                  })
+                "
+              >
+                <option :value="0">选择供应商</option>
+                <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
+              </select>
+              <div class="flex min-w-[200px] flex-1 flex-col gap-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <input
+                    :value="item.upstream_model"
+                    :list="`upstream-models-${index}`"
+                    placeholder="上游模型名"
+                    class="min-w-[160px] flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
+                    @input="
+                      updateItemAt(index, {
+                        upstream_model: ($event.target as HTMLInputElement).value,
+                      })
+                    "
+                  />
+                  <datalist :id="`upstream-models-${index}`">
+                    <option v-for="mid in modelOptions[index] || []" :key="mid" :value="mid" />
+                  </datalist>
+                  <HButton
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    class="shrink-0"
+                    :disabled="!item.provider_id || fetchingModels[index]"
+                    @click="pullModels(index)"
+                  >
+                    {{ fetchingModels[index] ? "拉取中…" : "拉取模型" }}
+                  </HButton>
+                </div>
+                <div
+                  v-if="modelOptions[index]?.length"
+                  class="flex max-h-28 flex-wrap gap-1 overflow-y-auto"
+                >
+                  <button
+                    v-for="mid in modelOptions[index]"
+                    :key="mid"
+                    type="button"
+                    class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-700 hover:bg-cyan-100"
+                    :title="mid"
+                    @click="pickModel(index, mid)"
+                  >
+                    {{ mid }}
+                  </button>
+                </div>
+              </div>
+              <HButton variant="ghost" size="sm" type="button" @click="moveItem(index, -1)">
+                上移
+              </HButton>
+              <HButton variant="ghost" size="sm" type="button" @click="moveItem(index, 1)">
+                下移
+              </HButton>
+              <HButton variant="danger-soft" size="sm" type="button" @click="removeItem(index)">
+                删除
+              </HButton>
             </div>
           </div>
-          <HButton variant="ghost" size="sm" type="button" @click="moveItem(index, -1)">上移</HButton>
-          <HButton variant="ghost" size="sm" type="button" @click="moveItem(index, 1)">下移</HButton>
-          <HButton variant="danger-soft" size="sm" type="button" @click="removeItem(index)">删除</HButton>
-        </div>
-      </div>
 
-      <div class="mt-4 flex gap-2">
-        <HButton variant="primary" type="button" :disabled="saving" @click="save">
-          {{ saving ? "保存中…" : isEditing ? "保存修改" : "创建分组" }}
-        </HButton>
-        <HButton variant="outline" type="button" :disabled="saving" @click="closeDialog">
-          取消
-        </HButton>
-      </div>
-      <p v-if="error" class="mt-3 text-sm text-rose-600">{{ error }}</p>
-    </section>
+          <div class="mt-4 flex gap-2">
+            <HButton variant="primary" type="submit" :disabled="saving">
+              {{ saving ? "保存中…" : isEditing ? "保存修改" : "创建分组" }}
+            </HButton>
+            <HButton variant="outline" type="button" :disabled="saving" @click="closeDialog">
+              取消
+            </HButton>
+          </div>
+        </form>
+        <p v-if="error" class="mt-3 text-sm text-rose-600">{{ error }}</p>
+      </section>
     </AppDialog>
 
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -706,7 +777,11 @@ onMounted(async () => {
       <p v-if="message" class="mb-3 whitespace-pre-line text-sm text-emerald-700">{{ message }}</p>
       <p v-if="error && !dialogOpen" class="mb-3 text-sm text-rose-600">{{ error }}</p>
       <HEmpty v-if="groups.length === 0" class="app-empty-compact" title="暂无分组" />
-      <div v-for="g in groups" :key="g.id" class="mb-4 rounded-lg border border-slate-100 p-4 last:mb-0">
+      <div
+        v-for="g in groups"
+        :key="g.id"
+        class="mb-4 rounded-lg border border-slate-100 p-4 last:mb-0"
+      >
         <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div>
             <span class="font-semibold">{{ g.name }}</span>
@@ -722,13 +797,21 @@ onMounted(async () => {
               {{ exportingPiId === g.id ? "配置中…" : "配置到 Pi" }}
             </HButton>
             <HButton variant="ghost" size="sm" type="button" @click="startEdit(g)">编辑</HButton>
-            <HButton variant="danger-soft" size="sm" type="button" @click="remove(g.id)">删除</HButton>
+            <HButton variant="danger-soft" size="sm" type="button" @click="remove(g.id)">
+              删除
+            </HButton>
           </div>
         </div>
         <ol class="space-y-2 text-sm">
-          <li v-for="(item, idx) in g.items" :key="item.id" class="flex flex-wrap items-center gap-2 text-slate-700">
+          <li
+            v-for="(item, idx) in g.items"
+            :key="item.id"
+            class="flex flex-wrap items-center gap-2 text-slate-700"
+          >
             <span class="text-slate-400">{{ idx + 1 }}.</span>
-            <span>{{ providerMap.get(item.provider_id)?.name || item.provider_name || item.provider_id }}</span>
+            <span>{{
+              providerMap.get(item.provider_id)?.name || item.provider_name || item.provider_id
+            }}</span>
             <span class="font-mono text-xs text-slate-500">{{ item.upstream_model }}</span>
           </li>
         </ol>

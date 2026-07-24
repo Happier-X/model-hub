@@ -50,30 +50,36 @@ function requestClose() {
 
 <template>
   <!-- Teleport 到 body，避免被 AppShell 内容区 overflow 裁切 -->
+  <!-- 宿主 class 挂在外层：HDialog 根 class 写死为 h-dialog，外传 class 不可靠 -->
   <Teleport to="body">
-    <HDialog
-      v-model="modelOpen"
-      :aria-label="title"
-      :close-on-overlay="allowClose"
-      :close-on-esc="allowClose"
-      :class="['app-dialog-host', size === 'wide' ? 'app-dialog-host--wide' : '']"
+    <div
+      v-if="open"
+      class="app-dialog-host"
+      :class="{ 'app-dialog-host--wide': size === 'wide' }"
     >
-      <template #title>
-        <div class="app-dialog-title-row">
-          <h2 class="app-dialog-title">{{ title }}</h2>
-          <HButton
-            variant="ghost"
-            size="sm"
-            type="button"
-            aria-label="关闭对话框"
-            :disabled="closeDisabled"
-            @click="requestClose"
-          >
-            ×
-          </HButton>
-        </div>
-      </template>
-      <slot />
-    </HDialog>
+      <HDialog
+        v-model="modelOpen"
+        :aria-label="title"
+        :close-on-overlay="allowClose"
+        :close-on-esc="allowClose"
+      >
+        <template #title>
+          <div class="app-dialog-title-row">
+            <h2 class="app-dialog-title">{{ title }}</h2>
+            <HButton
+              variant="ghost"
+              size="sm"
+              type="button"
+              aria-label="关闭对话框"
+              :disabled="closeDisabled"
+              @click="requestClose"
+            >
+              ×
+            </HButton>
+          </div>
+        </template>
+        <slot />
+      </HDialog>
+    </div>
   </Teleport>
 </template>

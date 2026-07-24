@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { onMounted, ref } from "vue";
+import { useForm } from "@tanstack/vue-form";
 import { HButton, HCheckbox, HEmpty, HInput } from "happier-ui";
 import {
   createProvider,
@@ -15,6 +16,20 @@ import {
   parseProviderPaste,
 } from "../utils/providerPaste";
 
+type ProviderFormValues = {
+  name: string;
+  base_url: string;
+  api_key: string;
+  enabled: boolean;
+};
+
+const defaultFormValues: ProviderFormValues = {
+  name: "",
+  base_url: "https://api.openai.com/v1",
+  api_key: "",
+  enabled: true,
+};
+
 const items = ref<Provider[]>([]);
 const error = ref("");
 const message = ref("");
@@ -22,11 +37,35 @@ const editingProviderId = ref<number | null>(null);
 const dialogOpen = ref(false);
 const saving = ref(false);
 const pasteText = ref("");
-const form = reactive({
-  name: "",
-  base_url: "https://api.openai.com/v1",
-  api_key: "",
-  enabled: true,
+
+const form = useForm({
+  defaultValues: { ...defaultFormValues },
+  onSubmit: async ({ value }) => {
+    if (saving.value) return;
+    message.value = "";
+    saving.value = true;
+    try {
+      const targetId = editingProviderId.value;
+      if (targetId !== null) {
+        await updateProvider({
+          id: targetId,
+          name: value.name,
+          base_url: value.base_url,
+          api_key: value.api_key,
+          enabled: value.enabled,
+        });
+      } else {
+        await createProvider({ ...value });
+      }
+      dialogOpen.value = false;
+      resetForm();
+      await refresh();
+    } catch (e) {
+      error.value = extractInvokeError(e);
+    } finally {
+      saving.value = false;
+    }
+  },
 });
 
 async function refresh() {
@@ -40,10 +79,7 @@ async function refresh() {
 
 function resetForm() {
   editingProviderId.value = null;
-  form.name = "";
-  form.base_url = "https://api.openai.com/v1";
-  form.api_key = "";
-  form.enabled = true;
+  form.reset({ ...defaultFormValues });
   pasteText.value = "";
   error.value = "";
   message.value = "";
@@ -58,11 +94,16 @@ function applyPaste() {
       "未能识别 Base URL 或 API Key。可粘贴 NewAPI 分享 JSON、环境变量、curl 或普通文本。";
     return;
   }
-  if (parsed.baseUrl) form.base_url = parsed.baseUrl;
-  if (parsed.apiKey) form.api_key = parsed.apiKey;
+  if (parsed.baseUrl) form.setFieldValue("base_url", parsed.baseUrl);
+  if (parsed.apiKey) form.setFieldValue("api_key", parsed.apiKey);
   // 编辑时保留原名称；新建且名称为空时用域名建议名。
-  if (editingProviderId.value === null && !form.name.trim() && parsed.suggestedName) {
-    form.name = parsed.suggestedName;
+  const currentName = String(form.state.values.name ?? "");
+  if (
+    editingProviderId.value === null &&
+    !currentName.trim() &&
+    parsed.suggestedName
+  ) {
+    form.setFieldValue("name", parsed.suggestedName);
   }
   const sourceLabel = describeProviderPasteSource(parsed.source);
   if (parsed.warnings.length > 0) {
@@ -82,43 +123,18 @@ function startEdit(p: Provider) {
   message.value = "";
   editingProviderId.value = p.id;
   dialogOpen.value = true;
-  form.name = p.name;
-  form.base_url = p.base_url;
-  form.api_key = p.api_key;
-  form.enabled = p.enabled;
+  form.reset({
+    name: p.name,
+    base_url: p.base_url,
+    api_key: p.api_key,
+    enabled: p.enabled,
+  });
 }
 
 function closeDialog() {
   if (saving.value) return;
   dialogOpen.value = false;
   resetForm();
-}
-
-async function save() {
-  if (saving.value) return;
-  message.value = "";
-  saving.value = true;
-  try {
-    const targetId = editingProviderId.value;
-    if (targetId !== null) {
-      await updateProvider({
-        id: targetId,
-        name: form.name,
-        base_url: form.base_url,
-        api_key: form.api_key,
-        enabled: form.enabled,
-      });
-    } else {
-      await createProvider({ ...form });
-    }
-    dialogOpen.value = false;
-    resetForm();
-    await refresh();
-  } catch (e) {
-    error.value = extractInvokeError(e);
-  } finally {
-    saving.value = false;
-  }
 }
 
 async function remove(id: number) {
@@ -173,27 +189,59 @@ onMounted(refresh);
             </HButton>
           </div>
         </div>
-        <div class="grid gap-3 md:grid-cols-2">
-          <HInput v-model="form.name" label="名称" />
-          <HInput v-model="form.base_url" label="Base URL" />
+        <form
+          class="grid gap-3 md:grid-cols-2"
+          @submit.prevent="form.handleSubmit()"
+        >
+          <form.Field name="name">
+            <template #default="{ field }">
+              <HInput
+                :model-value="field.state.value"
+                label="名称"
+                @update:model-value="field.handleChange"
+              />
+            </template>
+          </form.Field>
+          <form.Field name="base_url">
+            <template #default="{ field }">
+              <HInput
+                :model-value="field.state.value"
+                label="Base URL"
+                @update:model-value="field.handleChange"
+              />
+            </template>
+          </form.Field>
           <div class="md:col-span-2">
-            <HInput
-              v-model="form.api_key"
-              type="password"
-              autocomplete="off"
-              label="上游 API Key"
-            />
+            <form.Field name="api_key">
+              <template #default="{ field }">
+                <HInput
+                  :model-value="field.state.value"
+                  type="password"
+                  autocomplete="off"
+                  label="上游 API Key"
+                  @update:model-value="field.handleChange"
+                />
+              </template>
+            </form.Field>
           </div>
-          <HCheckbox v-model="form.enabled" label="启用" />
-        </div>
-        <div class="mt-4 flex flex-wrap gap-2">
-          <HButton variant="primary" type="button" :disabled="saving" @click="save">
-            {{ saving ? "保存中…" : "保存" }}
-          </HButton>
-          <HButton variant="outline" type="button" :disabled="saving" @click="closeDialog">
-            取消
-          </HButton>
-        </div>
+          <form.Field name="enabled">
+            <template #default="{ field }">
+              <HCheckbox
+                :model-value="field.state.value"
+                label="启用"
+                @update:model-value="field.handleChange"
+              />
+            </template>
+          </form.Field>
+          <div class="mt-1 flex flex-wrap gap-2 md:col-span-2">
+            <HButton variant="primary" type="submit" :disabled="saving">
+              {{ saving ? "保存中…" : "保存" }}
+            </HButton>
+            <HButton variant="outline" type="button" :disabled="saving" @click="closeDialog">
+              取消
+            </HButton>
+          </div>
+        </form>
         <p v-if="message" class="mt-3 text-sm text-emerald-700">{{ message }}</p>
         <p v-if="error" class="mt-3 text-sm text-rose-600">{{ error }}</p>
       </section>
