@@ -860,3 +860,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 24: 升级 happier-ui 0.0.2 + HCard/HSidebar 替换
+
+**Date**: 2026-07-25
+**Task**: 升级 happier-ui 0.0.2 + HCard/HSidebar 替换
+**Branch**: `master`
+
+### Summary
+
+happier-ui 0.0.1→0.0.2，修复破坏性 CSS 入口改名 style.css→styles.css；各页面外层 section 卡片改 HCard（标题进 header slot，接受无阴影），AppShell 侧栏改 HSidebar（model-value=route.path + router.push 路由联动）；HIconButton 实测放弃（无 hover 背景态、固定正方圆角、ghost 显蓝、danger 常驻红底，与 AppTitleBar/更新提示/overlay 图标钮交互模型冲突），三处保留原生 button+Tailwind；更新 component-guidelines.md 3.1 组件面边界。lint/typecheck/cargo build 全绿，trellis-check 修复两处 HCard header slot 一致性。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c66feb3` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
