@@ -10,7 +10,8 @@
 | 派生状态 | `computed` | 过滤结果、按钮可用状态、Base URL 文案 |
 | 可复用异步状态 | `src/composables/` | 代理状态轮询、通用加载流程 |
 | 跨层调用 | `src/api/tauri.ts` | CRUD、代理启停、路径与健康快照 |
-| 表单密钥 | 当前组件局部状态 | 上游供应商 Key |
+| 对话框业务表单 | `@tanstack/vue-form`（`useForm`） | 供应商/分组新建编辑字段 |
+| 表单密钥 | Form 字段 / 组件局部状态 | 上游供应商 Key（不落盘） |
 
 ## 规则
 

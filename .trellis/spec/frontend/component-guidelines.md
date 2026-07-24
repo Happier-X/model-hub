@@ -8,6 +8,7 @@
 2. Props 使用 `defineProps` 声明明确类型；事件使用 `defineEmits` 声明名称和参数。
 3. 页面负责加载与提交，通用组件负责展示和用户交互；复杂领域操作下沉到 `src/api/tauri.ts` 或组合式函数。
 3.1 **happier-ui（渐进）**：入口导入 `happier-ui/tokens.css` 与 `happier-ui/style.css`；peer 提供 `@lucide/vue`。按钮 → `HButton`；单行输入 → `HInput`；布尔 → `HSwitch`/`HCheckbox`；空列表 → `HEmpty`。表格、`select`、`textarea`、侧栏壳、卡片分区继续 Tailwind。不在本仓库扩展库组件面。
+3.2 **业务对话框表单（TanStack Form）**：供应商/分组等对话框表单用 `@tanstack/vue-form` 的 `useForm` + `form.Field` 管理字段与提交；控件仍用 `HInput`/`HCheckbox` 等，绑定 `field.state.value` + `field.handleChange`（或 `:model-value` + `@update:model-value`），**禁止**再用独立 `reactive` 作为提交字段真源。粘贴识别、拖拽排序、批量添加等通过 `form.setFieldValue` / 整体替换数组写回。保存走 `form.handleSubmit` / `onSubmit`；打开新建 `form.reset(defaults)`，打开编辑 `form.reset(entityFields)`；保存失败保留 values 与 `editing*Id`。日志筛选、概览端口/偏好等非对话框表单可用 `ref`，不强制迁 Form。不强制 Zod。
 4. 代理运行状态、Base URL 和最后错误必须使用清晰、可行动的中文文案。
 5. 列表必须覆盖加载、空数据和错误状态。
 6. 表单中的上游 Key 输入使用密码类型；不向用户展示完整上游 Key。
@@ -20,17 +21,17 @@
 
 ## 状态与生命周期
 
-- 局部交互使用 `ref` / `reactive` / `computed`。
+- 局部交互使用 `ref` / `reactive` / `computed`；**对话框业务表单字段**用 TanStack Form（见 3.2），不与页面级 `reactive` 双源。
 - 异步加载在 `onMounted` 中触发；定时器和事件订阅在 `onUnmounted` 中清理。
-- 提交期间禁用重复操作，并在失败时保留用户可修正的输入。
+- 提交期间禁用重复操作，并在失败时保留用户可修正的输入（Form values 与编辑 id）。
 - 编辑已有分组表单必须使用稳定的 `editingGroupId: number | null` 表达编辑目标；保存时先快照 id，id 非空只能调用更新，只有新建态才调用创建。添加条目、拉取模型、批量添加、排序等异步/局部操作不得清空编辑 id。
-- 新建/编辑供应商与分组复用 `AppDialog`，页面以稳定实体 id 区分创建和更新。打开新建 Dialog 前重置默认值；保存失败保留 Dialog 与输入；保存成功后关闭并刷新列表；保存期间禁止重复提交和关闭。
+- 新建/编辑供应商与分组复用 `AppDialog`，页面以稳定实体 id 区分创建和更新。打开新建 Dialog 前 `form.reset` 默认值；保存失败保留 Dialog 与 Form 输入；保存成功后关闭并刷新列表；保存期间禁止重复提交和关闭（`closeDisabled`）。
 
 ## 对话框合同
 
 - 通用外壳使用 `src/components/AppDialog.vue`（**内部**基于 `HDialog` 的薄封装），页面保留表单和领域保存逻辑，不引入页面专用遮罩实现。
 - 对外 props 保持：`open` / `title` / `size`（`default`|`wide`）/ `closeDisabled`、`@close`。
-- 适配：`open` ↔ `modelValue`；`closeDisabled` 时 `closeOnOverlay`/`closeOnEsc` 为 false 并忽略关闭更新；`wide` 由宿主 CSS 约束宽度与内容滚动。
+- 适配：`open` ↔ `modelValue`；`closeDisabled` 时 `closeOnOverlay`/`closeOnEsc` 为 false 并忽略关闭更新；`wide` 由 **Teleport 外层宿主** class（`app-dialog-host--wide`）约束宽度与内容滚动——勿把 class 直接挂在 `HDialog` 上（库根节点 class 写死为 `h-dialog`）。
 - 必须 Teleport 到 `body`（避免主区 `overflow` 裁切）；提供关闭按钮；关闭后恢复焦点。焦点陷阱以 `HDialog` 行为为准。
 - 对话框打开不得隐式触发上游请求；分组拉模型仍只允许用户点击。
 

@@ -14,6 +14,7 @@
 | 构建 | Vite |
 | UI | Vue 3 SFC + TypeScript |
 | 组件库 | **happier-ui**（npm；可映射控件优先 `H*`） |
+| 表单状态 | **@tanstack/vue-form**（对话框业务表单）+ H* 控件 |
 | 样式 | happier-ui tokens/style + **Tailwind**（布局/表格/select/textarea/侧栏） |
 | 路由 | vue-router |
 | 与壳通信 | `@tauri-apps/api` **invoke only**（代理启停 + 业务 CRUD） |
