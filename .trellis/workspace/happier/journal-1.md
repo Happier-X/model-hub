@@ -655,3 +655,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 19: 发布 v0.0.3
+
+**Date**: 2026-07-24
+**Task**: 发布 v0.0.3
+**Branch**: `master`
+
+### Summary
+
+将版本统一升至 0.0.3，新增 changelog/v0.0.3.md，同步 README 版本文案与故障转移描述；推送 master 与 v0.0.3，release-windows 成功并发布 NSIS/签名/latest.json/SHA256SUMS。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `73b17ae` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
