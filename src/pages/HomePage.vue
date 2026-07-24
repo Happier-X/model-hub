@@ -154,7 +154,7 @@ async function toggleStartupCheck(enabled: boolean) {
     const prefs = await setCheckUpdateOnStartup(enabled);
     checkUpdateOnStartup.value = prefs.check_update_on_startup;
     message.value = prefs.check_update_on_startup
-      ? "已开启：下次进入概览将自动检查更新"
+      ? "已开启：下次进入首页将自动检查更新"
       : "已关闭启动时自动检查更新";
     error.value = "";
   } catch (e) {
@@ -449,7 +449,7 @@ onMounted(async () => {
       <div class="mb-3">
         <HCheckbox
           :model-value="checkUpdateOnStartup"
-          label="进入概览时自动检查更新（仍需确认后才安装）"
+          label="进入首页时自动检查更新（仍需确认后才安装）"
           :disabled="prefsLoading"
           @update:model-value="toggleStartupCheck"
         />

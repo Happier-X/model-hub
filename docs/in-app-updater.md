@@ -6,7 +6,7 @@
 
 ### 管理台检查更新
 
-概览页提供 **「检查更新」** 入口，以及可选的 **「进入概览时自动检查更新」**（写入 `config/shell.json` 的 `check_update_on_startup`，**默认 false**）。
+首页提供 **「检查更新」** 入口，以及可选的 **「进入首页时自动检查更新」**（写入 `config/shell.json` 的 `check_update_on_startup`，**默认 false**）。
 
 流程如下：
 

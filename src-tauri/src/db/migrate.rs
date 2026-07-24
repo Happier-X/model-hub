@@ -526,7 +526,7 @@ mod tests {
         assert_eq!(row.2, 0); // 新列默认 0
         assert_eq!(row.3, "legacy row");
 
-        // 迁移后可做与概览统计相同的聚合
+        // 迁移后可做与首页统计相同的聚合
         let total: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM request_logs WHERE status_code >= 0",

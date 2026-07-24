@@ -11,7 +11,7 @@ src/
 │   └── AppShell.vue
 ├── composables/          # 仅在确有复用时创建
 ├── pages/
-│   ├── OverviewPage.vue  # 代理状态、Base URL、端口
+│   ├── HomePage.vue      # 代理状态、Base URL、端口
 │   ├── ProvidersPage.vue
 │   ├── GroupsPage.vue
 │   └── LogsPage.vue

@@ -6,7 +6,7 @@ const route = useRoute();
 const title = computed(() => (route.meta.title as string) || "Model Hub");
 
 const nav = [
-  { to: "/", label: "概览" },
+  { to: "/", label: "首页" },
   { to: "/providers", label: "供应商" },
   { to: "/groups", label: "分组" },
   { to: "/logs", label: "日志" },
