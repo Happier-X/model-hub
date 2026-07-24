@@ -790,3 +790,40 @@
 ### Next Steps
 
 - None - task complete
+
+
+## 2026-07-24 - 发布 v0.0.4
+
+**Task**: 发布新版本
+**Branch**: 
+
+### Summary
+
+完成 Windows 稳定版 v0.0.4 发布，包含最近成功模型展示、首页与设置调整、桌面悬浮状态条。版本材料已提交、推送并通过 GitHub Actions 发布。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+|  | chore(release): v0.0.4 |
+|  | chore(task): 落入 release-new-version 任务文档 |
+
+### Testing
+
+- pnpm lint
+- pnpm typecheck
+- pnpm test:unit（23 项）
+- pnpm build
+- cargo fmt --check
+- cargo check
+- cargo test（89 项）
+- GitHub Actions release-windows（run 30089675626）成功
+- GitHub Release 与 latest.json 资产核验通过
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
