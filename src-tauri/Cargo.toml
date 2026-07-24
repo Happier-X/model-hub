@@ -1,6 +1,6 @@
 [package]
 name = "model-hub"
-version = "0.0.2"
+version = "0.0.3"
 description = "Model Hub 桌面管理应用（Vue3 + 内嵌代理）"
 authors = ["Model Hub Contributors"]
 edition = "2021"
