@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 22
+- **Total Sessions**: 23
 - **Last Active**: 2026-07-24
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~792 | Active |
+| `journal-1.md` | ~862 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 23 | 2026-07-24 | 主窗口无边框 + 自定义标题栏 | `c7b76c8` | `master` |
 | 22 | 2026-07-24 | 桌面悬浮状态条显示最近成功模型 | `97051ce`, `1d4e568`, `21b8cc3` | `master` |
 | 21 | 2026-07-24 | 概览改名为首页 | `fea1216` | `master` |
 | 20 | 2026-07-24 | 概览展示最近成功模型 | `bdebbb7`, `f870b4f` | `master` |

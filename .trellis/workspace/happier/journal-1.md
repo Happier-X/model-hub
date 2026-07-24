@@ -827,3 +827,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 23: 主窗口无边框 + 自定义标题栏
+
+**Date**: 2026-07-24
+**Task**: 主窗口无边框 + 自定义标题栏
+**Branch**: `master`
+
+### Summary
+
+主窗口改 decorations:false，新增 AppTitleBar.vue 全宽标题栏（最小化/最大化还原/关闭三按钮），AppShell 布局改为上标题栏+下侧栏主区。窗口控制走 @tauri-apps/api/window，关闭按钮命中现有 CloseRequested 拦截保持隐藏到托盘语义，Rust 侧零改动。补 6 项 core:window capability 权限，沉淀前端 spec desktop-titlebar.md。lint/typecheck/cargo build 全绿。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c7b76c8` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
