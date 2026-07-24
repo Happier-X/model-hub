@@ -12,6 +12,7 @@ import {
   proxyStatus,
   relaunchApp,
   setCheckUpdateOnStartup,
+  setOverlayEnabled,
   type AppPaths,
   type DownloadEvent,
   type ProxyStatus,
@@ -39,6 +40,7 @@ const pendingUpdate = shallowRef<Update | null>(null);
 const downloadLoaded = ref(0);
 const downloadTotal = ref<number | null>(null);
 const checkUpdateOnStartup = ref(false);
+const overlayEnabled = ref(false);
 const prefsLoading = ref(false);
 
 const updateBusy = computed(
@@ -142,6 +144,23 @@ async function toggleStartupCheck(enabled: boolean) {
   }
 }
 
+async function toggleOverlay(enabled: boolean) {
+  const previous = overlayEnabled.value;
+  overlayEnabled.value = enabled;
+  prefsLoading.value = true;
+  try {
+    const prefs = await setOverlayEnabled(enabled);
+    overlayEnabled.value = prefs.overlay_enabled;
+    message.value = prefs.overlay_enabled ? "桌面悬浮条已显示" : "桌面悬浮条已隐藏";
+    error.value = "";
+  } catch (e) {
+    error.value = extractInvokeError(e);
+    overlayEnabled.value = previous;
+  } finally {
+    prefsLoading.value = false;
+  }
+}
+
 async function confirmInstall() {
   const update = pendingUpdate.value;
   if (!update || updateBusy.value) return;
@@ -184,6 +203,7 @@ async function refresh() {
     try {
       const prefs = await getShellPrefs();
       checkUpdateOnStartup.value = prefs.check_update_on_startup;
+      overlayEnabled.value = prefs.overlay_enabled;
     } catch {
       /* 偏好读取失败不阻塞配置页 */
     }
@@ -269,6 +289,21 @@ onUnmounted(() => {
       <p class="mt-2 text-xs text-slate-500">
         若首选端口被占用，会自动向后寻找可用端口并写入配置，不会结束占用进程。改口后若用
         Pi，请到「分组」页重新「配置到 Pi」。
+      </p>
+    </section>
+
+    <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 class="mb-3 text-base font-semibold">桌面悬浮条</h2>
+      <div class="mb-3">
+        <HCheckbox
+          :model-value="overlayEnabled"
+          label="显示最近成功模型悬浮条"
+          :disabled="prefsLoading"
+          @update:model-value="toggleOverlay"
+        />
+      </div>
+      <p class="text-sm text-slate-500">
+        开启后会在主显示器任务栏上方显示无边框状态条；关闭主窗口时代理仍继续运行，托盘「退出」才会停止代理。
       </p>
     </section>
 

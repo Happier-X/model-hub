@@ -47,6 +47,15 @@ pub fn proxy_set_port(
 pub struct ShellPrefs {
     pub gateway_port: u16,
     pub check_update_on_startup: bool,
+    pub overlay_enabled: bool,
+}
+
+fn shell_prefs(config: &crate::settings::ShellConfig) -> ShellPrefs {
+    ShellPrefs {
+        gateway_port: config.gateway_port,
+        check_update_on_startup: config.check_update_on_startup,
+        overlay_enabled: config.overlay_enabled,
+    }
 }
 
 #[tauri::command]
@@ -54,10 +63,7 @@ pub fn get_shell_prefs(app: AppHandle) -> Result<ShellPrefs, InvokeError> {
     let paths = paths::resolve_paths(&app).map_err(InvokeError::from)?;
     let cfg = crate::settings::load_shell_config(std::path::Path::new(&paths.config_dir))
         .map_err(InvokeError::from)?;
-    Ok(ShellPrefs {
-        gateway_port: cfg.gateway_port,
-        check_update_on_startup: cfg.check_update_on_startup,
-    })
+    Ok(shell_prefs(&cfg))
 }
 
 #[tauri::command]
@@ -70,10 +76,38 @@ pub fn set_check_update_on_startup(
     let mut cfg = crate::settings::load_shell_config(config_dir).map_err(InvokeError::from)?;
     cfg.check_update_on_startup = enabled;
     crate::settings::save_shell_config(config_dir, &cfg).map_err(InvokeError::from)?;
-    Ok(ShellPrefs {
-        gateway_port: cfg.gateway_port,
-        check_update_on_startup: cfg.check_update_on_startup,
-    })
+    Ok(shell_prefs(&cfg))
+}
+
+#[tauri::command]
+pub fn set_overlay_enabled(app: AppHandle, enabled: bool) -> Result<ShellPrefs, InvokeError> {
+    let paths = paths::resolve_paths(&app).map_err(InvokeError::from)?;
+    let config_dir = std::path::Path::new(&paths.config_dir);
+    let mut cfg = crate::settings::load_shell_config(config_dir).map_err(InvokeError::from)?;
+    let previous = cfg.overlay_enabled;
+
+    cfg.overlay_enabled = enabled;
+    crate::settings::save_shell_config(config_dir, &cfg).map_err(InvokeError::from)?;
+
+    if let Err(error) = crate::overlay::set_overlay_visible(&app, enabled) {
+        cfg.overlay_enabled = previous;
+        if let Err(rollback_error) = crate::settings::save_shell_config(config_dir, &cfg) {
+            tracing::warn!(error = %rollback_error, "回滚悬浮状态条开关失败");
+        }
+        return Err(InvokeError::from(error));
+    }
+
+    Ok(shell_prefs(&cfg))
+}
+
+#[tauri::command]
+pub fn save_overlay_position(app: AppHandle, x: i32, y: i32) -> Result<(), InvokeError> {
+    crate::overlay::save_overlay_position(&app, x, y).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn show_main_window(app: AppHandle) {
+    crate::tray::show_main_window(&app);
 }
 
 #[tauri::command]

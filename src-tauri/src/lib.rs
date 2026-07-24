@@ -2,6 +2,7 @@ mod commands;
 pub mod db;
 pub mod domain;
 mod error;
+mod overlay;
 mod paths;
 mod pi_export;
 pub mod proxy;
@@ -52,22 +53,43 @@ pub fn run() {
             app.manage(proxy);
             app.manage(AppExitState::new());
             tray::setup_tray(app)?;
+
+            // 若启动时悬浮条开关为开，则创建并显示悬浮窗；失败不阻塞主流程。
+            if let Err(err) = overlay::restore_overlay_on_start(app.handle()) {
+                tracing::warn!(error = %err, "恢复悬浮状态条失败");
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
-            if window.label() != "main" {
-                return;
-            }
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                let exiting = window
-                    .app_handle()
-                    .try_state::<AppExitState>()
-                    .map(|s| s.is_exiting())
-                    .unwrap_or(false);
-                if !exiting {
-                    api.prevent_close();
-                    let _ = window.hide();
+            match window.label() {
+                "main" => {
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        let exiting = window
+                            .app_handle()
+                            .try_state::<AppExitState>()
+                            .map(|s| s.is_exiting())
+                            .unwrap_or(false);
+                        if !exiting {
+                            api.prevent_close();
+                            let _ = window.hide();
+                        }
+                    }
                 }
+                label if label == overlay::OVERLAY_LABEL => {
+                    // overlay 关闭仅隐藏；真正退出仍由托盘退出触发。
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        let exiting = window
+                            .app_handle()
+                            .try_state::<AppExitState>()
+                            .map(|s| s.is_exiting())
+                            .unwrap_or(false);
+                        if !exiting {
+                            api.prevent_close();
+                            let _ = window.hide();
+                        }
+                    }
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -78,6 +100,9 @@ pub fn run() {
             commands::proxy_set_port,
             commands::get_shell_prefs,
             commands::set_check_update_on_startup,
+            commands::set_overlay_enabled,
+            commands::save_overlay_position,
+            commands::show_main_window,
             commands::list_providers,
             commands::create_provider,
             commands::update_provider,

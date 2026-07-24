@@ -125,6 +125,7 @@ export function extractInvokeError(error: unknown): string {
 export interface ShellPrefs {
   gateway_port: number;
   check_update_on_startup: boolean;
+  overlay_enabled: boolean;
 }
 
 export const getPaths = () => invoke<AppPaths>("get_paths");
@@ -135,6 +136,11 @@ export const proxySetPort = (port: number) => invoke<ProxyStatus>("proxy_set_por
 export const getShellPrefs = () => invoke<ShellPrefs>("get_shell_prefs");
 export const setCheckUpdateOnStartup = (enabled: boolean) =>
   invoke<ShellPrefs>("set_check_update_on_startup", { enabled });
+export const setOverlayEnabled = (enabled: boolean) =>
+  invoke<ShellPrefs>("set_overlay_enabled", { enabled });
+export const saveOverlayPosition = (x: number, y: number) =>
+  invoke<void>("save_overlay_position", { x, y });
+export const showMainWindow = () => invoke<void>("show_main_window");
 
 export const listProviders = () => invoke<Provider[]>("list_providers");
 export const createProvider = (payload: {

@@ -18,6 +18,14 @@ pub struct ShellConfig {
     /// 启动后是否自动检查应用更新（默认关闭；发现更新仍须用户确认安装）。
     #[serde(default)]
     pub check_update_on_startup: bool,
+    /// 是否显示桌面悬浮状态条（默认关闭）。
+    #[serde(default)]
+    pub overlay_enabled: bool,
+    /// 悬浮状态条持久化位置（物理像素，None 表示用默认右下角）。
+    #[serde(default)]
+    pub overlay_x: Option<i32>,
+    #[serde(default)]
+    pub overlay_y: Option<i32>,
 }
 
 impl Default for ShellConfig {
@@ -25,6 +33,9 @@ impl Default for ShellConfig {
         Self {
             gateway_port: DEFAULT_PORT,
             check_update_on_startup: false,
+            overlay_enabled: false,
+            overlay_x: None,
+            overlay_y: None,
         }
     }
 }
@@ -146,12 +157,18 @@ mod tests {
             &ShellConfig {
                 gateway_port: 19090,
                 check_update_on_startup: true,
+                overlay_enabled: true,
+                overlay_x: Some(1200),
+                overlay_y: Some(720),
             },
         )
         .unwrap();
         let cfg = load_shell_config(dir.path()).unwrap();
         assert_eq!(cfg.gateway_port, 19090);
         assert!(cfg.check_update_on_startup);
+        assert!(cfg.overlay_enabled);
+        assert_eq!(cfg.overlay_x, Some(1200));
+        assert_eq!(cfg.overlay_y, Some(720));
     }
 
     #[test]
@@ -162,6 +179,40 @@ mod tests {
         let cfg = load_shell_config(dir.path()).unwrap();
         assert_eq!(cfg.gateway_port, 9090);
         assert!(!cfg.check_update_on_startup);
+        assert!(!cfg.overlay_enabled);
+        assert!(cfg.overlay_x.is_none());
+        assert!(cfg.overlay_y.is_none());
+    }
+
+    #[test]
+    fn missing_overlay_fields_default_off() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("shell.json");
+        fs::write(&path, r#"{ "gateway_port": 9090 }"#).unwrap();
+        let cfg = load_shell_config(dir.path()).unwrap();
+        assert!(!cfg.overlay_enabled);
+        assert_eq!(cfg.overlay_x, None);
+        assert_eq!(cfg.overlay_y, None);
+    }
+
+    #[test]
+    fn overlay_fields_roundtrip() {
+        let dir = tempdir().unwrap();
+        save_shell_config(
+            dir.path(),
+            &ShellConfig {
+                gateway_port: 8888,
+                check_update_on_startup: false,
+                overlay_enabled: true,
+                overlay_x: Some(1234),
+                overlay_y: Some(567),
+            },
+        )
+        .unwrap();
+        let cfg = load_shell_config(dir.path()).unwrap();
+        assert!(cfg.overlay_enabled);
+        assert_eq!(cfg.overlay_x, Some(1234));
+        assert_eq!(cfg.overlay_y, Some(567));
     }
 
     #[test]
@@ -172,6 +223,9 @@ mod tests {
             &ShellConfig {
                 gateway_port: 8888,
                 check_update_on_startup: true,
+                overlay_enabled: true,
+                overlay_x: Some(100),
+                overlay_y: Some(200),
             },
         )
         .unwrap();
@@ -181,5 +235,8 @@ mod tests {
         let cfg = load_shell_config(dir.path()).unwrap();
         assert_eq!(cfg.gateway_port, 18080);
         assert!(cfg.check_update_on_startup);
+        assert!(cfg.overlay_enabled);
+        assert_eq!(cfg.overlay_x, Some(100));
+        assert_eq!(cfg.overlay_y, Some(200));
     }
 }

@@ -403,7 +403,7 @@ mod tests {
             &config_dir,
             &settings::ShellConfig {
                 gateway_port: preferred,
-                check_update_on_startup: false,
+                ..Default::default()
             },
         )
         .unwrap();

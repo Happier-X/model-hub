@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "overlay",
+  "description": "桌面悬浮状态条能力：允许读取窗口位置和拖动窗口，不授予更新或重启能力。",
+  "windows": ["overlay"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-outer-position",
+    "core:window:allow-start-dragging"
+  ]
+}

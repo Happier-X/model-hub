@@ -767,7 +767,10 @@ mod tests {
             })
             .unwrap();
 
-        let last = stores.last_success_request().unwrap().expect("应有成功记录");
+        let last = stores
+            .last_success_request()
+            .unwrap()
+            .expect("应有成功记录");
         assert_eq!(last.group_name, "g-new");
         assert_eq!(last.provider_name, "p-new");
         assert_eq!(last.upstream_model, "m-new");
@@ -813,7 +816,10 @@ mod tests {
                 Ok(())
             })
             .unwrap();
-        let last = stores.last_success_request().unwrap().expect("应有成功记录");
+        let last = stores
+            .last_success_request()
+            .unwrap()
+            .expect("应有成功记录");
         assert_eq!(last.group_name, "second");
         assert_eq!(last.provider_name, "p2");
         assert_eq!(last.upstream_model, "m2");
