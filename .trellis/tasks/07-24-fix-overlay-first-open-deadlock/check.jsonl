@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/desktop-overlay.md", "reason": "核对 set_overlay_enabled async 化后仍满足生命周期契约与新增建窗死锁约束"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "验证 fmt/test/check 与命令签名规范"}

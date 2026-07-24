@@ -80,7 +80,7 @@ pub fn set_check_update_on_startup(
 }
 
 #[tauri::command]
-pub fn set_overlay_enabled(app: AppHandle, enabled: bool) -> Result<ShellPrefs, InvokeError> {
+pub async fn set_overlay_enabled(app: AppHandle, enabled: bool) -> Result<ShellPrefs, InvokeError> {
     let paths = paths::resolve_paths(&app).map_err(InvokeError::from)?;
     let config_dir = std::path::Path::new(&paths.config_dir);
     let mut cfg = crate::settings::load_shell_config(config_dir).map_err(InvokeError::from)?;
