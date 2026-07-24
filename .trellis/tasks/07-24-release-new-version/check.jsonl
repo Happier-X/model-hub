@@ -1,0 +1,5 @@
+{"file":"docs/in-app-updater.md","reason":"核对 updater 签名、清单和发布资产要求"}
+{"file":".github/workflows/release-windows.yml","reason":"核对 workflow 成功条件与 Release 资产列表"}
+{"file":"README.md","reason":"核对当前版本、changelog 链接和发布命令示例一致性"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Rust 后端发布前质量门禁"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"前端 lint 与 typecheck 质量门禁"}

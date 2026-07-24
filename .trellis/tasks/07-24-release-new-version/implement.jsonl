@@ -1,0 +1,4 @@
+{"file":"docs/in-app-updater.md","reason":"发布步骤、签名、latest.json 和版本同步约定"}
+{"file":"changelog/v0.0.3.md","reason":"上一稳定版 changelog 结构与安装更新文案参考"}
+{"file":".github/workflows/release-windows.yml","reason":"tag 触发条件、CI 构建和 Release 资产契约"}
+{"file":".trellis/tasks/archive/2026-07/07-24-release-v0-0-3/design.md","reason":"上一版本已验证的版本同步与发布顺序"}
