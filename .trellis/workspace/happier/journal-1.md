@@ -755,3 +755,38 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 22: 桌面悬浮状态条显示最近成功模型
+
+**Date**: 2026-07-24
+**Task**: 桌面悬浮状态条显示最近成功模型
+**Branch**: `master`
+
+### Summary
+
+实现 Windows 桌面悬浮状态条：默认关闭、设置页开关、最近成功模型与代理状态展示、主屏工作区和 DPI 定位、拖动位置持久化、最小权限 capability；完成跨层契约规格与自动化验证。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `97051ce` | (see git log) |
+| `1d4e568` | (see git log) |
+| `21b8cc3` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
