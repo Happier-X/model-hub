@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查 Rust 测试与配置兼容"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "检查壳模块边界与生命周期"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "检查展示字段不含敏感信息"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "检查前端质量门禁"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "检查设置开关与悬浮条 UI 约定"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "检查 invoke 类型与偏好字段"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "检查开关、窗口显隐与状态展示一致性"}

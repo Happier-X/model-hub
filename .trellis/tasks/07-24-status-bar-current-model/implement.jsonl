@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "壳模块与托盘/代理边界"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "最近成功请求与日志字段脱敏"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "IPC 错误与配置读写失败处理"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Rust 测试与质量门禁"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "页面与 API 分层"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "设置页控件与悬浮条 UI"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "本地状态与轮询边界"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "ShellPrefs 与 invoke 类型"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端 lint/typecheck 门禁"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "壳配置、窗口与前端状态跨层一致性"}
