@@ -33,6 +33,7 @@
 | [Quality Guidelines](./quality-guidelines.md) | 质量门禁 | Current |
 | [Model Leaderboard](./model-leaderboard.md) | OpenRouter 榜单 IPC / 缓存 / 白名单 | Current |
 | [Upstream Access](./upstream-access.md) | 禁止用户上游测活；允许真实 Chat 与点击拉模型 | Current |
+| [Desktop Overlay](./desktop-overlay.md) | 桌面悬浮状态条窗口、IPC 命令、配置字段与位置钳制 | Current |
 
 ---
 

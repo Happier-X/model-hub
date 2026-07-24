@@ -36,6 +36,7 @@
 | [Quality Guidelines](./quality-guidelines.md) | 质量底线 |
 | [分组队列模型排序](./model-queue-sort.md) | 本地/外部混合排序与匹配 | |
 | [上游访问（backend）](../backend/upstream-access.md) | 禁止测活；拉取模型仅点击 | |
+| [桌面悬浮条（backend）](../backend/desktop-overlay.md) | overlay 窗口入口分流、轮询与位置持久化契约 | |
 
 ---
 
