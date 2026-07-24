@@ -202,6 +202,13 @@ pub fn get_request_stats(
     stores(&proxy)?.request_stats_today().map_err(Into::into)
 }
 
+#[tauri::command]
+pub fn get_last_success_request(
+    proxy: State<'_, ProxyHandle>,
+) -> Result<Option<crate::domain::log::LastSuccessRequest>, InvokeError> {
+    stores(&proxy)?.last_success_request().map_err(Into::into)
+}
+
 #[derive(Debug, Serialize)]
 pub struct ExportToPiResult {
     pub path: String,

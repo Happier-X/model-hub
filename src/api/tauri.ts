@@ -99,6 +99,15 @@ export interface RequestStats {
   day_end_unix: number;
 }
 
+/** 全局最近一条成功请求（2xx 且 error 为空） */
+export interface LastSuccessRequest {
+  time: number;
+  group_name: string;
+  provider_name: string;
+  upstream_model: string;
+  status_code: number;
+}
+
 export interface InvokeErrorShape {
   code?: string;
   message?: string;
@@ -175,6 +184,8 @@ export const listLogs = (query: LogQuery = {}) =>
 export const clearLogs = () => invoke<void>("clear_logs");
 export const purgeExpiredLogs = () => invoke<LogPurgeResult>("purge_expired_logs");
 export const getRequestStats = () => invoke<RequestStats>("get_request_stats");
+export const getLastSuccessRequest = () =>
+  invoke<LastSuccessRequest | null>("get_last_success_request");
 
 export interface ExportToPiResult {
   path: string;

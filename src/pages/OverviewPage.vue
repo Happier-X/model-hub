@@ -7,6 +7,7 @@ import {
   extractInvokeError,
   getAppVersion,
   getPaths,
+  getLastSuccessRequest,
   getRequestStats,
   getShellPrefs,
   proxySetPort,
@@ -17,6 +18,7 @@ import {
   setCheckUpdateOnStartup,
   type AppPaths,
   type DownloadEvent,
+  type LastSuccessRequest,
   type ProxyStatus,
   type RequestStats,
   type Update,
@@ -46,6 +48,8 @@ const checkUpdateOnStartup = ref(false);
 const prefsLoading = ref(false);
 const stats = ref<RequestStats | null>(null);
 const statsError = ref("");
+const lastSuccess = ref<LastSuccessRequest | null>(null);
+const lastSuccessError = ref("");
 
 const updateBusy = computed(
   () =>
@@ -192,13 +196,33 @@ async function cancelPendingUpdate() {
   updateError.value = "";
 }
 
-async function refreshStats() {
+function formatSuccessTime(unix: number): string {
+  if (!unix) return "-";
   try {
-    stats.value = await getRequestStats();
-    statsError.value = "";
-  } catch (e) {
-    statsError.value = extractInvokeError(e);
+    return new Date(unix * 1000).toLocaleString("zh-CN", { hour12: false });
+  } catch {
+    return String(unix);
   }
+}
+
+async function refreshStats() {
+  const statsPromise = getRequestStats()
+    .then((value) => {
+      stats.value = value;
+      statsError.value = "";
+    })
+    .catch((e) => {
+      statsError.value = extractInvokeError(e);
+    });
+  const lastSuccessPromise = getLastSuccessRequest()
+    .then((value) => {
+      lastSuccess.value = value;
+      lastSuccessError.value = "";
+    })
+    .catch((e) => {
+      lastSuccessError.value = extractInvokeError(e);
+    });
+  await Promise.all([statsPromise, lastSuccessPromise]);
 }
 
 async function refresh() {
@@ -320,6 +344,31 @@ onMounted(async () => {
         </div>
       </div>
       <p v-if="statsError" class="mt-3 text-sm text-rose-600">{{ statsError }}</p>
+
+      <div class="mt-4 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-3">
+        <div class="text-sm font-medium text-slate-800">最近成功请求</div>
+        <p class="mt-0.5 text-xs text-slate-500">全局最近一次 2xx 且无 error 的请求（日志态，非配置首选）</p>
+        <div v-if="lastSuccess" class="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+          <div>
+            <div class="text-xs text-slate-500">分组</div>
+            <div class="mt-0.5 font-medium break-all">{{ lastSuccess.group_name || "-" }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500">供应商</div>
+            <div class="mt-0.5 font-medium break-all">{{ lastSuccess.provider_name || "-" }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500">上游模型</div>
+            <div class="mt-0.5 font-mono text-xs break-all">{{ lastSuccess.upstream_model || "-" }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500">请求时间</div>
+            <div class="mt-0.5 tabular-nums">{{ formatSuccessTime(lastSuccess.time) }}</div>
+          </div>
+        </div>
+        <p v-else-if="!lastSuccessError" class="mt-3 text-sm text-slate-500">暂无成功请求</p>
+        <p v-if="lastSuccessError" class="mt-3 text-sm text-rose-600">{{ lastSuccessError }}</p>
+      </div>
     </section>
 
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">

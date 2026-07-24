@@ -418,6 +418,42 @@ impl Stores {
             .map_err(|e| AppError::Database(e.to_string()))
         })
     }
+
+    /// 全局最近一条成功请求（2xx 且 error 为空）；无则 `None`。
+    pub fn last_success_request(&self) -> Result<Option<LastSuccessRequest>, AppError> {
+        self.with_conn(|conn| {
+            use rusqlite::OptionalExtension;
+            conn.query_row(
+                "SELECT time, group_name, provider_name, upstream_model, status_code
+                 FROM request_logs
+                 WHERE status_code BETWEEN 200 AND 299
+                   AND (error IS NULL OR length(error) = 0)
+                 ORDER BY time DESC, id DESC
+                 LIMIT 1",
+                [],
+                |row| {
+                    Ok(LastSuccessRequest {
+                        time: row.get(0)?,
+                        group_name: row.get(1)?,
+                        provider_name: row.get(2)?,
+                        upstream_model: row.get(3)?,
+                        status_code: row.get(4)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|e| AppError::Database(e.to_string()))
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LastSuccessRequest {
+    pub time: i64,
+    pub group_name: String,
+    pub provider_name: String,
+    pub upstream_model: String,
+    pub status_code: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -695,5 +731,91 @@ mod tests {
         assert_eq!(empty.success, 0);
         assert_eq!(empty.failure, 0);
         assert_eq!(empty.failover, 0);
+    }
+
+    #[test]
+    fn last_success_returns_newest_success() {
+        let (_dir, stores) = setup();
+        let now = chrono::Utc::now().timestamp();
+        // 较旧的成功
+        stores
+            .with_conn(|conn| {
+                conn.execute(
+                    "INSERT INTO request_logs
+                     (time, group_name, provider_name, upstream_model, status_code, use_time_ms, error, failover_from, failover_to, failover_reason)
+                     VALUES (?1, 'g-old', 'p-old', 'm-old', 200, 1, '', '', '', '')",
+                    params![now - 100],
+                )
+                .map_err(|e| AppError::Database(e.to_string()))?;
+                Ok(())
+            })
+            .unwrap();
+        // 失败与 2xx 但有 error（不算成功）
+        insert_at(&stores, now - 10, 502, "bad", "", "");
+        insert_at(&stores, now - 5, 200, "structured", "", "");
+        // 最新成功
+        stores
+            .with_conn(|conn| {
+                conn.execute(
+                    "INSERT INTO request_logs
+                     (time, group_name, provider_name, upstream_model, status_code, use_time_ms, error, failover_from, failover_to, failover_reason)
+                     VALUES (?1, 'g-new', 'p-new', 'm-new', 201, 2, '', '', '', '')",
+                    params![now],
+                )
+                .map_err(|e| AppError::Database(e.to_string()))?;
+                Ok(())
+            })
+            .unwrap();
+
+        let last = stores.last_success_request().unwrap().expect("应有成功记录");
+        assert_eq!(last.group_name, "g-new");
+        assert_eq!(last.provider_name, "p-new");
+        assert_eq!(last.upstream_model, "m-new");
+        assert_eq!(last.status_code, 201);
+        assert_eq!(last.time, now);
+    }
+
+    #[test]
+    fn last_success_none_when_only_failures() {
+        let (_dir, stores) = setup();
+        let now = chrono::Utc::now().timestamp();
+        insert_at(&stores, now - 1, 500, "err", "", "");
+        insert_at(&stores, now, 200, "has-error", "", "");
+        assert!(stores.last_success_request().unwrap().is_none());
+    }
+
+    #[test]
+    fn last_success_none_when_empty() {
+        let (_dir, stores) = setup();
+        assert!(stores.last_success_request().unwrap().is_none());
+    }
+
+    #[test]
+    fn last_success_tie_break_by_id_desc() {
+        let (_dir, stores) = setup();
+        let t = chrono::Utc::now().timestamp();
+        stores
+            .with_conn(|conn| {
+                conn.execute(
+                    "INSERT INTO request_logs
+                     (time, group_name, provider_name, upstream_model, status_code, use_time_ms, error, failover_from, failover_to, failover_reason)
+                     VALUES (?1, 'first', 'p1', 'm1', 200, 1, '', '', '', '')",
+                    params![t],
+                )
+                .map_err(|e| AppError::Database(e.to_string()))?;
+                conn.execute(
+                    "INSERT INTO request_logs
+                     (time, group_name, provider_name, upstream_model, status_code, use_time_ms, error, failover_from, failover_to, failover_reason)
+                     VALUES (?1, 'second', 'p2', 'm2', 200, 1, '', '', '', '')",
+                    params![t],
+                )
+                .map_err(|e| AppError::Database(e.to_string()))?;
+                Ok(())
+            })
+            .unwrap();
+        let last = stores.last_success_request().unwrap().expect("应有成功记录");
+        assert_eq!(last.group_name, "second");
+        assert_eq!(last.provider_name, "p2");
+        assert_eq!(last.upstream_model, "m2");
     }
 }
