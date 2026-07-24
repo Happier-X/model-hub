@@ -7,6 +7,7 @@
 1. 使用 Vue 单文件组件与 `<script setup lang="ts">`。
 2. Props 使用 `defineProps` 声明明确类型；事件使用 `defineEmits` 声明名称和参数。
 3. 页面负责加载与提交，通用组件负责展示和用户交互；复杂领域操作下沉到 `src/api/tauri.ts` 或组合式函数。
+3.1 **happier-ui（渐进）**：入口导入 `happier-ui/tokens.css` 与 `happier-ui/style.css`；peer 提供 `@lucide/vue`。按钮 → `HButton`；单行输入 → `HInput`；布尔 → `HSwitch`/`HCheckbox`；空列表 → `HEmpty`。表格、`select`、`textarea`、侧栏壳、卡片分区继续 Tailwind。不在本仓库扩展库组件面。
 4. 代理运行状态、Base URL 和最后错误必须使用清晰、可行动的中文文案。
 5. 列表必须覆盖加载、空数据和错误状态。
 6. 表单中的上游 Key 输入使用密码类型；不向用户展示完整上游 Key。
@@ -27,9 +28,10 @@
 
 ## 对话框合同
 
-- 通用外壳使用 `src/components/AppDialog.vue`，页面保留表单和领域保存逻辑，不引入页面专用遮罩实现。
-- 必须提供语义化标题、`role="dialog"`、`aria-modal="true"`、Escape/遮罩/关闭按钮、焦点循环及关闭后的焦点恢复。
-- 普通表单使用 `size="default"`；分组等长表单使用 `size="wide"`，限制视口高度并在内容区内部滚动。
+- 通用外壳使用 `src/components/AppDialog.vue`（**内部**基于 `HDialog` 的薄封装），页面保留表单和领域保存逻辑，不引入页面专用遮罩实现。
+- 对外 props 保持：`open` / `title` / `size`（`default`|`wide`）/ `closeDisabled`、`@close`。
+- 适配：`open` ↔ `modelValue`；`closeDisabled` 时 `closeOnOverlay`/`closeOnEsc` 为 false 并忽略关闭更新；`wide` 由宿主 CSS 约束宽度与内容滚动。
+- 必须 Teleport 到 `body`（避免主区 `overflow` 裁切）；提供关闭按钮；关闭后恢复焦点。焦点陷阱以 `HDialog` 行为为准。
 - 对话框打开不得隐式触发上游请求；分组拉模型仍只允许用户点击。
 
 ```vue
