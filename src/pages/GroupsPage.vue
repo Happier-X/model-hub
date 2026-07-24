@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
+import { HButton, HEmpty, HInput } from "happier-ui";
 import {
   createGroup,
   deleteGroup,
@@ -507,7 +508,7 @@ onMounted(async () => {
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <div class="flex items-center justify-between gap-2">
         <h2 class="text-base font-semibold">分组管理</h2>
-        <button type="button" class="rounded-lg bg-slate-800 px-4 py-2 text-sm text-white" @click="openCreate">新建分组</button>
+        <HButton variant="primary" type="button" @click="openCreate">新建分组</HButton>
       </div>
     </section>
 
@@ -519,10 +520,7 @@ onMounted(async () => {
       </p>
       <p class="mb-3 text-sm text-slate-500">分组名 = 客户端 model；队列顺序即故障转移优先级。</p>
       <div class="grid gap-3 md:grid-cols-2">
-        <label class="text-sm">
-          <span class="mb-1 block text-slate-500">分组名（对外 model）</span>
-          <input v-model="form.name" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
-        </label>
+        <HInput v-model="form.name" label="分组名（对外 model）" />
       </div>
 
       <div class="mt-4 space-y-2">
@@ -540,23 +538,25 @@ onMounted(async () => {
                 <option value="external_coding">外部编码能力</option>
               </select>
             </label>
-            <button
+            <HButton
+              variant="ghost"
+              size="sm"
               type="button"
-              class="text-sm text-cyan-700 hover:underline disabled:opacity-40"
               :disabled="form.items.length < 2 || leaderboardLoading"
               @click="sortQueueByCapability"
             >
               按模型能力排序
-            </button>
-            <button
+            </HButton>
+            <HButton
+              variant="ghost"
+              size="sm"
               type="button"
-              class="text-sm text-cyan-700 hover:underline disabled:opacity-40"
               :disabled="leaderboardLoading"
               @click="loadLeaderboard(true)"
             >
               {{ leaderboardLoading ? "刷新榜单中…" : "强制刷新榜单" }}
-            </button>
-            <button type="button" class="text-sm text-cyan-700 hover:underline" @click="addItem">添加条目</button>
+            </HButton>
+            <HButton variant="ghost" size="sm" type="button" @click="addItem">添加条目</HButton>
           </div>
         </div>
         <p class="text-xs text-slate-500">{{ leaderboardStatusText }}</p>
@@ -571,14 +571,15 @@ onMounted(async () => {
               <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
             </select>
           </label>
-          <button
+          <HButton
+            variant="outline"
+            size="sm"
             type="button"
-            class="rounded border border-cyan-600 bg-white px-3 py-1.5 text-sm text-cyan-700 hover:bg-cyan-50 disabled:opacity-50"
             :disabled="!bulkProviderId || bulkAddingModels"
             @click="bulkAddProviderModels"
           >
             {{ bulkAddingModels ? "拉取添加中…" : "拉取并全部添加" }}
-          </button>
+          </HButton>
           <span class="pb-1 text-xs text-slate-500">按供应商 + 模型名去重，仅修改当前表单。</span>
         </div>
         <p v-if="bulkMessage" class="text-sm text-emerald-700">{{ bulkMessage }}</p>
@@ -646,14 +647,16 @@ onMounted(async () => {
               <datalist :id="`upstream-models-${index}`">
                 <option v-for="mid in modelOptions[index] || []" :key="mid" :value="mid" />
               </datalist>
-              <button
+              <HButton
+                variant="outline"
+                size="sm"
                 type="button"
-                class="shrink-0 rounded border border-cyan-600 px-2 py-1 text-xs text-cyan-700 hover:bg-cyan-50 disabled:opacity-50"
+                class="shrink-0"
                 :disabled="!item.provider_id || fetchingModels[index]"
                 @click="pullModels(index)"
               >
                 {{ fetchingModels[index] ? "拉取中…" : "拉取模型" }}
-              </button>
+              </HButton>
             </div>
             <div
               v-if="modelOptions[index]?.length"
@@ -671,29 +674,19 @@ onMounted(async () => {
               </button>
             </div>
           </div>
-          <button type="button" class="text-xs text-slate-600" @click="moveItem(index, -1)">上移</button>
-          <button type="button" class="text-xs text-slate-600" @click="moveItem(index, 1)">下移</button>
-          <button type="button" class="text-xs text-rose-600" @click="removeItem(index)">删除</button>
+          <HButton variant="ghost" size="sm" type="button" @click="moveItem(index, -1)">上移</HButton>
+          <HButton variant="ghost" size="sm" type="button" @click="moveItem(index, 1)">下移</HButton>
+          <HButton variant="danger-soft" size="sm" type="button" @click="removeItem(index)">删除</HButton>
         </div>
       </div>
 
       <div class="mt-4 flex gap-2">
-        <button
-          type="button"
-          class="rounded-lg bg-slate-800 px-4 py-2 text-sm text-white disabled:opacity-50"
-          :disabled="saving"
-          @click="save"
-        >
+        <HButton variant="primary" type="button" :disabled="saving" @click="save">
           {{ saving ? "保存中…" : isEditing ? "保存修改" : "创建分组" }}
-        </button>
-        <button
-          type="button"
-          class="rounded-lg border border-slate-300 px-4 py-2 text-sm disabled:opacity-50"
-          :disabled="saving"
-          @click="closeDialog"
-        >
+        </HButton>
+        <HButton variant="outline" type="button" :disabled="saving" @click="closeDialog">
           取消
-        </button>
+        </HButton>
       </div>
       <p v-if="error" class="mt-3 text-sm text-rose-600">{{ error }}</p>
     </section>
@@ -712,23 +705,24 @@ onMounted(async () => {
       </p>
       <p v-if="message" class="mb-3 whitespace-pre-line text-sm text-emerald-700">{{ message }}</p>
       <p v-if="error && !dialogOpen" class="mb-3 text-sm text-rose-600">{{ error }}</p>
-      <div v-if="groups.length === 0" class="text-sm text-slate-500">暂无分组</div>
+      <HEmpty v-if="groups.length === 0" class="app-empty-compact" title="暂无分组" />
       <div v-for="g in groups" :key="g.id" class="mb-4 rounded-lg border border-slate-100 p-4 last:mb-0">
         <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div>
             <span class="font-semibold">{{ g.name }}</span>
           </div>
           <div class="space-x-2 text-sm">
-            <button
+            <HButton
+              variant="ghost"
+              size="sm"
               type="button"
-              class="text-cyan-700 hover:underline disabled:opacity-50"
               :disabled="exportingPiId === g.id"
               @click="exportToPi(g.id)"
             >
               {{ exportingPiId === g.id ? "配置中…" : "配置到 Pi" }}
-            </button>
-            <button type="button" class="text-cyan-700 hover:underline" @click="startEdit(g)">编辑</button>
-            <button type="button" class="text-rose-600 hover:underline" @click="remove(g.id)">删除</button>
+            </HButton>
+            <HButton variant="ghost" size="sm" type="button" @click="startEdit(g)">编辑</HButton>
+            <HButton variant="danger-soft" size="sm" type="button" @click="remove(g.id)">删除</HButton>
           </div>
         </div>
         <ol class="space-y-2 text-sm">

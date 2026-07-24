@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, shallowRef } from "vue";
+import { HButton, HCheckbox, HInput } from "happier-ui";
 import {
   checkForUpdate,
   downloadAndInstallUpdate,
@@ -289,13 +290,7 @@ onMounted(async () => {
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 class="text-base font-semibold">今日请求（本地日）</h2>
-        <button
-          type="button"
-          class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
-          @click="refreshStats"
-        >
-          刷新统计
-        </button>
+        <HButton variant="outline" size="sm" type="button" @click="refreshStats">刷新统计</HButton>
       </div>
       <p class="mb-3 text-xs text-slate-500">
         基于请求日志；成功 = 2xx 且无 error；失败 = 状态 ≥400 或有 error；故障转移 = 记录了换源。
@@ -351,13 +346,7 @@ onMounted(async () => {
           <div class="text-slate-500">Base URL</div>
           <div class="mt-1 flex items-center gap-2 font-mono text-sm">
             <span>{{ status?.base_url || "-" }}</span>
-            <button
-              type="button"
-              class="rounded bg-slate-100 px-2 py-1 text-xs hover:bg-slate-200"
-              @click="copyBaseUrl"
-            >
-              复制
-            </button>
+            <HButton variant="tertiary" size="sm" type="button" @click="copyBaseUrl">复制</HButton>
           </div>
         </div>
         <div>
@@ -371,47 +360,21 @@ onMounted(async () => {
       </div>
 
       <div class="mt-5 flex flex-wrap items-end gap-3">
-        <label class="text-sm">
-          <span class="mb-1 block text-slate-500">端口</span>
-          <input
-            v-model.number="portInput"
+        <div class="w-28">
+          <HInput
+            :model-value="String(portInput)"
             type="number"
-            min="1"
-            max="65535"
-            class="w-28 rounded-lg border border-slate-300 px-3 py-2"
+            label="端口"
+            inputmode="numeric"
+            @update:model-value="portInput = Number($event) || 0"
           />
-        </label>
-        <button
-          type="button"
-          class="rounded-lg bg-slate-800 px-4 py-2 text-sm text-white hover:bg-slate-700 disabled:opacity-50"
-          :disabled="loading"
-          @click="savePort"
-        >
+        </div>
+        <HButton variant="primary" type="button" :disabled="loading" @click="savePort">
           保存端口
-        </button>
-        <button
-          type="button"
-          class="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-500 disabled:opacity-50"
-          :disabled="loading"
-          @click="start"
-        >
-          启动
-        </button>
-        <button
-          type="button"
-          class="rounded-lg bg-rose-600 px-4 py-2 text-sm text-white hover:bg-rose-500 disabled:opacity-50"
-          :disabled="loading"
-          @click="stop"
-        >
-          停止
-        </button>
-        <button
-          type="button"
-          class="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
-          @click="refresh"
-        >
-          刷新
-        </button>
+        </HButton>
+        <HButton variant="secondary" type="button" :disabled="loading" @click="start">启动</HButton>
+        <HButton variant="danger" type="button" :disabled="loading" @click="stop">停止</HButton>
+        <HButton variant="outline" type="button" @click="refresh">刷新</HButton>
       </div>
 
       <p v-if="message" class="mt-3 whitespace-pre-line text-sm text-emerald-700">{{ message }}</p>
@@ -434,24 +397,18 @@ onMounted(async () => {
       <p class="mb-3 text-sm text-slate-500">
         检查 GitHub Release 上的更新清单；发现新版本后须确认才会下载安装并重启。默认不在启动时自动检查。
       </p>
-      <label class="mb-3 flex items-center gap-2 text-sm text-slate-700">
-        <input
-          type="checkbox"
-          :checked="checkUpdateOnStartup"
+      <div class="mb-3">
+        <HCheckbox
+          :model-value="checkUpdateOnStartup"
+          label="进入概览时自动检查更新（仍需确认后才安装）"
           :disabled="prefsLoading"
-          @change="toggleStartupCheck(($event.target as HTMLInputElement).checked)"
+          @update:model-value="toggleStartupCheck"
         />
-        进入概览时自动检查更新（仍需确认后才安装）
-      </label>
+      </div>
       <div class="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          class="rounded-lg bg-cyan-700 px-4 py-2 text-sm text-white hover:bg-cyan-600 disabled:opacity-50"
-          :disabled="updateBusy"
-          @click="checkUpdate()"
-        >
+        <HButton variant="primary" type="button" :disabled="updateBusy" @click="checkUpdate()">
           {{ updatePhase === "checking" ? "检查中…" : "检查更新" }}
-        </button>
+        </HButton>
         <span v-if="currentVersion" class="text-xs text-slate-500">当前版本 {{ currentVersion }}</span>
       </div>
 
@@ -471,22 +428,18 @@ onMounted(async () => {
         >{{ pendingUpdate.body }}</pre>
         <p class="mt-2 text-xs text-slate-600">确认后将下载安装包、完成安装并自动重启应用。数据目录中的配置与数据库不会被删除。</p>
         <div class="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            class="rounded-lg bg-cyan-700 px-3 py-1.5 text-sm text-white hover:bg-cyan-600 disabled:opacity-50"
-            :disabled="updateBusy"
-            @click="confirmInstall"
-          >
+          <HButton variant="primary" size="sm" type="button" :disabled="updateBusy" @click="confirmInstall">
             {{ updatePhase === "error" ? "重试下载安装" : "下载并安装" }}
-          </button>
-          <button
+          </HButton>
+          <HButton
+            variant="outline"
+            size="sm"
             type="button"
-            class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
             :disabled="updateBusy"
             @click="cancelPendingUpdate"
           >
             稍后
-          </button>
+          </HButton>
         </div>
       </div>
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
+import { HButton, HCheckbox, HEmpty, HInput } from "happier-ui";
 import {
   createProvider,
   deleteProvider,
@@ -138,74 +139,63 @@ onMounted(refresh);
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <div class="flex items-center justify-between gap-2">
         <h2 class="text-base font-semibold">供应商管理</h2>
-        <button type="button" class="rounded-lg bg-slate-800 px-4 py-2 text-sm text-white" @click="openCreate">新建供应商</button>
+        <HButton variant="primary" type="button" @click="openCreate">新建供应商</HButton>
       </div>
     </section>
 
-    <AppDialog :open="dialogOpen" :title="editingProviderId === null ? '新建供应商' : '编辑供应商'" :close-disabled="saving" @close="closeDialog">
+    <AppDialog
+      :open="dialogOpen"
+      :title="editingProviderId === null ? '新建供应商' : '编辑供应商'"
+      :close-disabled="saving"
+      @close="closeDialog"
+    >
       <section>
-      <p v-if="editingProviderId !== null" class="mb-4 text-sm text-cyan-800">正在编辑供应商</p>
-      <div class="mb-4 rounded-lg border border-dashed border-cyan-300 bg-cyan-50/40 p-3">
-        <div class="mb-2 text-sm font-medium text-slate-700">粘贴快速添加</div>
-        <p class="mb-2 text-xs text-slate-500">
-          支持 NewAPI 分享 JSON（含
-          <code class="rounded bg-white px-1">newapi_channel_conn</code>）、环境变量、curl 与普通文本。仅本地解析，不会上传。
-        </p>
-        <textarea
-          v-model="pasteText"
-          rows="4"
-          spellcheck="false"
-          placeholder='例如：{"_type":"newapi_channel_conn","key":"sk-...","url":"https://..."}'
-          class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs"
-        />
-        <div class="mt-2 flex flex-wrap gap-2">
-          <button
-            type="button"
-            class="rounded-lg bg-cyan-700 px-3 py-1.5 text-sm text-white hover:bg-cyan-600"
-            @click="applyPaste"
-          >
-            识别并填入表单
-          </button>
-          <button
-            type="button"
-            class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-white"
-            @click="pasteText = ''"
-          >
-            清空粘贴框
-          </button>
-        </div>
-      </div>
-      <div class="grid gap-3 md:grid-cols-2">
-        <label class="text-sm">
-          <span class="mb-1 block text-slate-500">名称</span>
-          <input v-model="form.name" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
-        </label>
-        <label class="text-sm">
-          <span class="mb-1 block text-slate-500">Base URL</span>
-          <input v-model="form.base_url" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
-        </label>
-        <label class="text-sm md:col-span-2">
-          <span class="mb-1 block text-slate-500">上游 API Key</span>
-          <input
-            v-model="form.api_key"
-            type="password"
-            autocomplete="off"
-            class="w-full rounded-lg border border-slate-300 px-3 py-2"
+        <p v-if="editingProviderId !== null" class="mb-4 text-sm text-cyan-800">正在编辑供应商</p>
+        <div class="mb-4 rounded-lg border border-dashed border-cyan-300 bg-cyan-50/40 p-3">
+          <div class="mb-2 text-sm font-medium text-slate-700">粘贴快速添加</div>
+          <p class="mb-2 text-xs text-slate-500">
+            支持 NewAPI 分享 JSON（含
+            <code class="rounded bg-white px-1">newapi_channel_conn</code>）、环境变量、curl 与普通文本。仅本地解析，不会上传。
+          </p>
+          <textarea
+            v-model="pasteText"
+            rows="4"
+            spellcheck="false"
+            placeholder='例如：{"_type":"newapi_channel_conn","key":"sk-...","url":"https://..."}'
+            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs"
           />
-        </label>
-        <label class="flex items-center gap-2 text-sm">
-          <input v-model="form.enabled" type="checkbox" />
-          启用
-        </label>
-      </div>
-      <div class="mt-4 flex flex-wrap gap-2">
-        <button type="button" class="rounded-lg bg-slate-800 px-4 py-2 text-sm text-white disabled:opacity-50" :disabled="saving" @click="save">
-          {{ saving ? "保存中…" : "保存" }}
-        </button>
-        <button type="button" class="rounded-lg border border-slate-300 px-4 py-2 text-sm" :disabled="saving" @click="closeDialog">取消</button>
-      </div>
-      <p v-if="message" class="mt-3 text-sm text-emerald-700">{{ message }}</p>
-      <p v-if="error" class="mt-3 text-sm text-rose-600">{{ error }}</p>
+          <div class="mt-2 flex flex-wrap gap-2">
+            <HButton variant="secondary" size="sm" type="button" @click="applyPaste">
+              识别并填入表单
+            </HButton>
+            <HButton variant="outline" size="sm" type="button" @click="pasteText = ''">
+              清空粘贴框
+            </HButton>
+          </div>
+        </div>
+        <div class="grid gap-3 md:grid-cols-2">
+          <HInput v-model="form.name" label="名称" />
+          <HInput v-model="form.base_url" label="Base URL" />
+          <div class="md:col-span-2">
+            <HInput
+              v-model="form.api_key"
+              type="password"
+              autocomplete="off"
+              label="上游 API Key"
+            />
+          </div>
+          <HCheckbox v-model="form.enabled" label="启用" />
+        </div>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <HButton variant="primary" type="button" :disabled="saving" @click="save">
+            {{ saving ? "保存中…" : "保存" }}
+          </HButton>
+          <HButton variant="outline" type="button" :disabled="saving" @click="closeDialog">
+            取消
+          </HButton>
+        </div>
+        <p v-if="message" class="mt-3 text-sm text-emerald-700">{{ message }}</p>
+        <p v-if="error" class="mt-3 text-sm text-rose-600">{{ error }}</p>
       </section>
     </AppDialog>
 
@@ -214,7 +204,7 @@ onMounted(refresh);
         <h2 class="text-base font-semibold">供应商列表</h2>
       </div>
       <p v-if="error && !dialogOpen" class="mb-3 text-sm text-rose-600">{{ error }}</p>
-      <div v-if="items.length === 0" class="text-sm text-slate-500">暂无供应商</div>
+      <HEmpty v-if="items.length === 0" class="app-empty-compact" title="暂无供应商" />
       <div v-else class="overflow-x-auto">
         <table class="min-w-full text-left text-sm">
           <thead class="border-b text-slate-500">
@@ -231,8 +221,12 @@ onMounted(refresh);
               <td class="px-2 py-2 font-mono text-xs">{{ p.base_url }}</td>
               <td class="px-2 py-2">{{ p.enabled ? "启用" : "停用" }}</td>
               <td class="px-2 py-2 space-x-2">
-                <button type="button" class="text-cyan-700 hover:underline" @click="startEdit(p)">编辑</button>
-                <button type="button" class="text-rose-600 hover:underline" @click="remove(p.id)">删除</button>
+                <HButton variant="ghost" size="sm" type="button" @click="startEdit(p)">
+                  编辑
+                </HButton>
+                <HButton variant="danger-soft" size="sm" type="button" @click="remove(p.id)">
+                  删除
+                </HButton>
               </td>
             </tr>
           </tbody>

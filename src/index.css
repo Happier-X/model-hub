@@ -34,3 +34,41 @@ textarea:focus-visible {
   outline: 2px solid #22d3ee;
   outline-offset: 2px;
 }
+
+/* AppDialog：标题行 + 关闭按钮 */
+.app-dialog-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.app-dialog-title {
+  margin: 0;
+  font-size: var(--h-font-title, 15px);
+  font-weight: 600;
+  line-height: var(--h-line-height-title, 1.25);
+  min-width: 0;
+}
+
+/* AppDialog：HDialog 宽表单（分组等） */
+.app-dialog-host--wide .h-dialog__panel {
+  max-width: min(72rem, calc(100vw - 2rem));
+  max-height: 90vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-dialog-host--wide .h-dialog__body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+/* 列表空状态：收紧 HEmpty 默认 60vh */
+.app-empty-compact {
+  --h-empty-min-height: auto;
+}

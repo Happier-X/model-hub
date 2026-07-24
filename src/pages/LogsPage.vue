@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
+import { HButton, HCheckbox, HEmpty, HInput } from "happier-ui";
 import {
   clearLogs,
   extractInvokeError,
@@ -129,16 +130,14 @@ onUnmounted(() => {
   <div class="space-y-4">
     <section class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div class="flex flex-wrap items-end gap-3">
-        <label class="text-sm">
-          <span class="mb-1 block text-slate-500">分组名</span>
-          <input
+        <div class="w-40" @keydown.enter="applyFilters">
+          <HInput
             v-model="groupName"
             type="search"
+            label="分组名"
             placeholder="子串匹配"
-            class="w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            @keyup.enter="applyFilters"
           />
-        </label>
+        </div>
         <label class="text-sm">
           <span class="mb-1 block text-slate-500">状态</span>
           <select v-model="statusClass" class="rounded-lg border border-slate-300 px-3 py-2 text-sm">
@@ -149,10 +148,7 @@ onUnmounted(() => {
             <option value="error">错误（≥400 或有 error）</option>
           </select>
         </label>
-        <label class="flex items-center gap-2 pb-2 text-sm">
-          <input v-model="failoverOnly" type="checkbox" />
-          仅故障转移
-        </label>
+        <HCheckbox v-model="failoverOnly" label="仅故障转移" />
         <label class="text-sm">
           <span class="mb-1 block text-slate-500">每页</span>
           <select
@@ -165,45 +161,23 @@ onUnmounted(() => {
             <option :value="100">100</option>
           </select>
         </label>
-        <button
-          type="button"
-          class="rounded-lg bg-slate-800 px-4 py-2 text-sm text-white hover:bg-slate-700 disabled:opacity-50"
-          :disabled="loading"
-          @click="applyFilters"
-        >
+        <HButton variant="primary" type="button" :disabled="loading" @click="applyFilters">
           筛选
-        </button>
-        <button
-          type="button"
-          class="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50 disabled:opacity-50"
-          :disabled="loading"
-          @click="refresh"
-        >
+        </HButton>
+        <HButton variant="outline" type="button" :disabled="loading" @click="refresh">
           刷新
-        </button>
-        <button
+        </HButton>
+        <HButton
+          :variant="autoRefresh ? 'secondary' : 'outline'"
           type="button"
-          class="rounded-lg border px-4 py-2 text-sm"
-          :class="
-            autoRefresh
-              ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
-              : 'border-slate-300 bg-white text-slate-600'
-          "
           @click="toggleAutoRefresh"
         >
           {{ autoRefresh ? "自动刷新：3 秒" : "自动刷新：已暂停" }}
-        </button>
-        <button
-          type="button"
-          class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 hover:bg-amber-100"
-          :disabled="loading"
-          @click="purgeExpired"
-        >
+        </HButton>
+        <HButton variant="tertiary" type="button" :disabled="loading" @click="purgeExpired">
           清理过期
-        </button>
-        <button type="button" class="rounded-lg bg-rose-600 px-4 py-2 text-sm text-white" @click="clear">
-          清空全部
-        </button>
+        </HButton>
+        <HButton variant="danger" type="button" @click="clear">清空全部</HButton>
       </div>
       <p class="mt-3 text-xs text-slate-500">
         默认保留 {{ retentionDays }} 天；打开列表/写入日志时会自动清理更早记录。库内现有
@@ -220,27 +194,28 @@ onUnmounted(() => {
           >筛选 {{ total }} 条 · 库内 {{ storedTotal }} 条 · 第 {{ page }} / {{ totalPages }} 页</span
         >
         <div class="flex gap-2">
-          <button
+          <HButton
+            variant="outline"
+            size="sm"
             type="button"
-            class="rounded border border-slate-300 px-3 py-1 text-sm disabled:opacity-40"
             :disabled="loading || page <= 1"
             @click="goPage(page - 1)"
           >
             上一页
-          </button>
-          <button
+          </HButton>
+          <HButton
+            variant="outline"
+            size="sm"
             type="button"
-            class="rounded border border-slate-300 px-3 py-1 text-sm disabled:opacity-40"
             :disabled="loading || page >= totalPages"
             @click="goPage(page + 1)"
           >
             下一页
-          </button>
+          </HButton>
         </div>
       </div>
-      <div v-if="items.length === 0" class="text-sm text-slate-500">
-        {{ loading ? "加载中…" : "暂无日志" }}
-      </div>
+      <div v-if="loading && items.length === 0" class="text-sm text-slate-500">加载中…</div>
+      <HEmpty v-else-if="items.length === 0" class="app-empty-compact" title="暂无日志" />
       <div v-else class="overflow-x-auto">
         <table class="min-w-full text-left text-xs">
           <thead class="border-b text-slate-500">
