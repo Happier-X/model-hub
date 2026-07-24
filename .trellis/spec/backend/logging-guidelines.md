@@ -22,6 +22,8 @@
 3. 请求日志字段：时间、分组、供应商、上游 model、状态码、耗时、error、failover_from/to/reason。
 4. **禁止**完整 messages / 上游 Key。
 5. **流式最终日志**：`/v1/chat/completions` 在流式 prime 成功后不得立刻记 200 成功；应在 body 正常结束时记成功，或在静默超时/读错误时记**单条**失败（如 504「流式静默超时」）。同一次流式请求禁止「先 200 空 error、再 504」双结论。
+6. **成功请求判定**（今日统计 `RequestStats.success` 与「最近成功」共用）：`status_code BETWEEN 200 AND 299` 且 `(error IS NULL OR length(error) = 0)`。
+7. **最近成功请求（概览）**：专用 IPC `get_last_success_request` → `Option<LastSuccessRequest>`；查询全库满足成功谓词、`ORDER BY time DESC, id DESC LIMIT 1`；字段 `time` / `group_name` / `provider_name` / `upstream_model` / `status_code`；无行返回 JSON `null`。禁止用 `list_logs` 整页再筛代替此查询。前端在概览与「刷新统计」一并拉取；空态文案，不新增定时轮询。
 
 ---
 
@@ -29,3 +31,5 @@
 
 - 每个 token 一条 info。
 - 把完整 Authorization 打进日志。
+- 前端拉整页日志再筛「最近成功」。
+- 「最近成功」判定与 `RequestStats.success` 分叉。
