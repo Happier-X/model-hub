@@ -722,3 +722,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 21: 概览改名为首页
+
+**Date**: 2026-07-24
+**Task**: 概览改名为首页
+**Branch**: `master`
+
+### Summary
+
+将应用中「概览」统一更名为「首页」：路由 name=home、OverviewPage→HomePage、侧栏与页面文案、README/docs/changelog/注释及相关 Trellis spec 同步更新；typecheck 与 lint 通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fea1216` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

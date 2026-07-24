@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 20
+- **Total Sessions**: 21
 - **Last Active**: 2026-07-24
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~724 | Active |
+| `journal-1.md` | ~757 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 21 | 2026-07-24 | 概览改名为首页 | `fea1216` | `master` |
 | 20 | 2026-07-24 | 概览展示最近成功模型 | `bdebbb7`, `f870b4f` | `master` |
 | 19 | 2026-07-24 | 发布 v0.0.3 | `73b17ae` | `master` |
 | 18 | 2026-07-24 | 渐进接入 happier-ui 替换可映射控件 | `cd12f94`, `e7bac07` | `master` |
