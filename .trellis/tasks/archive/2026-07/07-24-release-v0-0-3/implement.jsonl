@@ -1,0 +1,3 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": "docs/in-app-updater.md", "reason": "发布步骤、签名与 latest.json 约定"}
+{"file": "changelog/v0.0.2.md", "reason": "changelog 结构与措辞参考"}
