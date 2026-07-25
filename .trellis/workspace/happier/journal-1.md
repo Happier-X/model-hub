@@ -978,3 +978,36 @@ Session summary was not supplied.
 ### Next Steps
 
 - None - task complete
+
+
+## Session 27: 修复流式 SSE 帧错误信封漏检导致不换源
+
+**Date**: 2026-07-25
+**Task**: 修复流式 SSE 帧错误信封漏检导致不换源
+**Branch**: `master`
+
+### Summary
+
+上游流式返回 HTTP 200 + data:{error} 帧时被当正常 SSE 放行、故障转移停止、日志误记 200。扩展 is_structured_error_body：抽出 classify_json_error_envelope 供裸 JSON 与 SSE payload 共用；新增 looks_like_sse / extract_sse_data_payload 剥 data: 帧再判定；[DONE]/纯注释/带 choices 正常 delta 一律放行。耗尽分支自动复用 2xx 信封升级 502。单测 21 + failover_any_error 13(含 3 新 SSE 场景) + proxy_failover 8 全绿；fmt/clippy/build 干净。同步 error-handling.md 判定表。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f392572` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
