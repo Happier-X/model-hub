@@ -893,3 +893,22 @@ happier-ui 0.0.1→0.0.2，修复破坏性 CSS 入口改名 style.css→styles.c
 ### Next Steps
 
 - None - task complete
+
+---
+
+## 2025-07-25 修复故障转移耗尽时 2xx 错误信封透传问题
+
+### 问题
+上游供应商（xAI/Grok）返回 HTTP 200 但 body 为结构化 JSON 错误时，检测正确触发故障转移，但所有候选耗尽后 exhausted 分支原样透传最后的 HTTP 200 + 错误体，客户端误以为成功。
+
+### 修改
+- **forward.rs**：exhausted 分支新增判断，若最后 HTTP 响应为 2xx 且含结构化错误信封，升级为 502 + 汇总错误摘要
+- **failover_any_error.rs**：新增 exhausted_2xx_error_envelopes_return_502 集成测试
+- **error-handling.md**：更新 exhausted 行为描述
+
+### 验证
+- 74 单元测试通过
+- 10/10 failover_any_error 集成测试通过
+- 8/8 proxy_failover 集成测试通过
+
+[OK] **Completed**

@@ -288,3 +288,72 @@ async fn exhausted_transport_errors_return_gateway_error() {
     );
     assert!(!body.contains("test-key"));
 }
+
+#[tokio::test]
+async fn exhausted_2xx_error_envelopes_return_502() {
+    let first = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "error": "上游密钥已过期"
+        })))
+        .expect(1)
+        .mount(&first)
+        .await;
+
+    let second = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "error": {"message": "模型已停用"}
+        })))
+        .expect(1)
+        .mount(&second)
+        .await;
+
+    let env = setup();
+    // 两个候选均为 2xx 错误信封，耗尽后应返回 502 而非原样透传 200
+    let first_provider = env
+        .stores
+        .create_provider(CreateProviderPayload {
+            name: "err-first".into(),
+            base_url: format!("{}/v1", first.uri()),
+            api_key: "k1".into(),
+            enabled: true,
+        })
+        .unwrap();
+    let second_provider = env
+        .stores
+        .create_provider(CreateProviderPayload {
+            name: "err-second".into(),
+            base_url: format!("{}/v1", second.uri()),
+            api_key: "k2".into(),
+            enabled: true,
+        })
+        .unwrap();
+    env.stores
+        .create_group(CreateGroupPayload {
+            name: "all-200-err".into(),
+            items: vec![
+                GroupItemInput {
+                    provider_id: first_provider.id,
+                    upstream_model: "m1".into(),
+                },
+                GroupItemInput {
+                    provider_id: second_provider.id,
+                    upstream_model: "m2".into(),
+                },
+            ],
+        })
+        .unwrap();
+
+    let response = chat(env.router, "all-200-err", false).await;
+    // 耗尽后应返回 502，而非 200
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body_str = String::from_utf8_lossy(&bytes);
+    assert!(body_str.contains("所有上游均返回错误"), "应包含汇总错误: {body_str}");
+    assert!(body_str.contains("模型已停用"), "应包含最后上游的错误详情: {body_str}");
+}

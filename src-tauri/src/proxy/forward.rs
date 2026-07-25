@@ -520,6 +520,22 @@ fn build_http_response(status: u16, headers: HeaderMap, body: Bytes) -> Response
         .unwrap_or_else(|_| StatusCode::BAD_GATEWAY.into_response())
 }
 
+/// 构造 JSON 网关错误响应（OpenAI 兼容格式），用于 exhausted 路径升级 2xx 错误信封。
+fn build_gateway_error_response(status: u16, message: &str) -> Response {
+    let body = serde_json::json!({
+        "message": message,
+        "error": {
+            "message": message
+        }
+    });
+    let mut builder =
+        Response::builder().status(StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY));
+    builder = builder.header("Content-Type", "application/json");
+    builder
+        .body(Body::from(serde_json::to_vec(&body).unwrap_or_default()))
+        .unwrap_or_else(|_| StatusCode::BAD_GATEWAY.into_response())
+}
+
 pub struct ForwardOutcome {
     pub response: Response,
     pub final_provider_name: String,
@@ -778,7 +794,26 @@ pub async fn forward_with_failover(
     }
 
     // 队列耗尽：有最后 HTTP 响应则透传；否则返回明确网关错误。
+    // 特别注意：若最后响应是 2xx 结构化错误信封（如 HTTP 200 + JSON 错误体），
+    // 不应当原样透传误导客户端，而应升级为 502 网关错误，附带上游原始错误详情。
     if let Some((status, headers, body, provider_name, model, safe_error)) = last_http {
+        // 2xx 错误信封 → 转换为 502，避免客户端误认为请求成功。
+        if (200..300).contains(&status) && is_structured_error_body(&body).is_some() {
+            let response = build_gateway_error_response(
+                502,
+                &format!("所有上游均返回错误，最后错误：{safe_error}"),
+            );
+            return Ok(ForwardOutcome {
+                response,
+                final_provider_name: provider_name,
+                final_model: model,
+                failover_from,
+                failover_to,
+                failover_reason: last_error.clone(),
+                error: safe_error,
+                defer_request_log: false,
+            });
+        }
         let response = build_http_response(status, headers, body);
         return Ok(ForwardOutcome {
             response,
