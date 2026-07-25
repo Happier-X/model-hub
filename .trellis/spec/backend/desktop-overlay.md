@@ -89,8 +89,10 @@ overlay 前端不新增后端能力，全部复用现有 IPC：
 | `idle` / `stopping` | 任意 | 「代理已停止」 |
 | `error` | 任意 | 「代理异常」+ `last_error` 摘要 |
 
-- 请求失败保留上一次有效数据，只做非阻断提示（避免闪烁）。
+- 请求失败保留上一次有效数据，只做非阻断提示（避免闪烁）；同时把错误打到 overlay 窗口 console（`console.error("[overlay] poll failed", err)`），不得完全静默吞掉，便于排查后端异常。
+- 记录 `lastSuccessPolledAt`（最近一次 `poll()` 成功返回的本地时刻），失败轮询不推进它；tooltip 在此基础上追加一行「最后刷新：MM-DD HH:mm:ss」。这是区分「不更新」根因的关键观测点：时间停滞 = 轮询/IPC 持续失败；时间在走但模型没变 = 当前确实没有新的成功请求落库。
 - 不展示 API Key 或消息正文；`last_success` 只使用 `group_name` / `provider_name` / `upstream_model` / `time`。
+- 「不更新」不是 bug：悬浮条按契约只显示 DB 里最近一条 2xx 且无 error 的请求，不是「正在用的模型」。新模型请求全失败或尚未落库时，停留在上一条成功模型是预期行为。
 
 ---
 

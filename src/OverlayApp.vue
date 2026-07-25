@@ -18,6 +18,8 @@ const status = ref<ProxyStatus | null>(null);
 const lastSuccess = ref<LastSuccessRequest | null>(null);
 /** 上一次拉取是否失败：失败时保留旧数据，只做非阻断提示 */
 const fetchFailed = ref(false);
+/** 最近一次 poll() 成功返回的本地时刻（unix 秒）；失败轮询不推进 */
+const lastSuccessPolledAt = ref<number | null>(null);
 
 let timer: number | null = null;
 let positionTimer: number | null = null;
@@ -70,15 +72,19 @@ const dotClass = computed(() => {
 
 const tooltip = computed(() => {
   const v = view.value;
+  const refreshedAt =
+    lastSuccessPolledAt.value !== null
+      ? `\n最后刷新：${formatTimeWithSeconds(lastSuccessPolledAt.value)}`
+      : "";
   switch (v.kind) {
     case "model":
-      return `分组：${v.group}\n供应商：${v.provider}\n上游模型：${v.model}\n最近成功：${v.time}`;
+      return `分组：${v.group}\n供应商：${v.provider}\n上游模型：${v.model}\n最近成功：${v.time}${refreshedAt}`;
     case "running-empty":
-      return "代理运行中，尚无成功请求";
+      return `代理运行中，尚无成功请求${refreshedAt}`;
     case "stopped":
-      return "代理已停止";
+      return `代理已停止${refreshedAt}`;
     case "error":
-      return v.detail;
+      return `${v.detail}${refreshedAt}`;
     default:
       return "";
   }
@@ -90,15 +96,23 @@ function formatTime(unix: number): string {
   return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function formatTimeWithSeconds(unix: number): string {
+  const d = new Date(unix * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 async function poll() {
   try {
     const [s, ok] = await Promise.all([proxyStatus(), getLastSuccessRequest()]);
     status.value = s;
     lastSuccess.value = ok;
     fetchFailed.value = false;
-  } catch {
-    // 保留上一次有效数据，只标记失败，避免闪烁
+    lastSuccessPolledAt.value = Math.floor(Date.now() / 1000);
+  } catch (err) {
+    // 保留上一次有效数据，只标记失败，避免闪烁；错误打到 console 便于排查后端异常
     fetchFailed.value = true;
+    console.error("[overlay] poll failed", err);
   }
 }
 
