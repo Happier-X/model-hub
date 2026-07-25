@@ -17,23 +17,31 @@ use crate::domain::Stores;
 
 /// 流式首包超时。
 pub const STREAM_FIRST_BYTE_TIMEOUT: Duration = Duration::from_secs(60);
-/// 流式首包后的静默（空闲）超时：后续 chunk 最长等待。
-pub const STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(120);
+/// 流式首包后的"绝对静默兜底"：上游连续无任何数据超过该值即判定卡死。
+///
+/// 注意：SSE 路径下不再等价于"客户端会 terminated 的窗口"——只要连接活着，
+/// 心跳 ping 会持续保活客户端；此阈值仅用来防止上游真卡死时挂起。
+pub const STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(300);
+/// SSE 心跳保活间隔：等待上游 chunk 期间，每隔该时长向客户端发一次 SSE 注释行。
+/// 远小于 `STREAM_IDLE_TIMEOUT`，用来跨越思考期无 token 的静默窗口。
+pub const STREAM_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
 /// 非流式总超时。
 pub const NON_STREAM_TIMEOUT: Duration = Duration::from_secs(600);
 /// 连接超时。
 pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// 转发策略（可测注入：如缩短流式静默超时）。
+/// 转发策略（可测注入：如缩短流式静默超时 / 心跳间隔）。
 #[derive(Debug, Clone)]
 pub struct ForwardPolicy {
     pub stream_idle_timeout: Duration,
+    pub heartbeat_interval: Duration,
 }
 
 impl Default for ForwardPolicy {
     fn default() -> Self {
         Self {
             stream_idle_timeout: STREAM_IDLE_TIMEOUT,
+            heartbeat_interval: STREAM_HEARTBEAT_INTERVAL,
         }
     }
 }
@@ -445,6 +453,15 @@ fn strip_tool_strict(obj: &mut serde_json::Map<String, Value>) {
     }
 }
 
+/// 响应是否为 SSE（`text/event-stream`）；仅此类型注入心跳。
+fn is_sse_response(headers: &HeaderMap) -> bool {
+    headers
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_ascii_lowercase().contains("text/event-stream"))
+        .unwrap_or(false)
+}
+
 fn map_headers(resp: &reqwest::Response) -> HeaderMap {
     let mut headers = HeaderMap::new();
     for (k, v) in resp.headers().iter() {
@@ -606,7 +623,14 @@ struct StreamState {
     done: bool,
     /// 已调用任一终态回调（成功/超时/读错误/drop 中断）。
     finalized: bool,
+    /// 绝对静默兜底：上游连续无数据超过该值即判定卡死。
     idle: Duration,
+    /// SSE 心跳间隔：仅当 `is_sse` 为 true 时向客户端发 `: ping` 保活。
+    heartbeat: Duration,
+    /// 响应是否为 SSE；true 时空闲 tick 会产出保活字节，false 时不注入任何字节。
+    is_sse: bool,
+    /// 已累计的静默时长（单位与 heartbeat 对齐）；每收到真实 chunk 归零。
+    idle_acc: Duration,
     on_idle_timeout: Option<Box<dyn FnOnce() + Send>>,
     on_success: Option<Box<dyn FnOnce() + Send>>,
     on_error: Option<Box<dyn FnOnce(String) + Send>>,
@@ -640,12 +664,19 @@ impl Drop for StreamState {
     }
 }
 
-/// 从已成功 prime 的流构造 body；后续 chunk 使用 `idle` 静默超时。
-/// 超时后结束流并调用 `on_idle_timeout`；**不会**回到换源循环。
+/// SSE 心跳保活字节：`:` 开头是 SSE 规范内的注释行，客户端全部忽略。
+const SSE_HEARTBEAT_BYTES: &[u8] = b": ping\n\n";
+
+/// 从已成功 prime 的流构造 body。SSE 响应在等待上游 chunk 期间周期性发送心跳注释行
+/// 保活；上游连续无数据累计超过 `idle`（绝对兜底）时结束流并调用 `on_idle_timeout`。
+/// 非 SSE 响应不注入任何字节，累计到 `idle` 时同样判定超时。**不会**回到换源循环。
+#[allow(clippy::too_many_arguments)]
 fn stream_body_from_prime(
     first: Bytes,
     response: reqwest::Response,
     idle: Duration,
+    heartbeat: Duration,
+    is_sse: bool,
     on_idle_timeout: impl FnOnce() + Send + 'static,
     on_success: impl FnOnce() + Send + 'static,
     on_error: impl FnOnce(String) + Send + 'static,
@@ -658,6 +689,9 @@ fn stream_body_from_prime(
             done: false,
             finalized: false,
             idle,
+            heartbeat,
+            is_sse,
+            idle_acc: Duration::ZERO,
             on_idle_timeout: Some(Box::new(on_idle_timeout)),
             on_success: Some(Box::new(on_success)),
             on_error: Some(Box::new(on_error)),
@@ -672,46 +706,67 @@ fn stream_body_from_prime(
                     return Some((Ok::<Bytes, std::io::Error>(chunk), state));
                 }
             }
-            let Some(resp) = state.response.as_mut() else {
-                if let Some(cb) = state.on_success.take() {
-                    cb();
-                }
-                state.mark_finalized();
-                return None;
-            };
-            match tokio::time::timeout(state.idle, resp.chunk()).await {
-                Err(_) => {
-                    if let Some(cb) = state.on_idle_timeout.take() {
-                        cb();
-                    }
-                    state.mark_finalized();
-                    state.done = true;
-                    state.response = None;
-                    Some((
-                        Err(std::io::Error::new(
-                            std::io::ErrorKind::TimedOut,
-                            "流式静默超时",
-                        )),
-                        state,
-                    ))
-                }
-                Ok(Ok(Some(bytes))) => Some((Ok(bytes), state)),
-                Ok(Ok(None)) => {
+            // 循环内每轮 wait 至多 heartbeat；未收到 chunk 时按 is_sse 决定是否发 ping。
+            // 非 SSE 路径不产出保活字节，仅静默累计到 idle 再判超时。
+            loop {
+                let Some(resp) = state.response.as_mut() else {
                     if let Some(cb) = state.on_success.take() {
                         cb();
                     }
                     state.mark_finalized();
-                    None
-                }
-                Ok(Err(e)) => {
-                    let msg = e.to_string();
-                    if let Some(cb) = state.on_error.take() {
-                        cb(msg.clone());
+                    return None;
+                };
+                let heartbeat = state.heartbeat;
+                match tokio::time::timeout(heartbeat, resp.chunk()).await {
+                    Ok(Ok(Some(bytes))) => {
+                        state.idle_acc = Duration::ZERO;
+                        return Some((Ok(bytes), state));
                     }
-                    state.mark_finalized();
-                    state.done = true;
-                    state.response = None;
-                    Some((Err(std::io::Error::other(msg)), state))
+                    Ok(Ok(None)) => {
+                        if let Some(cb) = state.on_success.take() {
+                            cb();
+                        }
+                        state.mark_finalized();
+                        return None;
+                    }
+                    Ok(Err(e)) => {
+                        let msg = e.to_string();
+                        if let Some(cb) = state.on_error.take() {
+                            cb(msg.clone());
+                        }
+                        state.mark_finalized();
+                        state.done = true;
+                        state.response = None;
+                        return Some((Err(std::io::Error::other(msg)), state));
+                    }
+                    Err(_) => {
+                        // heartbeat 到期但未收到 chunk：先累计静默，再判是否命中绝对兜底。
+                        state.idle_acc = state.idle_acc.saturating_add(heartbeat);
+                        if state.idle_acc >= state.idle {
+                            if let Some(cb) = state.on_idle_timeout.take() {
+                                cb();
+                            }
+                            state.mark_finalized();
+                            state.done = true;
+                            state.response = None;
+                            return Some((
+                                Err(std::io::Error::new(
+                                    std::io::ErrorKind::TimedOut,
+                                    "流式静默超时",
+                                )),
+                                state,
+                            ));
+                        }
+                        if state.is_sse {
+                            // SSE 注释行：客户端忽略，但足以让 chunked 传输保持活跃。
+                            return Some((
+                                Ok(Bytes::from_static(SSE_HEARTBEAT_BYTES)),
+                                state,
+                            ));
+                        }
+                        // 非 SSE：不注入任何字节，继续下一轮等待直到 idle 兜底。
+                        continue;
+                    }
                 }
             }
         },
@@ -759,6 +814,7 @@ pub struct ForwardOutcome {
     pub defer_request_log: bool,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn forward_with_failover(
     stores: &Stores,
     clients: &UpstreamClients,
@@ -805,6 +861,8 @@ pub async fn forward_with_failover(
                     let success_status = ok.status.as_u16() as i64;
                     let started = Instant::now();
                     let idle = policy.stream_idle_timeout;
+                    let heartbeat = policy.heartbeat_interval;
+                    let is_sse = is_sse_response(&ok.headers);
 
                     let on_idle = {
                         let stores = stores.clone();
@@ -899,6 +957,8 @@ pub async fn forward_with_failover(
                         ok.first_chunk,
                         ok.rest,
                         idle,
+                        heartbeat,
+                        is_sse,
                         on_idle,
                         on_success,
                         on_error,
@@ -1346,9 +1406,31 @@ mod tests {
     #[test]
     fn timeout_constants_match_prd() {
         assert_eq!(STREAM_FIRST_BYTE_TIMEOUT, Duration::from_secs(60));
-        assert_eq!(STREAM_IDLE_TIMEOUT, Duration::from_secs(120));
+        assert_eq!(STREAM_IDLE_TIMEOUT, Duration::from_secs(300));
+        assert_eq!(STREAM_HEARTBEAT_INTERVAL, Duration::from_secs(15));
         assert_eq!(NON_STREAM_TIMEOUT, Duration::from_secs(600));
         assert_eq!(CONNECT_TIMEOUT, Duration::from_secs(10));
+    }
+
+    #[test]
+    fn is_sse_response_detects_event_stream() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::CONTENT_TYPE,
+            HeaderValue::from_static("text/event-stream; charset=utf-8"),
+        );
+        assert!(is_sse_response(&headers));
+    }
+
+    #[test]
+    fn is_sse_response_false_for_json_and_missing() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        );
+        assert!(!is_sse_response(&headers));
+        assert!(!is_sse_response(&HeaderMap::new()));
     }
 
     #[tokio::test]

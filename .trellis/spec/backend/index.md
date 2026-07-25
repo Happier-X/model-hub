@@ -33,6 +33,7 @@
 | [Quality Guidelines](./quality-guidelines.md) | 质量门禁 | Current |
 | [Model Leaderboard](./model-leaderboard.md) | OpenRouter 榜单 IPC / 缓存 / 白名单 | Current |
 | [Upstream Access](./upstream-access.md) | 禁止用户上游测活；允许真实 Chat 与点击拉模型 | Current |
+| [Stream Forwarding](./stream-forwarding.md) | 流式续传超时、SSE 心跳保活、日志四态、换源边界 | Current |
 | [Thinking Effort](./thinking-effort.md) | 分组思考强度档位 → 各厂商字段翻译、家族识别、迁移 | Current |
 | [Desktop Overlay](./desktop-overlay.md) | 桌面悬浮状态条窗口、IPC 命令、配置字段与位置钳制 | Current |
 

@@ -237,6 +237,8 @@ async fn stream_idle_timeout_single_failure_log() {
 
     let env = setup_with_policy(ForwardPolicy {
         stream_idle_timeout: Duration::from_millis(80),
+        // 心跳远小于 idle 兜底：SSE 路径会先发若干 ping，再累计到 80ms 触发 504。
+        heartbeat_interval: Duration::from_millis(20),
     });
     let provider = env
         .stores
@@ -301,6 +303,90 @@ async fn stream_idle_timeout_single_failure_log() {
     assert_eq!(log.upstream_model, "m-stream");
     assert!(!log.error.contains("sk-"));
     assert!(!log.error.contains("messages"));
+}
+
+/// SSE 思考期静默：首包后到硬兜底前，客户端应持续收到 `: ping` 心跳保活字节，
+/// 而非立刻断流。兜底命中后仍记 504。
+#[tokio::test]
+async fn stream_sse_heartbeat_keeps_alive_before_hard_timeout() {
+    use futures_util::StreamExt;
+
+    let base = spawn_hanging_after_first_chunk_upstream().await;
+
+    // heartbeat 30ms 远小于 idle 300ms：兜底前应累计出多个 ping。
+    let env = setup_with_policy(ForwardPolicy {
+        stream_idle_timeout: Duration::from_millis(300),
+        heartbeat_interval: Duration::from_millis(30),
+    });
+    let provider = env
+        .stores
+        .create_provider(CreateProviderPayload {
+            name: "sse-hb".into(),
+            base_url: format!("{base}/v1"),
+            api_key: "k".into(),
+            enabled: true,
+        })
+        .unwrap();
+    env.stores
+        .create_group(CreateGroupPayload {
+            thinking_effort: None,
+            name: "g-hb".into(),
+            items: vec![GroupItemInput {
+                provider_id: provider.id,
+                upstream_model: "m-hb".into(),
+            }],
+        })
+        .unwrap();
+
+    let body = json!({
+        "model": "g-hb",
+        "messages": [{"role":"user","content":"hi"}],
+        "stream": true
+    });
+    let res = env
+        .router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/chat/completions")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_vec(&body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // 逐帧消费 body：兜底命中前收集到的字节里应含首包与至少一个心跳注释行。
+    let mut stream = res.into_body().into_data_stream();
+    let mut collected: Vec<u8> = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        match chunk {
+            Ok(bytes) => collected.extend_from_slice(&bytes),
+            Err(_) => break, // 硬兜底超时以流错误结束
+        }
+    }
+
+    let text = String::from_utf8_lossy(&collected);
+    assert!(text.contains("partial"), "应含上游首包: {text:?}");
+    assert!(
+        text.contains(": ping"),
+        "兜底前应收到 SSE 心跳保活字节: {text:?}"
+    );
+
+    // 兜底命中后仍记 504 静默超时。
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let logs = env
+        .stores
+        .list_logs(model_hub_lib::domain::log::LogQuery {
+            page: 1,
+            page_size: 50,
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(logs.items.len(), 1, "期望仅一条最终日志: {:?}", logs);
+    assert_eq!(logs.items[0].status_code, 504);
+    assert_eq!(logs.items[0].error, "流式静默超时");
 }
 
 /// 流式正常结束：记一条 200 成功日志。
@@ -449,6 +535,7 @@ async fn stream_abort_on_drop_writes_log() {
 
     let env = setup_with_policy(ForwardPolicy {
         stream_idle_timeout: Duration::from_secs(30),
+        heartbeat_interval: Duration::from_secs(30),
     });
     let provider = env
         .stores
