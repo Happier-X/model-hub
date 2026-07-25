@@ -15,6 +15,7 @@ import {
   type Group,
   type ModelLeaderboardSnapshot,
   type Provider,
+  type ThinkingEffort,
 } from "../api/tauri";
 import AppDialog from "../components/AppDialog.vue";
 import {
@@ -37,12 +38,32 @@ type QueueItemDraft = {
 
 type GroupFormValues = {
   name: string;
+  thinking_effort: ThinkingEffort;
   items: QueueItemDraft[];
 };
 
 const defaultFormValues: GroupFormValues = {
   name: "",
+  thinking_effort: "off",
   items: [],
+};
+
+const thinkingEffortOptions: HSelectOption[] = [
+  { value: "off", label: "关闭（不注入）" },
+  { value: "auto", label: "自动最佳" },
+  { value: "minimal", label: "最小" },
+  { value: "low", label: "低" },
+  { value: "medium", label: "中" },
+  { value: "high", label: "高" },
+];
+
+const thinkingEffortLabels: Record<ThinkingEffort, string> = {
+  off: "关闭",
+  auto: "自动最佳",
+  minimal: "最小",
+  low: "低",
+  medium: "中",
+  high: "高",
 };
 
 const groups = ref<Group[]>([]);
@@ -84,6 +105,7 @@ let nextItemUid = 1;
 const form = useForm({
   defaultValues: {
     name: defaultFormValues.name,
+    thinking_effort: defaultFormValues.thinking_effort,
     items: [] as QueueItemDraft[],
   },
   onSubmit: async ({ value }) => {
@@ -95,6 +117,7 @@ const form = useForm({
     try {
       const payload = {
         name: value.name,
+        thinking_effort: value.thinking_effort,
         items: value.items.filter((i) => i.provider_id > 0 && i.upstream_model.trim()),
       };
       if (mode === "update" && targetId !== null) {
@@ -226,7 +249,7 @@ async function refresh() {
 
 function resetForm() {
   editingGroupId.value = null;
-  form.reset({ name: "", items: [] });
+  form.reset({ name: "", thinking_effort: "off", items: [] });
   modelOptions.value = {};
   fetchingModels.value = {};
   bulkProviderId.value = providers.value[0]?.id ?? 0;
@@ -253,6 +276,7 @@ function startEdit(g: Group) {
   dialogOpen.value = true;
   form.reset({
     name: g.name,
+    thinking_effort: g.thinking_effort,
     items: g.items.map((i) => createQueueItem(i.provider_id, i.upstream_model)),
   });
   modelOptions.value = {};
@@ -580,6 +604,21 @@ onMounted(async () => {
                 />
               </template>
             </form.Field>
+            <form.Field name="thinking_effort">
+              <template #default="{ field }">
+                <label class="text-sm">
+                  <span class="mb-1 block text-slate-600">思考强度</span>
+                  <HSelect
+                    :options="thinkingEffortOptions"
+                    :model-value="field.state.value"
+                    @update:model-value="(v) => field.handleChange(v as ThinkingEffort)"
+                  />
+                  <span class="mt-1 block text-xs text-slate-500">
+                    代理转发时按上游模型家族翻译为对应字段；客户端自带则不覆盖。Claude 需自备足够 max_tokens。
+                  </span>
+                </label>
+              </template>
+            </form.Field>
           </div>
 
           <div class="mt-4 space-y-2">
@@ -786,6 +825,13 @@ onMounted(async () => {
         <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div>
             <span class="font-semibold">{{ g.name }}</span>
+            <span
+              v-if="g.thinking_effort && g.thinking_effort !== 'off'"
+              class="ml-2 rounded-full bg-violet-50 px-2 py-0.5 text-[11px] text-violet-700"
+              title="思考强度档位"
+            >
+              思考 · {{ thinkingEffortLabels[g.thinking_effort] ?? g.thinking_effort }}
+            </span>
           </div>
           <div class="space-x-2 text-sm">
             <HButton

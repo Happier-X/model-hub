@@ -40,11 +40,16 @@ export interface GroupItem {
   sort_order: number;
 }
 
+/** 思考强度档位：off 关闭（零侵入）、auto 自动最佳、其余为显式档位。 */
+export type ThinkingEffort = "off" | "minimal" | "low" | "medium" | "high" | "auto";
+
 export interface Group {
   id: number;
   name: string;
   items: GroupItem[];
   created_at: string;
+  /** 思考强度档位，默认 off。转发时按上游模型家族翻译成厂商字段。 */
+  thinking_effort: ThinkingEffort;
 }
 
 export interface RequestLog {
@@ -171,11 +176,13 @@ export const fetchProviderModels = (payload: {
 export const listGroups = () => invoke<Group[]>("list_groups");
 export const createGroup = (payload: {
   name: string;
+  thinking_effort?: ThinkingEffort;
   items: { provider_id: number; upstream_model: string }[];
 }) => invoke<Group>("create_group", { payload });
 export const updateGroup = (payload: {
   id: number;
   name: string;
+  thinking_effort?: ThinkingEffort;
   items: { provider_id: number; upstream_model: string }[];
 }) => invoke<Group>("update_group", { payload });
 export const deleteGroup = (id: number) => invoke<void>("delete_group", { id });

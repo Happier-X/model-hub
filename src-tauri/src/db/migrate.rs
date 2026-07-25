@@ -89,6 +89,15 @@ fn ensure_group_columns(conn: &Connection) -> Result<(), AppError> {
         )
         .map_err(|e| AppError::Database(format!("添加 groups.created_at 字段失败: {e}")))?;
     }
+
+    // 思考强度档位：老库缺列则加列，默认 off（保持零侵入行为）。
+    if !columns.contains("thinking_effort") {
+        conn.execute(
+            "ALTER TABLE groups ADD COLUMN thinking_effort TEXT NOT NULL DEFAULT 'off'",
+            [],
+        )
+        .map_err(|e| AppError::Database(format!("添加 groups.thinking_effort 字段失败: {e}")))?;
+    }
     Ok(())
 }
 

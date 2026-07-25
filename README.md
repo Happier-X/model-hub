@@ -7,6 +7,7 @@
 - 多供应商（Provider）配置（上游 API Key 保留在供应商配置中）
 - 分组 = 客户端 `model`，组内有序故障转移队列
 - 上游错误即按队列顺序故障转移（无熔断 / 无 `auto_failover` 开关）
+- 分组级「思考强度」：按 upstream 模型家族自动翻译成对应厂商字段（OpenAI `reasoning_effort` / Anthropic `thinking.budget_tokens` / Qwen `enable_thinking`），默认 `off` 零侵入。客户端请求体已带对应字段时保留客户端值不覆盖；Claude 家族仅注入 `thinking`，需客户端自行给足 `max_tokens`（须大于 `budget_tokens`）
 - 本机 `/v1/*` 无客户端鉴权（有无 `Authorization` 均放行；代理忽略客户端鉴权头）
 - `POST /v1/chat/completions`（非流式 + SSE）、`GET /v1/models`
 - 首页聚焦代理状态、请求统计与接入指引；设置页管理端口、数据目录和应用更新

@@ -288,13 +288,145 @@ fn chat_url(base_url: &str) -> String {
     }
 }
 
-fn rewrite_model(body: &Value, upstream_model: &str) -> Value {
+fn rewrite_model(body: &Value, upstream_model: &str, effort: &str) -> Value {
     let mut v = body.clone();
     if let Some(obj) = v.as_object_mut() {
         obj.insert("model".into(), Value::String(upstream_model.to_string()));
         strip_tool_strict(obj);
+        apply_thinking_effort(obj, upstream_model, effort);
     }
     v
+}
+
+/// 思考强度可注入的模型家族。
+enum ThinkingFamily {
+    /// OpenAI 推理系（gpt-5*、o1/o3/o4）。`supports_minimal` 仅原版 GPT-5 系为 true。
+    OpenAiReasoning { supports_minimal: bool },
+    /// Claude extended thinking（sonnet-4 / opus-4 / 3.7）。
+    ClaudeThinking,
+    /// Qwen3 思考模式（enable_thinking 顶层布尔字段，DashScope 形态）。
+    QwenThinking,
+    /// 其它一律不注入（gpt-4o、claude haiku、deepseek r1、qwen-turbo 等）。
+    None,
+}
+
+/// 词界匹配 o1/o3/o4：`(^|[-_/])o[134]([-_/]|$)`。避免误伤 `o1` 出现在其它 token 中。
+fn matches_o_series(model: &str) -> bool {
+    let bytes = model.as_bytes();
+    let is_sep = |b: u8| b == b'-' || b == b'_' || b == b'/';
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'o' {
+            let prev_ok = i == 0 || is_sep(bytes[i - 1]);
+            let has_digit = i + 1 < bytes.len() && matches!(bytes[i + 1], b'1' | b'3' | b'4');
+            let next_ok = i + 2 >= bytes.len() || is_sep(bytes[i + 2]);
+            if prev_ok && has_digit && next_ok {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
+/// 按 upstream 模型名（小写子串 + 词界）识别思考家族。
+fn thinking_family(upstream_model: &str) -> ThinkingFamily {
+    let m = upstream_model.to_ascii_lowercase();
+
+    // OpenAI 推理系：gpt-5 / gpt5 → 支持 minimal；o1/o3/o4 → 不支持 minimal。
+    if m.contains("gpt-5") || m.contains("gpt5") {
+        return ThinkingFamily::OpenAiReasoning {
+            supports_minimal: true,
+        };
+    }
+    if matches_o_series(&m) {
+        return ThinkingFamily::OpenAiReasoning {
+            supports_minimal: false,
+        };
+    }
+
+    // Claude extended thinking：需同时含 claude 与推理档型号标记。
+    if m.contains("claude")
+        && (m.contains("sonnet-4")
+            || m.contains("sonnet4")
+            || m.contains("opus-4")
+            || m.contains("opus4")
+            || m.contains("3-7")
+            || m.contains("3.7"))
+    {
+        return ThinkingFamily::ClaudeThinking;
+    }
+
+    // Qwen3 思考：qwen3* 或 qwen 且含 3。
+    if m.contains("qwen3") || (m.contains("qwen") && m.contains('3')) {
+        return ThinkingFamily::QwenThinking;
+    }
+
+    ThinkingFamily::None
+}
+
+/// OpenAI `reasoning_effort` 档位映射；o 系不支持 minimal 时降级 low。
+fn openai_reasoning_value(effort: &str, supports_minimal: bool) -> Option<&'static str> {
+    match effort {
+        "minimal" => Some(if supports_minimal { "minimal" } else { "low" }),
+        "low" => Some("low"),
+        "medium" => Some("medium"),
+        "high" => Some("high"),
+        "auto" => Some("medium"),
+        _ => None,
+    }
+}
+
+/// Claude `thinking.budget_tokens` 档位映射（均 ≥ 1024）。
+fn claude_budget_tokens(effort: &str) -> Option<i64> {
+    match effort {
+        "minimal" => Some(2048),
+        "low" => Some(4096),
+        "medium" => Some(8192),
+        "high" => Some(16384),
+        "auto" => Some(8192),
+        _ => None,
+    }
+}
+
+/// 按 upstream 模型家族翻译思考强度档位为对应厂商字段。
+///
+/// - `effort == "off"` → 入口直接 return，对所有家族都不改动 body。
+/// - 客户端已显式声明对应字段 → 保留，不覆盖。
+/// - 未识别家族 / 非推理模型 → 不注入。
+fn apply_thinking_effort(obj: &mut serde_json::Map<String, Value>, upstream_model: &str, effort: &str) {
+    if effort == "off" {
+        return;
+    }
+    match thinking_family(upstream_model) {
+        ThinkingFamily::OpenAiReasoning { supports_minimal } => {
+            if obj.contains_key("reasoning_effort") {
+                return;
+            }
+            if let Some(value) = openai_reasoning_value(effort, supports_minimal) {
+                obj.insert("reasoning_effort".into(), Value::String(value.into()));
+            }
+        }
+        ThinkingFamily::ClaudeThinking => {
+            if obj.contains_key("thinking") {
+                return;
+            }
+            if let Some(budget) = claude_budget_tokens(effort) {
+                obj.insert(
+                    "thinking".into(),
+                    serde_json::json!({ "type": "enabled", "budget_tokens": budget }),
+                );
+            }
+        }
+        ThinkingFamily::QwenThinking => {
+            if obj.contains_key("enable_thinking") {
+                return;
+            }
+            // 非 off 档一律开启（off 已在入口 return）。
+            obj.insert("enable_thinking".into(), Value::Bool(true));
+        }
+        ThinkingFamily::None => {}
+    }
 }
 
 /// 剥离 `tools[].function.strict`。
@@ -335,9 +467,10 @@ async fn attempt_non_stream(
     clients: &UpstreamClients,
     candidate: &Candidate,
     body: &Value,
+    effort: &str,
 ) -> Result<(StatusCode, HeaderMap, Bytes), AttemptError> {
     let url = chat_url(&candidate.provider.base_url);
-    let payload = rewrite_model(body, &candidate.upstream_model);
+    let payload = rewrite_model(body, &candidate.upstream_model, effort);
     let response = clients
         .non_stream
         .post(&url)
@@ -400,9 +533,10 @@ async fn attempt_stream_prime(
     clients: &UpstreamClients,
     candidate: &Candidate,
     body: &Value,
+    effort: &str,
 ) -> Result<StreamPrimeOk, AttemptError> {
     let url = chat_url(&candidate.provider.base_url);
-    let payload = rewrite_model(body, &candidate.upstream_model);
+    let payload = rewrite_model(body, &candidate.upstream_model, effort);
     let response = clients
         .stream
         .post(&url)
@@ -633,6 +767,7 @@ pub async fn forward_with_failover(
     body: &Value,
     stream: bool,
     policy: &ForwardPolicy,
+    effort: &str,
 ) -> Result<ForwardOutcome, (StatusCode, String)> {
     if candidates.is_empty() {
         return Err((StatusCode::BAD_GATEWAY, "分组无可用上游".into()));
@@ -659,7 +794,7 @@ pub async fn forward_with_failover(
         }
 
         let attempt_err: AttemptError = if stream {
-            match attempt_stream_prime(clients, candidate, body).await {
+            match attempt_stream_prime(clients, candidate, body, effort).await {
                 Ok(ok) => {
                     let provider_name = candidate.provider.name.clone();
                     let upstream_model = candidate.upstream_model.clone();
@@ -790,7 +925,7 @@ pub async fn forward_with_failover(
                 Err(e) => e,
             }
         } else {
-            match attempt_non_stream(clients, candidate, body).await {
+            match attempt_non_stream(clients, candidate, body, effort).await {
                 Ok((status, headers, bytes)) => {
                     let mut builder = Response::builder().status(status);
                     for (k, v) in headers.iter() {
@@ -1044,7 +1179,7 @@ mod tests {
     #[test]
     fn rewrite_model_replaces_field() {
         let body = serde_json::json!({"model":"group","messages":[]});
-        let out = rewrite_model(&body, "gpt-4o");
+        let out = rewrite_model(&body, "gpt-4o", "off");
         assert_eq!(out["model"], "gpt-4o");
     }
 
@@ -1071,7 +1206,7 @@ mod tests {
                 }
             ]
         });
-        let out = rewrite_model(&body, "gpt-4o");
+        let out = rewrite_model(&body, "gpt-4o", "off");
         // strict 已剥离，其余字段保留。
         assert!(out["tools"][0]["function"].get("strict").is_none());
         assert_eq!(out["tools"][0]["function"]["name"], "get_weather");
@@ -1083,8 +1218,129 @@ mod tests {
     #[test]
     fn rewrite_model_without_tools_is_noop() {
         let body = serde_json::json!({"model":"group","messages":[]});
-        let out = rewrite_model(&body, "gpt-4o");
+        let out = rewrite_model(&body, "gpt-4o", "off");
         assert!(out.get("tools").is_none());
+    }
+
+    // ---- 思考强度：家族识别 ----
+
+    #[test]
+    fn family_gpt5_supports_minimal() {
+        assert!(matches!(
+            thinking_family("gpt-5"),
+            ThinkingFamily::OpenAiReasoning { supports_minimal: true }
+        ));
+        assert!(matches!(
+            thinking_family("gpt-5-mini"),
+            ThinkingFamily::OpenAiReasoning { supports_minimal: true }
+        ));
+    }
+
+    #[test]
+    fn family_o_series_no_minimal() {
+        assert!(matches!(
+            thinking_family("o3"),
+            ThinkingFamily::OpenAiReasoning { supports_minimal: false }
+        ));
+        assert!(matches!(
+            thinking_family("o1-preview"),
+            ThinkingFamily::OpenAiReasoning { supports_minimal: false }
+        ));
+        // 词界：o1 出现在其它 token 中间不误伤。
+        assert!(matches!(thinking_family("model-o1x"), ThinkingFamily::None));
+    }
+
+    #[test]
+    fn family_claude_thinking() {
+        assert!(matches!(
+            thinking_family("claude-sonnet-4-20250514"),
+            ThinkingFamily::ClaudeThinking
+        ));
+        assert!(matches!(
+            thinking_family("claude-3-7-sonnet"),
+            ThinkingFamily::ClaudeThinking
+        ));
+        // Claude haiku 不注入。
+        assert!(matches!(thinking_family("claude-3-haiku"), ThinkingFamily::None));
+    }
+
+    #[test]
+    fn family_qwen3_thinking() {
+        assert!(matches!(thinking_family("qwen3-32b"), ThinkingFamily::QwenThinking));
+        assert!(matches!(thinking_family("qwen3-235b-a22b"), ThinkingFamily::QwenThinking));
+        // qwen-turbo 不注入。
+        assert!(matches!(thinking_family("qwen-turbo"), ThinkingFamily::None));
+    }
+
+    // ---- 思考强度：注入行为 ----
+
+    #[test]
+    fn off_never_injects_any_family() {
+        for model in ["gpt-5", "o3", "claude-sonnet-4", "qwen3-32b"] {
+            let out = rewrite_model(&serde_json::json!({"model":"g","messages":[]}), model, "off");
+            let obj = out.as_object().unwrap();
+            assert!(obj.get("reasoning_effort").is_none());
+            assert!(obj.get("thinking").is_none());
+            assert!(obj.get("enable_thinking").is_none());
+        }
+    }
+
+    #[test]
+    fn openai_injects_reasoning_effort() {
+        let out = rewrite_model(&serde_json::json!({"model":"g","messages":[]}), "gpt-5", "high");
+        assert_eq!(out["reasoning_effort"], "high");
+        // auto → medium。
+        let out = rewrite_model(&serde_json::json!({"model":"g"}), "gpt-5", "auto");
+        assert_eq!(out["reasoning_effort"], "medium");
+    }
+
+    #[test]
+    fn o_series_minimal_downgrades_to_low() {
+        let out = rewrite_model(&serde_json::json!({"model":"g"}), "o3", "minimal");
+        assert_eq!(out["reasoning_effort"], "low");
+        // gpt-5 保留 minimal。
+        let out = rewrite_model(&serde_json::json!({"model":"g"}), "gpt-5", "minimal");
+        assert_eq!(out["reasoning_effort"], "minimal");
+    }
+
+    #[test]
+    fn claude_injects_thinking_budget() {
+        let out = rewrite_model(&serde_json::json!({"model":"g"}), "claude-sonnet-4", "medium");
+        assert_eq!(out["thinking"]["type"], "enabled");
+        assert_eq!(out["thinking"]["budget_tokens"], 8192);
+    }
+
+    #[test]
+    fn qwen_injects_enable_thinking_true() {
+        let out = rewrite_model(&serde_json::json!({"model":"g"}), "qwen3-32b", "low");
+        assert_eq!(out["enable_thinking"], true);
+    }
+
+    #[test]
+    fn client_field_not_overwritten() {
+        // 客户端已带 reasoning_effort，保留不覆盖。
+        let out = rewrite_model(
+            &serde_json::json!({"model":"g","reasoning_effort":"low"}),
+            "gpt-5",
+            "high",
+        );
+        assert_eq!(out["reasoning_effort"], "low");
+        // 客户端已带 thinking，保留。
+        let out = rewrite_model(
+            &serde_json::json!({"model":"g","thinking":{"type":"enabled","budget_tokens":100}}),
+            "claude-sonnet-4",
+            "high",
+        );
+        assert_eq!(out["thinking"]["budget_tokens"], 100);
+    }
+
+    #[test]
+    fn non_reasoning_family_never_injects() {
+        let out = rewrite_model(&serde_json::json!({"model":"g"}), "gpt-4o", "high");
+        let obj = out.as_object().unwrap();
+        assert!(obj.get("reasoning_effort").is_none());
+        assert!(obj.get("thinking").is_none());
+        assert!(obj.get("enable_thinking").is_none());
     }
 
     #[test]

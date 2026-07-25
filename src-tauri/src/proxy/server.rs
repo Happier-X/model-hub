@@ -114,6 +114,7 @@ async fn chat_completions(State(state): State<AppState>, Json(body): Json<Value>
         &body,
         stream,
         &state.forward_policy,
+        &group.thinking_effort,
     )
     .await
     {

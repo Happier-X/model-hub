@@ -20,6 +20,8 @@ pub struct Group {
     pub name: String,
     pub items: Vec<GroupItem>,
     pub created_at: String,
+    /// 思考强度档位：off|minimal|low|medium|high|auto，默认 off。
+    pub thinking_effort: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -31,6 +33,8 @@ pub struct GroupItemInput {
 #[derive(Debug, Deserialize)]
 pub struct CreateGroupPayload {
     pub name: String,
+    #[serde(default)]
+    pub thinking_effort: Option<String>,
     pub items: Vec<GroupItemInput>,
 }
 
@@ -38,7 +42,21 @@ pub struct CreateGroupPayload {
 pub struct UpdateGroupPayload {
     pub id: i64,
     pub name: String,
+    #[serde(default)]
+    pub thinking_effort: Option<String>,
     pub items: Vec<GroupItemInput>,
+}
+
+/// 归一化思考强度档位；未知值回退 off。
+pub fn normalize_effort(raw: &str) -> &'static str {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "minimal" => "minimal",
+        "low" => "low",
+        "medium" => "medium",
+        "high" => "high",
+        "auto" => "auto",
+        _ => "off",
+    }
 }
 
 impl Stores {
@@ -135,7 +153,7 @@ impl Stores {
     pub fn list_groups(&self) -> Result<Vec<Group>, AppError> {
         self.with_conn(|conn| {
             let mut stmt = conn
-                .prepare("SELECT id, name, created_at FROM groups ORDER BY id ASC")
+                .prepare("SELECT id, name, created_at, thinking_effort FROM groups ORDER BY id ASC")
                 .map_err(|e| AppError::Database(e.to_string()))?;
             let rows = stmt
                 .query_map([], |row| {
@@ -143,18 +161,21 @@ impl Stores {
                         row.get::<_, i64>(0)?,
                         row.get::<_, String>(1)?,
                         row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
                     ))
                 })
                 .map_err(|e| AppError::Database(e.to_string()))?;
             let mut out = Vec::new();
             for r in rows {
-                let (id, name, created_at) = r.map_err(|e| AppError::Database(e.to_string()))?;
+                let (id, name, created_at, thinking_effort) =
+                    r.map_err(|e| AppError::Database(e.to_string()))?;
                 let items = Self::load_items(conn, id)?;
                 out.push(Group {
                     id,
                     name,
                     items,
                     created_at,
+                    thinking_effort,
                 });
             }
             Ok(out)
@@ -165,19 +186,20 @@ impl Stores {
         self.with_conn(|conn| {
             let row = conn
                 .query_row(
-                    "SELECT id, name, created_at FROM groups WHERE name = ?1",
+                    "SELECT id, name, created_at, thinking_effort FROM groups WHERE name = ?1",
                     [name],
                     |row| {
                         Ok((
                             row.get::<_, i64>(0)?,
                             row.get::<_, String>(1)?,
                             row.get::<_, String>(2)?,
+                            row.get::<_, String>(3)?,
                         ))
                     },
                 )
                 .optional()
                 .map_err(|e| AppError::Database(e.to_string()))?;
-            let Some((id, name, created_at)) = row else {
+            let Some((id, name, created_at, thinking_effort)) = row else {
                 return Ok(None);
             };
             let items = Self::load_items(conn, id)?;
@@ -186,6 +208,7 @@ impl Stores {
                 name,
                 items,
                 created_at,
+                thinking_effort,
             }))
         })
     }
@@ -212,13 +235,14 @@ impl Stores {
             return Err(AppError::Business("分组名不能为空".into()));
         }
         let created_at = chrono::Utc::now().to_rfc3339();
+        let effort = normalize_effort(payload.thinking_effort.as_deref().unwrap_or("off"));
         self.with_conn(|conn| {
             let tx = conn
                 .unchecked_transaction()
                 .map_err(|e| AppError::Database(e.to_string()))?;
             tx.execute(
-                "INSERT INTO groups (name, created_at) VALUES (?1, ?2)",
-                params![name, created_at],
+                "INSERT INTO groups (name, created_at, thinking_effort) VALUES (?1, ?2, ?3)",
+                params![name, created_at, effort],
             )
             .map_err(|e| {
                 if e.to_string().contains("UNIQUE") {
@@ -244,14 +268,15 @@ impl Stores {
         if name.is_empty() {
             return Err(AppError::Business("分组名不能为空".into()));
         }
+        let effort = normalize_effort(payload.thinking_effort.as_deref().unwrap_or("off"));
         self.with_conn(|conn| {
             let tx = conn
                 .unchecked_transaction()
                 .map_err(|e| AppError::Database(e.to_string()))?;
             let n = tx
                 .execute(
-                    "UPDATE groups SET name=?1 WHERE id=?2",
-                    params![name, payload.id],
+                    "UPDATE groups SET name=?1, thinking_effort=?2 WHERE id=?3",
+                    params![name, effort, payload.id],
                 )
                 .map_err(|e| {
                     if e.to_string().contains("UNIQUE") {
@@ -314,6 +339,7 @@ mod tests {
         let g = s
             .create_group(CreateGroupPayload {
                 name: "gpt".into(),
+                thinking_effort: None,
                 items: vec![
                     GroupItemInput {
                         provider_id: p2.id,
@@ -356,6 +382,7 @@ mod tests {
         let g = s
             .create_group(CreateGroupPayload {
                 name: "routing".into(),
+                thinking_effort: None,
                 items: vec![GroupItemInput {
                     provider_id: p1.id,
                     upstream_model: "model-a".into(),
@@ -369,6 +396,7 @@ mod tests {
             .update_group(UpdateGroupPayload {
                 id: g.id,
                 name: g.name.clone(),
+                thinking_effort: None,
                 items: vec![
                     GroupItemInput {
                         provider_id: p1.id,
@@ -391,5 +419,97 @@ mod tests {
         assert_eq!(updated.items[0].upstream_model, "model-a");
         assert_eq!(updated.items[1].provider_id, p2.id);
         assert_eq!(updated.items[1].upstream_model, "model-b");
+    }
+
+    #[test]
+    fn normalize_effort_maps_known_and_unknown() {
+        assert_eq!(normalize_effort("minimal"), "minimal");
+        assert_eq!(normalize_effort("LOW"), "low");
+        assert_eq!(normalize_effort(" medium "), "medium");
+        assert_eq!(normalize_effort("high"), "high");
+        assert_eq!(normalize_effort("auto"), "auto");
+        assert_eq!(normalize_effort("off"), "off");
+        // 未知值回退 off。
+        assert_eq!(normalize_effort(""), "off");
+        assert_eq!(normalize_effort("bogus"), "off");
+    }
+
+    #[test]
+    fn create_group_defaults_effort_to_off() {
+        let dir = tempdir().unwrap();
+        let s = Stores::new(open_db(&dir.path().join("t.db")).unwrap());
+        let p = s
+            .create_provider(CreateProviderPayload {
+                name: "p".into(),
+                base_url: "https://p.example/v1".into(),
+                api_key: "k".into(),
+                enabled: true,
+            })
+            .unwrap();
+        let g = s
+            .create_group(CreateGroupPayload {
+                name: "g".into(),
+                thinking_effort: None,
+                items: vec![GroupItemInput {
+                    provider_id: p.id,
+                    upstream_model: "m".into(),
+                }],
+            })
+            .unwrap();
+        assert_eq!(g.thinking_effort, "off");
+    }
+
+    #[test]
+    fn create_and_update_group_persist_normalized_effort() {
+        let dir = tempdir().unwrap();
+        let s = Stores::new(open_db(&dir.path().join("t.db")).unwrap());
+        let p = s
+            .create_provider(CreateProviderPayload {
+                name: "p".into(),
+                base_url: "https://p.example/v1".into(),
+                api_key: "k".into(),
+                enabled: true,
+            })
+            .unwrap();
+        // 创建时带 high。
+        let g = s
+            .create_group(CreateGroupPayload {
+                name: "g".into(),
+                thinking_effort: Some("high".into()),
+                items: vec![GroupItemInput {
+                    provider_id: p.id,
+                    upstream_model: "m".into(),
+                }],
+            })
+            .unwrap();
+        assert_eq!(g.thinking_effort, "high");
+
+        // 更新为未知值 → 归一化回退 off。
+        let updated = s
+            .update_group(UpdateGroupPayload {
+                id: g.id,
+                name: g.name.clone(),
+                thinking_effort: Some("bogus".into()),
+                items: vec![GroupItemInput {
+                    provider_id: p.id,
+                    upstream_model: "m".into(),
+                }],
+            })
+            .unwrap();
+        assert_eq!(updated.thinking_effort, "off");
+
+        // 更新为 auto。
+        let updated = s
+            .update_group(UpdateGroupPayload {
+                id: g.id,
+                name: g.name.clone(),
+                thinking_effort: Some("auto".into()),
+                items: vec![GroupItemInput {
+                    provider_id: p.id,
+                    upstream_model: "m".into(),
+                }],
+            })
+            .unwrap();
+        assert_eq!(updated.thinking_effort, "auto");
     }
 }
