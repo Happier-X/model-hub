@@ -912,3 +912,36 @@ happier-ui 0.0.1→0.0.2，修复破坏性 CSS 入口改名 style.css→styles.c
 - 8/8 proxy_failover 集成测试通过
 
 [OK] **Completed**
+
+
+## Session 25: 发布 v0.0.5
+
+**Date**: 2026-07-25
+**Task**: 发布 v0.0.5
+**Branch**: `master`
+
+### Summary
+
+Session summary was not supplied.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fa539df` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

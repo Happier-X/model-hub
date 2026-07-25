@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 24
+- **Total Sessions**: 25
 - **Last Active**: 2026-07-25
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~895 | Active |
+| `journal-1.md` | ~947 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 25 | 2026-07-25 | 发布 v0.0.5 | `fa539df` | `master` |
 | 24 | 2026-07-25 | 升级 happier-ui 0.0.2 + HCard/HSidebar 替换 | `c66feb3` | `master` |
 | 23 | 2026-07-24 | 主窗口无边框 + 自定义标题栏 | `c7b76c8` | `master` |
 | 22 | 2026-07-24 | 桌面悬浮状态条显示最近成功模型 | `97051ce`, `1d4e568`, `21b8cc3` | `master` |
