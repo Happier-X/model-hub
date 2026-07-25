@@ -117,28 +117,15 @@ fn error_message_from_json(v: &Value) -> String {
     "上游返回错误信封".chars().take(200).collect()
 }
 
-/// 判断 body 是否为明确的结构化错误信封（非正常 chat completion / SSE）。
+/// 对一段 JSON 字节判定是否为明确的结构化错误信封（不含 SSE 帧解析）。
 ///
-/// 识别：字符串 `error`、对象 `error.message`、`type: "error"`、以及无 `choices` 时的顶层 `message`。
-pub fn is_structured_error_body(bytes: &[u8]) -> Option<String> {
-    let trimmed = bytes
-        .iter()
-        .position(|&b| !b.is_ascii_whitespace())
-        .map(|i| &bytes[i..])
-        .unwrap_or(bytes);
-    if trimmed.is_empty() {
-        return None;
-    }
-    // 正常 SSE 首包以 data: / event: / : 注释 开头，不按 JSON 错误信封处理。
-    if trimmed.starts_with(b"data:")
-        || trimmed.starts_with(b"event:")
-        || trimmed.starts_with(b":")
-        || trimmed.starts_with(b"id:")
-    {
-        return None;
-    }
-
-    let v: Value = serde_json::from_slice(trimmed).ok()?;
+/// 规则（裸 JSON 与 SSE 帧内 data payload 共用，避免两套判定漂移）：
+/// - 有 `choices` 且 `type != "error"` → 非错误；`type == "error"` → 错误
+/// - 无 `choices` 且（字符串 `error` 非空 / 对象 `error.message` 非空 /
+///   `type == "error"` / 顶层 `message` 非空且 `object != "chat.completion"`）→ 错误
+/// - 非 JSON → 非错误
+fn classify_json_error_envelope(bytes: &[u8]) -> Option<String> {
+    let v: Value = serde_json::from_slice(bytes).ok()?;
     let obj = v.as_object()?;
 
     // 正常 chat completion 带 choices：默认不换源；
@@ -171,6 +158,78 @@ pub fn is_structured_error_body(bytes: &[u8]) -> Option<String> {
         return Some(error_message_from_json(&v));
     }
     None
+}
+
+/// 首字节（跳过前导空白后）是否形似 SSE 帧行前缀。
+fn looks_like_sse(trimmed: &[u8]) -> bool {
+    trimmed.starts_with(b"data:")
+        || trimmed.starts_with(b"event:")
+        || trimmed.starts_with(b":")
+        || trimmed.starts_with(b"id:")
+        || trimmed.starts_with(b"retry:")
+}
+
+/// 从 SSE 帧字节中抽取 `data:` 行拼接后的 payload。
+///
+/// - 按 `\n` / `\r\n` 拆行；收集 `data:`（可选单空格）行值，多行以 `\n` 拼接。
+/// - 忽略 `event:` / `id:` / `retry:` / 注释行（`:` 开头）/ 空行。
+/// - 无任何 `data:` 行、或拼接后去空白为空 → `None`（当正常 SSE 放行）。
+/// - 仅解析首 chunk 内可见的事件，不跨 chunk 重组。
+fn extract_sse_data_payload(trimmed: &[u8]) -> Option<Vec<u8>> {
+    let text = std::str::from_utf8(trimmed).ok()?;
+    let mut parts: Vec<&str> = Vec::new();
+    for raw_line in text.split('\n') {
+        let line = raw_line.strip_suffix('\r').unwrap_or(raw_line);
+        if let Some(rest) = line.strip_prefix("data:") {
+            // SSE 规范：`data:` 后可选单个前导空格。
+            let value = rest.strip_prefix(' ').unwrap_or(rest);
+            parts.push(value);
+        }
+        // 其它行（event:/id:/retry:/注释/空行）忽略。
+    }
+    if parts.is_empty() {
+        return None;
+    }
+    let payload = parts.join("\n");
+    if payload.trim().is_empty() {
+        return None;
+    }
+    Some(payload.into_bytes())
+}
+
+/// 判断 body 是否为明确的结构化错误信封（非正常 chat completion / SSE）。
+///
+/// 识别裸 JSON 与 **SSE 帧内 `data:` payload** 两种形态；`data: [DONE]`、纯注释、
+/// 无 `data:` 行、正常 delta（含 `choices`）一律放行。
+/// 识别字段：字符串 `error`、对象 `error.message`、`type: "error"`、无 `choices` 时的顶层 `message`。
+pub fn is_structured_error_body(bytes: &[u8]) -> Option<String> {
+    let trimmed = bytes
+        .iter()
+        .position(|&b| !b.is_ascii_whitespace())
+        .map(|i| &bytes[i..])
+        .unwrap_or(bytes);
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    // SSE 帧：剥出 data payload 再复用 JSON 错误信封判定；
+    // 无 data / [DONE] / 纯注释等正常 SSE 放行，避免误伤正常流。
+    if looks_like_sse(trimmed) {
+        let payload = extract_sse_data_payload(trimmed)?;
+        if payload
+            .iter()
+            .position(|&b| !b.is_ascii_whitespace())
+            .map(|i| &payload[i..])
+            .unwrap_or(&payload)
+            == b"[DONE]"
+        {
+            return None;
+        }
+        return classify_json_error_envelope(&payload);
+    }
+
+    // 裸 JSON 路径。
+    classify_json_error_envelope(trimmed)
 }
 
 fn redact_sensitive_summary(message: &str, api_key: &str) -> String {
@@ -884,6 +943,75 @@ mod tests {
     #[test]
     fn sse_first_chunk_not_error() {
         let body = b"data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\n";
+        assert!(is_structured_error_body(body).is_none());
+    }
+
+    #[test]
+    fn sse_data_error_string_failovers() {
+        let body = b"data: {\"error\":\"Invalid or expired credentials\"}\n\n";
+        let msg = is_structured_error_body(body).expect("SSE 帧字符串 error 应识别");
+        assert!(msg.contains("Invalid or expired credentials"));
+    }
+
+    #[test]
+    fn sse_data_error_object_message() {
+        let body =
+            b"data: {\"error\":{\"message\":\"No available accounts. Add an account first.\"}}\n\n";
+        let msg = is_structured_error_body(body).expect("SSE 帧 error.message 应识别");
+        assert!(msg.contains("No available accounts"));
+    }
+
+    #[test]
+    fn sse_data_type_error_failovers() {
+        let body = b"data: {\"type\":\"error\",\"error\":{\"message\":\"stream failed\"}}\n\n";
+        let msg = is_structured_error_body(body).expect("SSE 帧 type=error 应识别");
+        assert!(msg.contains("stream failed"));
+    }
+
+    #[test]
+    fn sse_done_not_error() {
+        let body = b"data: [DONE]\n\n";
+        assert!(is_structured_error_body(body).is_none());
+    }
+
+    #[test]
+    fn sse_comment_only_not_error() {
+        let body = b": ping\n\n";
+        assert!(is_structured_error_body(body).is_none());
+    }
+
+    #[test]
+    fn sse_event_only_not_error() {
+        let body = b"event: message\nid: 1\n\n";
+        assert!(is_structured_error_body(body).is_none());
+    }
+
+    #[test]
+    fn sse_crlf_data_error_failovers() {
+        let body = b"data: {\"error\":\"bad key\"}\r\n\r\n";
+        let msg = is_structured_error_body(body).expect("CRLF SSE 帧 error 应识别");
+        assert!(msg.contains("bad key"));
+    }
+
+    #[test]
+    fn sse_multiline_data_error_failovers() {
+        // 多个行首 data: 行按 \n 拼接为完整 JSON 错误信封（SSE 规范多 data 行做法）。
+        let body = b"data: {\"error\":\ndata: \"split across lines\"}\n\n";
+        let msg = is_structured_error_body(body).expect("多行 data 拼接后应识别");
+        assert!(msg.contains("split across lines"));
+    }
+
+    #[test]
+    fn sse_data_completion_delta_not_error() {
+        // 首包为正常 delta，即使无 choices 外层也不应误判（有 choices）。
+        let body = b"data: {\"id\":\"c1\",\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\n";
+        assert!(is_structured_error_body(body).is_none());
+    }
+
+    #[test]
+    fn sse_data_non_json_text_not_error() {
+        // SSE 里的非 JSON 文本不当错误信封（避免误伤）。
+        let body = b"data: keep-alive\n\n";
         assert!(is_structured_error_body(body).is_none());
     }
 

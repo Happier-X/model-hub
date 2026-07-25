@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "故障转移判定表与「响应提交前任意失败换源 / 2xx 错误信封升级 502」合同，本任务需扩展 SSE 帧信封并保持一致"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "请求日志成功语义与 failover 字段写入规则，改动不得误记 200 成功"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端代码风格、测试与 fmt/clippy 门禁要求"}

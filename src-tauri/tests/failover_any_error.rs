@@ -177,6 +177,126 @@ async fn structured_2xx_error_failovers_before_stream_commit() {
 }
 
 #[tokio::test]
+async fn sse_frame_error_envelope_failovers_before_stream_commit() {
+    // 第一家流式返回 HTTP 200 + SSE 帧内错误信封（data: {"error":...}），
+    // 首包提交前应换源到第二家；客户端最终拿到第二家的正常流。
+    let first = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string("data: {\"error\":\"Invalid or expired credentials\"}\n\n"),
+        )
+        .expect(1)
+        .mount(&first)
+        .await;
+    let second = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string(
+                    "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n",
+                ),
+        )
+        .expect(1)
+        .mount(&second)
+        .await;
+
+    let env = setup();
+    add_two_candidates(&env, &first.uri(), &second.uri(), "sse-frame-error");
+    let response = chat(env.router, "sse-frame-error", true).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body = String::from_utf8_lossy(&bytes);
+    assert!(body.contains("ok"), "应拿到第二家正常流: {body}");
+    assert!(
+        !body.contains("Invalid or expired credentials"),
+        "不应把第一家的错误帧提交给客户端: {body}"
+    );
+}
+
+#[tokio::test]
+async fn sse_frame_normal_delta_not_failover() {
+    // 第一家流式返回正常 SSE delta，不应换源；第二家不应被调用。
+    let first = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string(
+                    "data: {\"choices\":[{\"delta\":{\"content\":\"first\"}}]}\n\ndata: [DONE]\n\n",
+                ),
+        )
+        .expect(1)
+        .mount(&first)
+        .await;
+    let second = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("data: should-not-be-used\n\n"))
+        .expect(0)
+        .mount(&second)
+        .await;
+
+    let env = setup();
+    add_two_candidates(&env, &first.uri(), &second.uri(), "sse-normal-delta");
+    let response = chat(env.router, "sse-normal-delta", true).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body = String::from_utf8_lossy(&bytes);
+    assert!(body.contains("first"), "应拿到第一家正常流: {body}");
+}
+
+#[tokio::test]
+async fn exhausted_sse_frame_error_envelopes_return_502() {
+    // 两个候选均为 HTTP 200 + SSE 帧错误信封，耗尽后应升级为 502。
+    let first = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string("data: {\"error\":\"账号池为空\"}\n\n"),
+        )
+        .expect(1)
+        .mount(&first)
+        .await;
+    let second = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string("data: {\"error\":{\"message\":\"凭证已过期\"}}\n\n"),
+        )
+        .expect(1)
+        .mount(&second)
+        .await;
+
+    let env = setup();
+    add_two_candidates(&env, &first.uri(), &second.uri(), "all-sse-err");
+    let response = chat(env.router, "all-sse-err", true).await;
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body = String::from_utf8_lossy(&bytes);
+    assert!(
+        body.contains("所有上游均返回错误"),
+        "应包含汇总错误: {body}"
+    );
+    assert!(body.contains("凭证已过期"), "应含最后上游错误详情: {body}");
+}
+
+#[tokio::test]
 async fn network_error_failovers() {
     // 先绑定再释放端口，得到当前没有监听者的本机地址。
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
