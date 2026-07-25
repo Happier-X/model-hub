@@ -72,5 +72,5 @@ import "happier-ui/styles.css";    // .h-button 正确归入已声明的 compone
 
 ## Notes
 
-- 可考虑给 happier-ui 提 issue：`styles.css` 应在文件顶部声明 `@layer theme, base, components, utilities;`（或至少 `@layer components;`）以避免消费方引入顺序敏感。本任务先在消费侧修复。
+- 已给 happier-ui 提 issue [#10](https://github.com/Happier-X/happier-ui/issues/10)：`styles.css` 应在文件顶部声明 `@layer theme, base, components, utilities;`（或至少 `@layer components;`）以避免消费方引入顺序敏感。本任务已在消费侧修复。
 - 现场证据：`main.ts` 现顺序为 tokens → styles → index.css；`index.css` 首行 `@import "tailwindcss";`；happier `styles.css` 第一个 `@layer components {` 在第 393 行，之前无 layer 顺序声明。
