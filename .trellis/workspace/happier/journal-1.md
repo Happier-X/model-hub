@@ -1011,3 +1011,44 @@ Session summary was not supplied.
 ### Next Steps
 
 - None - task complete
+
+---
+
+**Date**: 2026-07-25
+**Task**: 修复 happier-ui 样式被 Tailwind preflight 覆盖（CSS layer 顺序）
+**Branch**: `master`
+
+### Summary
+
+用户报 HButton 等 happier-ui 组件「没样式」，怀疑用法错误。排查确认非用法问题，而是 main.ts 的 CSS 引入顺序打乱了 CSS 层叠层优先级。happier-ui 的 styles.css 把组件样式裸包在 `@layer components{}` 且未在文件顶部声明 layer 顺序；原顺序 tokens→styles→index.css 使 happier 的 `components` 被注册为首个层，Tailwind 展开的 theme/base/utilities 追加其后，最终 `components < base`，preflight（base 层 button reset：清背景/边框/内边距）反而覆盖 .h-button。改为 index.css（含 `@import "tailwindcss"`）先加载，Tailwind 先声明 `theme,base,components,utilities` 顺序，.h-button 正确归入 components 层（base < components），preflight 不再覆盖。
+
+### Main Changes
+
+- `src/main.ts`：调整 import 顺序为 index.css → tokens.css → styles.css；加 4 行注释护栏说明顺序敏感与根因。
+- `.trellis/spec/frontend/component-guidelines.md` §3.1：新增「CSS 引入顺序（强制）」约定，含根因图示与 issue #10 链接。
+- 给 happier-ui 提 issue [#10](https://github.com/Happier-X/happier-ui/issues/10)：建议 styles.css 顶部声明 layer 顺序，避免消费方顺序敏感。
+
+### 构建产物验证
+
+- dist CSS layer 顺序：`theme(2644) < base(5079) < components(8568) < utilities(8586)`；preflight `button` reset 在 pos=6688（base 层内），`.h-button` 在 pos=34872（components 层内）。base < components，preflight 不再覆盖组件样式。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `536f783` | fix(ui): 调整 CSS 引入顺序，修复 happier-ui 被 Tailwind preflight 覆盖 |
+| `a1111e9` | docs: 记录 happier-ui#10 与 CSS layer 引入顺序约束 |
+| `084780e` | chore(task): archive 07-25-fix-happier-ui-css-layer-order |
+
+### Testing
+
+- typecheck ✓ / lint ✓ / test:unit 23 ✓ / build 1858 modules ✓
+- 构建产物 layer 顺序人工核对 ✓
+
+### Status
+
+[OK] **Completed & Archived**
+
+### Next Steps
+
+- None - task complete
