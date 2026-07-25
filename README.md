@@ -69,21 +69,21 @@ OpenAI SDK 若要求非空 `api_key`，可填任意占位（如 `model-hub`）�
 | [Chat 上手](docs/chat-onboarding.md) | 联调与排错 |
 | [本机验收](docs/local-acceptance.md) | 可勾选联调清单 |
 | [MVP 验收](docs/mvp-acceptance.md) | 自动化 + 手工 AC |
-| [v0.0.5 更新日志](changelog/v0.0.5.md) | 当前版本发布说明 |
+| [v0.0.6 更新日志](changelog/v0.0.6.md) | 当前版本发布说明 |
 | [应用更新](docs/in-app-updater.md) | 签名、Secrets、tag 发布 |
 
 版本更新日志维护在仓库根目录 `changelog/vX.Y.Z.md`，并作为 GitHub Release 正文来源。
 
 ## 发布（Windows）
 
-版本号请同步：`package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`、`src-tauri/tauri.release.conf.json`（当前 **0.0.5**）。
+版本号请同步：`package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`、`src-tauri/tauri.release.conf.json`（当前 **0.0.6**）。
 
 1. 撰写/更新 `changelog/vX.Y.Z.md`
 2. 推送代码后打 tag：
 
 ```bash
-git tag v0.0.5
-git push origin v0.0.5
+git tag v0.0.6
+git push origin v0.0.6
 ```
 
 3. GitHub Actions `release-windows` 构建 NSIS、Updater 签名资产与 `latest.json`，Release 正文读取对应 changelog
