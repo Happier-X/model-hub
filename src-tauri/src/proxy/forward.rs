@@ -292,8 +292,25 @@ fn rewrite_model(body: &Value, upstream_model: &str) -> Value {
     let mut v = body.clone();
     if let Some(obj) = v.as_object_mut() {
         obj.insert("model".into(), Value::String(upstream_model.to_string()));
+        strip_tool_strict(obj);
     }
     v
+}
+
+/// 剥离 `tools[].function.strict`。
+///
+/// 该字段是 OpenAI Structured Outputs 特性，部分兼容上游不支持，原样透传会报
+/// `tool.function.strict is not supported`。移除仅关闭上游侧严格 schema 校验，
+/// 不改变工具定义与调用语义（下游仍返回 JSON 字符串 arguments，客户端照常解析）。
+fn strip_tool_strict(obj: &mut serde_json::Map<String, Value>) {
+    let Some(tools) = obj.get_mut("tools").and_then(|t| t.as_array_mut()) else {
+        return;
+    };
+    for tool in tools.iter_mut() {
+        if let Some(function) = tool.get_mut("function").and_then(|f| f.as_object_mut()) {
+            function.remove("strict");
+        }
+    }
 }
 
 fn map_headers(resp: &reqwest::Response) -> HeaderMap {
@@ -1029,6 +1046,45 @@ mod tests {
         let body = serde_json::json!({"model":"group","messages":[]});
         let out = rewrite_model(&body, "gpt-4o");
         assert_eq!(out["model"], "gpt-4o");
+    }
+
+    #[test]
+    fn rewrite_model_strips_tool_strict() {
+        let body = serde_json::json!({
+            "model": "group",
+            "messages": [],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "strict": true,
+                        "parameters": {"type": "object"}
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "no_strict",
+                        "parameters": {"type": "object"}
+                    }
+                }
+            ]
+        });
+        let out = rewrite_model(&body, "gpt-4o");
+        // strict 已剥离，其余字段保留。
+        assert!(out["tools"][0]["function"].get("strict").is_none());
+        assert_eq!(out["tools"][0]["function"]["name"], "get_weather");
+        assert_eq!(out["tools"][0]["function"]["parameters"]["type"], "object");
+        assert!(out["tools"][1]["function"].get("strict").is_none());
+        assert_eq!(out["tools"][1]["function"]["name"], "no_strict");
+    }
+
+    #[test]
+    fn rewrite_model_without_tools_is_noop() {
+        let body = serde_json::json!({"model":"group","messages":[]});
+        let out = rewrite_model(&body, "gpt-4o");
+        assert!(out.get("tools").is_none());
     }
 
     #[test]

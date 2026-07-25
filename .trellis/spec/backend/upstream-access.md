@@ -29,6 +29,7 @@
 1. 真实用户 Chat → 代理按分组队列顺序故障转移转发上游（响应提交前任意失败换下一启用候选项；无熔断跳过）。
 2. 用户在分组页点击「拉取模型」或「批量添加供应商模型」→ `GET {base}/models`（或兼容路径）。
 3. OpenRouter 公共 Models API（无用户 Key）。
+4. 转发前清洗请求体：`rewrite_model` 重写顶层 `model` 为上游模型名，并剥离 `tools[].function.strict`（OpenAI Structured Outputs 字段，部分兼容上游不支持，原样透传会报 `tool.function.strict is not supported`）。流式与非流式路径共用该清洗。
 
 **禁止**
 
@@ -45,6 +46,7 @@
 | 代码路径为启动/定时/测活 | **不得**发起上游 HTTP |
 | 用户未点击拉取模型 | 不得调用 `fetch_provider_models` |
 | 真实 Chat 候选失败 | 可按队列换源；仍属该次业务请求，不算后台测活 |
+| 转发前 body 含 `tools[].function.strict` | 剥离该字段后再转发；不改工具语义 |
 | 错误日志 | 不得打印完整上游 Key |
 
 ### 5. Good / Base / Bad Cases
