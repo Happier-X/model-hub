@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useForm } from "@tanstack/vue-form";
-import { HButton, HCard, HCheckbox, HEmpty, HInput } from "happier-ui";
+import {
+  HButton,
+  HCard,
+  HCheckbox,
+  HEmpty,
+  HInput,
+  HTable,
+  type HTableColumn,
+  HTextarea,
+} from "happier-ui";
 import {
   createProvider,
   deleteProvider,
@@ -31,6 +40,13 @@ const defaultFormValues: ProviderFormValues = {
 };
 
 const items = ref<Provider[]>([]);
+
+const providerColumns: HTableColumn[] = [
+  { key: "name", title: "名称" },
+  { key: "base_url", title: "Base URL" },
+  { key: "enabled", title: "启用" },
+  { key: "actions", title: "操作" },
+];
 const error = ref("");
 const message = ref("");
 const editingProviderId = ref<number | null>(null);
@@ -173,12 +189,13 @@ onMounted(refresh);
             支持 NewAPI 分享 JSON（含
             <code class="rounded bg-white px-1">newapi_channel_conn</code>）、环境变量、curl 与普通文本。仅本地解析，不会上传。
           </p>
-          <textarea
+          <!-- HTextarea 内部 textarea 无法接收等宽字体（class 落到外层 div，表单元素不继承 font-family）；
+               原 font-mono 暂时降级，等 happier-ui#8 补 monospace 支持后恢复。 -->
+          <HTextarea
             v-model="pasteText"
-            rows="4"
-            spellcheck="false"
+            :rows="4"
+            :spellcheck="false"
             placeholder='例如：{"_type":"newapi_channel_conn","key":"sk-...","url":"https://..."}'
-            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs"
           />
           <div class="mt-2 flex flex-wrap gap-2">
             <HButton variant="secondary" size="sm" type="button" @click="applyPaste">
@@ -253,33 +270,42 @@ onMounted(refresh);
       </template>
       <p v-if="error && !dialogOpen" class="mb-3 text-sm text-rose-600">{{ error }}</p>
       <HEmpty v-if="items.length === 0" class="app-empty-compact" title="暂无供应商" />
-      <div v-else class="overflow-x-auto">
-        <table class="min-w-full text-left text-sm">
-          <thead class="border-b text-slate-500">
-            <tr>
-              <th class="px-2 py-2">名称</th>
-              <th class="px-2 py-2">Base URL</th>
-              <th class="px-2 py-2">启用</th>
-              <th class="px-2 py-2">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="p in items" :key="p.id" class="border-b border-slate-100">
-              <td class="px-2 py-2 font-medium">{{ p.name }}</td>
-              <td class="px-2 py-2 font-mono text-xs">{{ p.base_url }}</td>
-              <td class="px-2 py-2">{{ p.enabled ? "启用" : "停用" }}</td>
-              <td class="px-2 py-2 space-x-2">
-                <HButton variant="ghost" size="sm" type="button" @click="startEdit(p)">
-                  编辑
-                </HButton>
-                <HButton variant="danger-soft" size="sm" type="button" @click="remove(p.id)">
-                  删除
-                </HButton>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <!-- HTable data 只接受 Record<string, unknown>[]，interface 无索引签名需双重断言；等 happier-ui#9 泛型化后简化 -->
+      <HTable
+        v-else
+        :columns="providerColumns"
+        :data="items as unknown as Record<string, unknown>[]"
+        row-key="id"
+        class="text-sm"
+      >
+        <template #cell="{ column, row }">
+          <template v-if="column.key === 'name'">
+            <span class="font-medium">{{ (row as Provider).name }}</span>
+          </template>
+          <template v-else-if="column.key === 'base_url'">
+            <span class="font-mono text-xs">{{ (row as Provider).base_url }}</span>
+          </template>
+          <template v-else-if="column.key === 'enabled'">
+            {{ (row as Provider).enabled ? "启用" : "停用" }}
+          </template>
+          <template v-else-if="column.key === 'actions'">
+            <span class="space-x-2">
+              <HButton variant="ghost" size="sm" type="button" @click="startEdit(row as Provider)">
+                编辑
+              </HButton>
+              <HButton
+                variant="danger-soft"
+                size="sm"
+                type="button"
+                @click="remove((row as Provider).id)"
+              >
+                删除
+              </HButton>
+            </span>
+          </template>
+          <template v-else>{{ (row as Provider)[column.key as keyof Provider] }}</template>
+        </template>
+      </HTable>
     </HCard>
   </div>
 </template>

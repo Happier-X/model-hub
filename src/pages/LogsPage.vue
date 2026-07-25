@@ -1,6 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { HButton, HCard, HCheckbox, HEmpty, HInput } from "happier-ui";
+import {
+  HBadge,
+  HButton,
+  HCard,
+  HCheckbox,
+  HInput,
+  HPagination,
+  HSelect,
+  HTable,
+  type HSelectOption,
+  type HTableColumn,
+} from "happier-ui";
 import {
   clearLogs,
   extractInvokeError,
@@ -9,7 +20,41 @@ import {
   type LogStatusClass,
   type RequestLog,
 } from "../api/tauri";
-import { statusCodeClass } from "../utils/statusCode";
+
+const statusOptions: HSelectOption[] = [
+  { value: "all", label: "全部" },
+  { value: "2xx", label: "2xx 成功" },
+  { value: "4xx", label: "4xx 客户端" },
+  { value: "5xx", label: "5xx 上游/网关" },
+  { value: "error", label: "错误（≥400 或有 error）" },
+];
+
+const pageSizeOptions: HSelectOption[] = [
+  { value: 20, label: "20" },
+  { value: 50, label: "50" },
+  { value: 100, label: "100" },
+];
+
+function statusCodeVariant(
+  code: number | null | undefined,
+): "default" | "success" | "warning" | "danger" {
+  if (!code) return "default";
+  if (code >= 200 && code < 300) return "success";
+  if (code >= 400 && code < 500) return "warning";
+  if (code >= 500) return "danger";
+  return "default";
+}
+
+const logColumns: HTableColumn[] = [
+  { key: "time", title: "时间" },
+  { key: "group_name", title: "分组" },
+  { key: "provider_name", title: "供应商" },
+  { key: "upstream_model", title: "上游模型" },
+  { key: "status_code", title: "状态" },
+  { key: "use_time_ms", title: "耗时(ms)" },
+  { key: "error", title: "错误" },
+  { key: "failover", title: "故障转移" },
+];
 
 const items = ref<RequestLog[]>([]);
 const total = ref(0);
@@ -140,29 +185,28 @@ onUnmounted(() => {
             placeholder="子串匹配"
           />
         </div>
-        <label class="text-sm">
-          <span class="mb-1 block text-slate-500">状态</span>
-          <select v-model="statusClass" class="rounded-lg border border-slate-300 px-3 py-2 text-sm">
-            <option value="all">全部</option>
-            <option value="2xx">2xx 成功</option>
-            <option value="4xx">4xx 客户端</option>
-            <option value="5xx">5xx 上游/网关</option>
-            <option value="error">错误（≥400 或有 error）</option>
-          </select>
-        </label>
+        <div class="w-44">
+          <HSelect
+            label="状态"
+            :options="statusOptions"
+            :model-value="statusClass"
+            @update:model-value="(v) => (statusClass = v as LogStatusClass)"
+          />
+        </div>
         <HCheckbox v-model="failoverOnly" label="仅故障转移" />
-        <label class="text-sm">
-          <span class="mb-1 block text-slate-500">每页</span>
-          <select
-            v-model.number="pageSize"
-            class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            @change="onPageSizeChange"
-          >
-            <option :value="20">20</option>
-            <option :value="50">50</option>
-            <option :value="100">100</option>
-          </select>
-        </label>
+        <div class="w-24">
+          <HSelect
+            label="每页"
+            :options="pageSizeOptions"
+            :model-value="pageSize"
+            @update:model-value="
+              (v) => {
+                pageSize = Number(v);
+                void onPageSizeChange();
+              }
+            "
+          />
+        </div>
         <HButton variant="primary" type="button" :disabled="loading" @click="applyFilters">
           筛选
         </HButton>
@@ -195,70 +239,52 @@ onUnmounted(() => {
         <span
           >筛选 {{ total }} 条 · 库内 {{ storedTotal }} 条 · 第 {{ page }} / {{ totalPages }} 页</span
         >
-        <div class="flex gap-2">
-          <HButton
-            variant="outline"
-            size="sm"
-            type="button"
-            :disabled="loading || page <= 1"
-            @click="goPage(page - 1)"
-          >
-            上一页
-          </HButton>
-          <HButton
-            variant="outline"
-            size="sm"
-            type="button"
-            :disabled="loading || page >= totalPages"
-            @click="goPage(page + 1)"
-          >
-            下一页
-          </HButton>
-        </div>
+        <HPagination
+          :current="page"
+          :total="total"
+          :page-size="pageSize"
+          :disabled="loading"
+          @change="({ current }) => goPage(current)"
+        />
       </div>
-      <div v-if="loading && items.length === 0" class="text-sm text-slate-500">加载中…</div>
-      <HEmpty v-else-if="items.length === 0" class="app-empty-compact" title="暂无日志" />
-      <div v-else class="overflow-x-auto">
-        <table class="min-w-full text-left text-xs">
-          <thead class="border-b text-slate-500">
-            <tr>
-              <th class="px-2 py-2">时间</th>
-              <th class="px-2 py-2">分组</th>
-              <th class="px-2 py-2">供应商</th>
-              <th class="px-2 py-2">上游模型</th>
-              <th class="px-2 py-2">状态</th>
-              <th class="px-2 py-2">耗时(ms)</th>
-              <th class="px-2 py-2">错误</th>
-              <th class="px-2 py-2">故障转移</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="log in items" :key="log.id" class="border-b border-slate-100 align-top">
-              <td class="px-2 py-2 whitespace-nowrap">{{ formatTime(log.time) }}</td>
-              <td class="px-2 py-2">{{ log.group_name }}</td>
-              <td class="px-2 py-2">{{ log.provider_name }}</td>
-              <td class="px-2 py-2 font-mono">{{ log.upstream_model }}</td>
-              <td class="px-2 py-2">
-                <span
-                  class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium tabular-nums"
-                  :class="statusCodeClass(log.status_code)"
-                >
-                  {{ log.status_code || "-" }}
-                </span>
-              </td>
-              <td class="px-2 py-2">{{ log.use_time_ms }}</td>
-              <td class="max-w-[200px] px-2 py-2 break-words text-rose-600">{{ log.error || "-" }}</td>
-              <td class="max-w-[220px] px-2 py-2 break-words">
-                <template v-if="log.failover_from || log.failover_to">
-                  {{ log.failover_from }} → {{ log.failover_to }}
-                  <div class="text-slate-500">{{ log.failover_reason }}</div>
-                </template>
-                <template v-else>-</template>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <!-- HTable data 只接受 Record<string, unknown>[]，interface 无索引签名需双重断言；等 happier-ui#9 泛型化后简化 -->
+      <HTable
+        :columns="logColumns"
+        :data="items as unknown as Record<string, unknown>[]"
+        row-key="id"
+        :loading="loading"
+        empty-text="暂无日志"
+        class="text-xs"
+      >
+        <template #cell="{ column, row }">
+          <template v-if="column.key === 'time'">
+            <span class="whitespace-nowrap">{{ formatTime((row as RequestLog).time) }}</span>
+          </template>
+          <template v-else-if="column.key === 'upstream_model'">
+            <span class="font-mono">{{ (row as RequestLog).upstream_model }}</span>
+          </template>
+          <template v-else-if="column.key === 'status_code'">
+            <HBadge :variant="statusCodeVariant((row as RequestLog).status_code)">
+              {{ (row as RequestLog).status_code || "-" }}
+            </HBadge>
+          </template>
+          <template v-else-if="column.key === 'error'">
+            <span class="block max-w-[200px] break-words text-rose-600">{{
+              (row as RequestLog).error || "-"
+            }}</span>
+          </template>
+          <template v-else-if="column.key === 'failover'">
+            <div class="max-w-[220px] break-words">
+              <template v-if="(row as RequestLog).failover_from || (row as RequestLog).failover_to">
+                {{ (row as RequestLog).failover_from }} → {{ (row as RequestLog).failover_to }}
+                <div class="text-slate-500">{{ (row as RequestLog).failover_reason }}</div>
+              </template>
+              <template v-else>-</template>
+            </div>
+          </template>
+          <template v-else>{{ (row as RequestLog)[column.key as keyof RequestLog] }}</template>
+        </template>
+      </HTable>
     </HCard>
   </div>
 </template>

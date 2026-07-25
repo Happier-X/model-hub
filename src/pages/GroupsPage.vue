@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useForm } from "@tanstack/vue-form";
-import { HButton, HCard, HEmpty, HInput } from "happier-ui";
+import { HButton, HCard, HEmpty, HInput, HSelect, type HSelectOption } from "happier-ui";
 import {
   createGroup,
   deleteGroup,
@@ -65,6 +65,17 @@ const bulkMessage = ref("");
 const dragFromIndex = ref<number | null>(null);
 const dragOverIndex = ref<number | null>(null);
 const sortMode = ref<QueueSortMode>("local");
+
+const sortModeOptions: HSelectOption[] = [
+  { value: "local", label: "本地启发式" },
+  { value: "external_intelligence", label: "外部通用能力" },
+  { value: "external_coding", label: "外部编码能力" },
+];
+
+const providerSelectOptions = computed<HSelectOption[]>(() => [
+  { value: 0, label: "选择供应商" },
+  ...providers.value.map((p) => ({ value: p.id, label: p.name })),
+]);
 const leaderboard = ref<ModelLeaderboardSnapshot | null>(null);
 const leaderboardLoading = ref(false);
 const leaderboardError = ref("");
@@ -577,14 +588,12 @@ onMounted(async () => {
               <div class="flex flex-wrap items-center gap-3">
                 <label class="flex items-center gap-1.5 text-sm text-slate-600">
                   <span class="text-slate-500">排序方式</span>
-                  <select
-                    v-model="sortMode"
-                    class="rounded border border-slate-300 bg-white px-2 py-1 text-sm"
-                  >
-                    <option value="local">本地启发式</option>
-                    <option value="external_intelligence">外部通用能力</option>
-                    <option value="external_coding">外部编码能力</option>
-                  </select>
+                  <HSelect
+                    class="w-40"
+                    :options="sortModeOptions"
+                    :model-value="sortMode"
+                    @update:model-value="(v) => (sortMode = v as QueueSortMode)"
+                  />
                 </label>
                 <HButton
                   variant="ghost"
@@ -613,13 +622,12 @@ onMounted(async () => {
             >
               <label class="text-sm">
                 <span class="mb-1 block text-slate-600">批量添加供应商全部模型</span>
-                <select
-                  v-model.number="bulkProviderId"
-                  class="min-w-48 rounded border border-slate-300 bg-white px-2 py-1.5 text-sm"
-                >
-                  <option :value="0">选择供应商</option>
-                  <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
-                </select>
+                <HSelect
+                  class="min-w-48"
+                  :options="providerSelectOptions"
+                  :model-value="bulkProviderId"
+                  @update:model-value="(v) => (bulkProviderId = Number(v))"
+                />
               </label>
               <HButton
                 variant="outline"
@@ -683,18 +691,11 @@ onMounted(async () => {
                 ·
                 {{ queueDisplayScores[index]?.score }}
               </span>
-              <select
-                :value="item.provider_id"
-                class="rounded border border-slate-300 px-2 py-1 text-sm"
-                @change="
-                  updateItemAt(index, {
-                    provider_id: Number(($event.target as HTMLSelectElement).value),
-                  })
-                "
-              >
-                <option :value="0">选择供应商</option>
-                <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
-              </select>
+              <HSelect
+                :options="providerSelectOptions"
+                :model-value="item.provider_id"
+                @update:model-value="(v) => updateItemAt(index, { provider_id: Number(v) })"
+              />
               <div class="flex min-w-[200px] flex-1 flex-col gap-1">
                 <div class="flex flex-wrap items-center gap-2">
                   <input

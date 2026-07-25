@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import { HButton, HCard } from "happier-ui";
+import { computed, onMounted, ref } from "vue";
+import { HBadge, HButton, HCard } from "happier-ui";
 import {
   extractInvokeError,
   getLastSuccessRequest,
@@ -21,6 +21,12 @@ const stats = ref<RequestStats | null>(null);
 const statsError = ref("");
 const lastSuccess = ref<LastSuccessRequest | null>(null);
 const lastSuccessError = ref("");
+
+const statusBadgeVariant = computed<"success" | "danger" | "default">(() => {
+  if (status.value?.state === "running") return "success";
+  if (status.value?.state === "error") return "danger";
+  return "default";
+});
 
 function formatSuccessTime(unix: number): string {
   if (!unix) return "-";
@@ -178,18 +184,9 @@ onMounted(refresh);
         <div>
           <div class="text-slate-500">状态</div>
           <div class="mt-1 font-medium">
-            <span
-              class="inline-flex rounded-full px-2 py-0.5 text-xs"
-              :class="
-                status?.state === 'running'
-                  ? 'bg-emerald-100 text-emerald-700'
-                  : status?.state === 'error'
-                    ? 'bg-rose-100 text-rose-700'
-                    : 'bg-slate-100 text-slate-600'
-              "
-            >
+            <HBadge :variant="statusBadgeVariant">
               {{ status?.state || "未知" }}
-            </span>
+            </HBadge>
           </div>
         </div>
         <div>
