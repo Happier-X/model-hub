@@ -24,8 +24,8 @@ importers:
         specifier: 2.10.1
         version: 2.10.1
       happier-ui:
-        specifier: 0.0.3
-        version: 0.0.3(@lucide/vue@1.26.0(vue@3.5.18(typescript@5.9.2)))(tailwindcss@4.1.13)(vue@3.5.18(typescript@5.9.2))
+        specifier: 0.0.6
+        version: 0.0.6(@lucide/vue@1.26.0(vue@3.5.18(typescript@5.9.2)))(tailwindcss@4.1.13)(vue@3.5.18(typescript@5.9.2))
       vue:
         specifier: 3.5.18
         version: 3.5.18(typescript@5.9.2)
@@ -898,6 +898,9 @@ packages:
   csstype@3.2.3:
     resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
 
+  dayjs@1.11.21:
+    resolution: {integrity: sha512-98IT+HOahAisibz/yjKbzuOBwYcjJ7BCLPzARyHiyEBmRz4fatF+KPJszEHXsGYjUG234aH/cOjW1wwTbKUZlA==}
+
   de-indent@1.0.2:
     resolution: {integrity: sha512-e/1zu3xH5MQryN2zdVaF0OrdNLUbvWxzMbi+iNA6Bky7l1RoP8a2fIbRocyHclXt/arDrrR6lL3TqFD9pMQTsg==}
 
@@ -1065,8 +1068,8 @@ packages:
   graphemer@1.4.0:
     resolution: {integrity: sha512-EtKwoO6kxCL9WO5xipiHTZlSzBm7WLT627TqC/uVRd0HKmq8NXyebnNYxDoBi7wt8eTWrUrKXCOVaFq9x1kgag==}
 
-  happier-ui@0.0.3:
-    resolution: {integrity: sha512-ByfAAuOOeM9ojm3yuePhL8jx4ywFp0vznyRf6qM+rZeIMnF0S9ZC8QvsfUXbHFUy31JIwtjFgNpMiukjC2CUEA==}
+  happier-ui@0.0.6:
+    resolution: {integrity: sha512-QSLSZuPcXUQs26WuBYpeePMM7+muar91SMHYZXzDN8LqJKajm4HK3FyBKVPfdwolVrC5Spnos0yu1zxPG6qk5g==}
     engines: {node: '>=18'}
     peerDependencies:
       '@lucide/vue': ^1.25.0
@@ -2191,6 +2194,8 @@ snapshots:
 
   csstype@3.2.3: {}
 
+  dayjs@1.11.21: {}
+
   de-indent@1.0.2: {}
 
   debug@4.4.3:
@@ -2386,9 +2391,10 @@ snapshots:
 
   graphemer@1.4.0: {}
 
-  happier-ui@0.0.3(@lucide/vue@1.26.0(vue@3.5.18(typescript@5.9.2)))(tailwindcss@4.1.13)(vue@3.5.18(typescript@5.9.2)):
+  happier-ui@0.0.6(@lucide/vue@1.26.0(vue@3.5.18(typescript@5.9.2)))(tailwindcss@4.1.13)(vue@3.5.18(typescript@5.9.2)):
     dependencies:
       '@lucide/vue': 1.26.0(vue@3.5.18(typescript@5.9.2))
+      dayjs: 1.11.21
       tailwindcss: 4.1.13
       vue: 3.5.18(typescript@5.9.2)
 

@@ -116,6 +116,22 @@ export interface LastSuccessRequest {
   status_code: number;
 }
 
+/** 单个本地自然日的请求计数 */
+export interface DailyCount {
+  /** 本地自然日 00:00 的 unix 秒 */
+  day_start_unix: number;
+  count: number;
+}
+
+/** 每日请求量聚合（仅含 count>0 的日期，升序） */
+export interface RequestDailyCounts {
+  days: DailyCount[];
+  /** 窗口首日 00:00 的 unix 秒 */
+  start_unix: number;
+  /** 今日次日 00:00 的 unix 秒（半开区间） */
+  end_unix: number;
+}
+
 export interface InvokeErrorShape {
   code?: string;
   message?: string;
@@ -202,6 +218,8 @@ export const purgeExpiredLogs = () => invoke<LogPurgeResult>("purge_expired_logs
 export const getRequestStats = () => invoke<RequestStats>("get_request_stats");
 export const getLastSuccessRequest = () =>
   invoke<LastSuccessRequest | null>("get_last_success_request");
+export const getRequestDailyCounts = (days?: number) =>
+  invoke<RequestDailyCounts>("get_request_daily_counts", days == null ? {} : { days });
 
 export interface ExportToPiResult {
   path: string;

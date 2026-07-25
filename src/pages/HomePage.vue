@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { HBadge, HButton, HCard } from "happier-ui";
+import { HBadge, HButton, HCard, HHeatmap } from "happier-ui";
+import type { HHeatmapData } from "happier-ui";
 import {
   extractInvokeError,
   getLastSuccessRequest,
+  getRequestDailyCounts,
   getRequestStats,
   proxyStart,
   proxyStatus,
   proxyStop,
   type LastSuccessRequest,
   type ProxyStatus,
+  type RequestDailyCounts,
   type RequestStats,
 } from "../api/tauri";
 
@@ -21,6 +24,13 @@ const stats = ref<RequestStats | null>(null);
 const statsError = ref("");
 const lastSuccess = ref<LastSuccessRequest | null>(null);
 const lastSuccessError = ref("");
+const daily = ref<RequestDailyCounts | null>(null);
+const dailyError = ref("");
+const dailyLoading = ref(false);
+
+const heatmapData = computed<HHeatmapData>(
+  () => daily.value?.days.map((d) => ({ timestamp: d.day_start_unix * 1000, value: d.count })) ?? [],
+);
 
 const statusBadgeVariant = computed<"success" | "danger" | "default">(() => {
   if (status.value?.state === "running") return "success";
@@ -54,7 +64,19 @@ async function refreshStats() {
     .catch((e) => {
       lastSuccessError.value = extractInvokeError(e);
     });
-  await Promise.all([statsPromise, lastSuccessPromise]);
+  dailyLoading.value = true;
+  const dailyPromise = getRequestDailyCounts()
+    .then((value) => {
+      daily.value = value;
+      dailyError.value = "";
+    })
+    .catch((e) => {
+      dailyError.value = extractInvokeError(e);
+    })
+    .finally(() => {
+      dailyLoading.value = false;
+    });
+  await Promise.all([statsPromise, lastSuccessPromise, dailyPromise]);
 }
 
 async function refresh() {
@@ -174,6 +196,17 @@ onMounted(refresh);
         <p v-else-if="!lastSuccessError" class="mt-3 text-sm text-slate-500">暂无成功请求</p>
         <p v-if="lastSuccessError" class="mt-3 text-sm text-rose-600">{{ lastSuccessError }}</p>
       </div>
+    </HCard>
+
+    <HCard variant="outlined" padding="md">
+      <template #header>
+        <h2 class="text-base font-semibold">每日请求量（近一年）</h2>
+      </template>
+      <p class="mb-3 text-xs text-slate-500">
+        按本地自然日聚合的请求总条数；随上方「刷新统计」一起刷新。
+      </p>
+      <HHeatmap :data="heatmapData" :loading="dailyLoading" />
+      <p v-if="dailyError" class="mt-3 text-sm text-rose-600">{{ dailyError }}</p>
     </HCard>
 
     <HCard variant="outlined" padding="md">

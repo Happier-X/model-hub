@@ -475,6 +475,40 @@ impl Stores {
             .map_err(|e| AppError::Database(e.to_string()))
         })
     }
+
+    /// 按本地自然日聚合过去 `days` 天（含今日）的请求总量。
+    /// 仅返回 `count > 0` 的日期，按 `day_start_unix` 升序。
+    pub fn request_daily_counts(&self, days: u32) -> Result<RequestDailyCounts, AppError> {
+        let days = days.clamp(1, DAILY_COUNTS_MAX_DAYS);
+        let (start_unix, end_unix) = daily_window_bounds(days);
+        self.with_conn(|conn| {
+            let mut stmt = conn
+                .prepare("SELECT time FROM request_logs WHERE time >= ?1 AND time < ?2")
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            let mut buckets: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
+            let rows = stmt
+                .query_map(params![start_unix, end_unix], |row| row.get::<_, i64>(0))
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            for time in rows {
+                let time = time.map_err(|e| AppError::Database(e.to_string()))?;
+                let bucket = local_day_start_unix(time);
+                *buckets.entry(bucket).or_insert(0) += 1;
+            }
+            let mut days_out: Vec<DailyCount> = buckets
+                .into_iter()
+                .map(|(day_start_unix, count)| DailyCount {
+                    day_start_unix,
+                    count,
+                })
+                .collect();
+            days_out.sort_by_key(|d| d.day_start_unix);
+            Ok(RequestDailyCounts {
+                days: days_out,
+                start_unix,
+                end_unix,
+            })
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -497,6 +531,28 @@ pub struct RequestStats {
     pub day_end_unix: i64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct DailyCount {
+    /// 本地自然日 00:00 的 unix 秒
+    pub day_start_unix: i64,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RequestDailyCounts {
+    /// 仅含 `count > 0` 的日期，升序
+    pub days: Vec<DailyCount>,
+    /// 窗口首日 00:00 的 unix 秒
+    pub start_unix: i64,
+    /// 今日次日 00:00 的 unix 秒（半开区间）
+    pub end_unix: i64,
+}
+
+/// 每日计数默认窗口（天）：约 12 个自然月。
+pub const DAILY_COUNTS_DEFAULT_DAYS: u32 = 365;
+/// 每日计数允许的最大窗口（天），防一次拉太多桶。
+pub const DAILY_COUNTS_MAX_DAYS: u32 = 400;
+
 fn local_day_bounds_unix() -> (i64, i64) {
     use chrono::{Local, TimeZone};
     let today = Local::now().date_naive();
@@ -514,6 +570,40 @@ fn local_day_bounds_unix() -> (i64, i64) {
         .map(|dt| dt.timestamp())
         .unwrap_or_else(|| end.and_utc().timestamp());
     (start_ts, end_ts)
+}
+
+/// 把任意 unix 秒归一化到「所在本地自然日 00:00」的 unix 秒。
+fn local_day_start_unix(ts: i64) -> i64 {
+    use chrono::{Local, TimeZone};
+    let Some(dt) = Local.timestamp_opt(ts, 0).single() else {
+        return ts;
+    };
+    let day = dt.date_naive();
+    let midnight = match day.and_hms_opt(0, 0, 0) {
+        Some(m) => m,
+        None => return ts,
+    };
+    Local
+        .from_local_datetime(&midnight)
+        .single()
+        .map(|d| d.timestamp())
+        .unwrap_or(ts)
+}
+
+/// 按本地自然日算出 `[days-1 天前 00:00, 今日次日 00:00)` 半开区间。
+fn daily_window_bounds(days: u32) -> (i64, i64) {
+    use chrono::{Duration, Local, TimeZone};
+    let (today_start, tomorrow_start) = local_day_bounds_unix();
+    let back = days.saturating_sub(1) as i64;
+    let start_unix = Local
+        .timestamp_opt(today_start, 0)
+        .single()
+        .map(|dt| dt.date_naive() - Duration::days(back))
+        .and_then(|d| d.and_hms_opt(0, 0, 0))
+        .and_then(|nd| Local.from_local_datetime(&nd).single())
+        .map(|dt| dt.timestamp())
+        .unwrap_or(today_start);
+    (start_unix, tomorrow_start)
 }
 
 #[cfg(test)]
@@ -900,5 +990,73 @@ mod tests {
         assert_eq!(last.group_name, "second");
         assert_eq!(last.provider_name, "p2");
         assert_eq!(last.upstream_model, "m2");
+    }
+
+    #[test]
+    fn daily_counts_buckets_by_local_day() {
+        let (_dir, stores) = setup();
+        // insert_log 用 Utc::now 落 time，多条都归到「今天」这一本地日桶。
+        seed(&stores, "g", 200, "", "", "");
+        seed(&stores, "g", 502, "bad", "", "");
+        seed(&stores, "g", 200, "", "a", "b");
+        let result = stores.request_daily_counts(365).unwrap();
+        let total: i64 = result.days.iter().map(|d| d.count).sum();
+        assert_eq!(total, 3, "总量应等于插入条数（含成功/失败/故障转移）");
+        let today_bucket = local_day_start_unix(chrono::Local::now().timestamp());
+        let bucket = result
+            .days
+            .iter()
+            .find(|d| d.day_start_unix == today_bucket)
+            .expect("今天应有一个桶");
+        assert_eq!(bucket.count, 3);
+        assert!(result.start_unix < result.end_unix);
+    }
+
+    #[test]
+    fn daily_counts_buckets_split_across_days() {
+        let (_dir, stores) = setup();
+        let today_start = local_day_start_unix(chrono::Local::now().timestamp());
+        // 今天 2 条、昨天 1 条：手插不同 time 绕过 insert_log 的 Utc::now。
+        insert_at(&stores, today_start + 10, 200, "", "", "");
+        insert_at(&stores, today_start + 20, 200, "", "", "");
+        insert_at(&stores, today_start - 86_400 + 10, 200, "", "", "");
+        let result = stores.request_daily_counts(365).unwrap();
+        assert_eq!(result.days.len(), 2, "应有今天和昨天两个桶");
+        // 升序：第一个是昨天，第二个是今天
+        assert_eq!(result.days[0].count, 1);
+        assert_eq!(result.days[1].count, 2);
+        assert!(result.days[0].day_start_unix < result.days[1].day_start_unix);
+    }
+
+    #[test]
+    fn daily_counts_window_excludes_out_of_range() {
+        let (_dir, stores) = setup();
+        let today_start = local_day_start_unix(chrono::Local::now().timestamp());
+        insert_at(&stores, today_start + 10, 200, "", "", "");
+        // 400 天前，落在默认 365 天窗口之外
+        insert_at(&stores, today_start - 400 * 86_400, 200, "", "", "");
+        let result = stores.request_daily_counts(365).unwrap();
+        let total: i64 = result.days.iter().map(|d| d.count).sum();
+        assert_eq!(total, 1, "窗口外的记录不计入");
+    }
+
+    #[test]
+    fn daily_counts_respects_clamp() {
+        let (_dir, stores) = setup();
+        // days=0 → clamp 到 1；days=9999 → clamp 到 MAX，均不 panic。
+        let narrow = stores.request_daily_counts(0).unwrap();
+        assert!(narrow.start_unix < narrow.end_unix);
+        let wide = stores.request_daily_counts(9999).unwrap();
+        assert!(wide.start_unix < wide.end_unix);
+        // clamp 到 MAX 的窗口应比 clamp 到 1 的窗口更早开始
+        assert!(wide.start_unix < narrow.start_unix);
+    }
+
+    #[test]
+    fn daily_counts_empty_db_returns_no_buckets() {
+        let (_dir, stores) = setup();
+        let result = stores.request_daily_counts(365).unwrap();
+        assert!(result.days.is_empty());
+        assert!(result.start_unix < result.end_unix);
     }
 }

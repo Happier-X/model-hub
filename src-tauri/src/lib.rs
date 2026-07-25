@@ -117,6 +117,7 @@ pub fn run() {
             commands::purge_expired_logs,
             commands::get_request_stats,
             commands::get_last_success_request,
+            commands::get_request_daily_counts,
             commands::export_group_to_pi_agent,
             commands::get_model_leaderboard,
         ])

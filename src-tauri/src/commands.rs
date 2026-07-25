@@ -243,6 +243,19 @@ pub fn get_last_success_request(
     stores(&proxy)?.last_success_request().map_err(Into::into)
 }
 
+/// 按本地自然日聚合过去 `days` 天（含今日）的请求总量，供首页热力图使用。
+/// `days` 不传默认 365；领域层再钳制到 [1, 400]。
+#[tauri::command]
+pub fn get_request_daily_counts(
+    proxy: State<'_, ProxyHandle>,
+    days: Option<u32>,
+) -> Result<crate::domain::log::RequestDailyCounts, InvokeError> {
+    let days = days.unwrap_or(crate::domain::log::DAILY_COUNTS_DEFAULT_DAYS);
+    stores(&proxy)?
+        .request_daily_counts(days)
+        .map_err(Into::into)
+}
+
 #[derive(Debug, Serialize)]
 pub struct ExportToPiResult {
     pub path: String,

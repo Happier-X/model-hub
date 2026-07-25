@@ -257,3 +257,76 @@ CREATE TABLE IF NOT EXISTS groups (..., auto_failover INTEGER NOT NULL DEFAULT 1
 ```text
 PRAGMA table_info(groups) → 存在 auto_failover 时事务内重建表拷贝 id/name/created_at → 校验无孤儿 group_items
 ```
+
+---
+
+## 场景：按本地自然日聚合请求日志（时区归桶）
+
+### 1. Scope / Trigger
+
+- Trigger：任何需要把 `request_logs.time`（本地 unix 秒）按「本地自然日」分组统计的查询（如首页每日请求量热力图 `request_daily_counts`）。
+- 目标：归桶口径与 `request_stats_today` / `request_stats_between` 保持一致，且测试可控、跨平台稳定。
+
+### 2. Signatures
+
+```rust
+// domain/log.rs
+pub const DAILY_COUNTS_DEFAULT_DAYS: u32 = 365;
+pub const DAILY_COUNTS_MAX_DAYS: u32 = 400;
+pub fn request_daily_counts(&self, days: u32) -> Result<RequestDailyCounts, AppError>;
+fn local_day_start_unix(ts: i64) -> i64;       // 任意本地 unix 秒 → 所在自然日 00:00
+fn daily_window_bounds(days: u32) -> (i64, i64); // [days-1 天前 00:00, 今日次日 00:00)
+
+// commands.rs
+pub fn get_request_daily_counts(proxy, days: Option<u32>) -> Result<RequestDailyCounts, InvokeError>;
+```
+
+### 3. Contracts
+
+- **不用 SQL `date(time,'unixepoch','localtime')` 分组**：`localtime` 依赖运行时系统时区、跨平台行为漂移、测试不可控。改为**应用层分桶**：SQL 仅按半开区间 `time >= ?1 AND time < ?2` 取窗口内 `time`，Rust 侧用 `chrono::Local` 归桶到自然日 00:00，`HashMap<i64,i64>` 计数。
+- 窗口半开：`end` = 今日次日 00:00（复用 `local_day_bounds_unix().1`），`start` = 从今日 00:00 往前推 `days-1` 天。
+- 入参钳制：command 层 `unwrap_or(DEFAULT)`，领域层再 `clamp(1, MAX)` 兜底一次（两层都钳，防绕过）。
+- 输出仅含 `count > 0` 的桶，按 `day_start_unix` 升序；前端稀疏渲染。
+- 序列化字段 snake_case（`day_start_unix`/`start_unix`/`end_unix`），TS 接口须逐字对齐。
+
+### 4. Validation & Error Matrix
+
+| 输入 | 期望 |
+|------|------|
+| `days=0` | clamp 到 1，`start_unix < end_unix` 不 panic |
+| `days=9999` | clamp 到 400 |
+| 窗口外记录（如 400 天前） | 不计入 |
+| 空库 | `days` 为空数组，`start/end` 仍有值 |
+
+### 5. Good / Base / Bad Cases
+
+- **Good**：今天 2 条 + 昨天 1 条 → 两个桶，升序 [1, 2]。
+- **Base**：多条同日 → 单桶累加（含成功/失败/故障转移，不拆分）。
+- **Bad**：用 SQL `localtime` 分组；或只在 command 层钳制而领域层不兜底。
+
+### 6. Tests Required
+
+- 同日多条累加：断言总量 == 插入条数、今天桶存在。
+- 跨日分桶：手插不同 `time`，断言桶数与升序。
+- 窗口外排除：插一条 400 天前，断言不计入。
+- clamp 边界：`request_daily_counts(0)` / `(9999)` 不 panic。
+- 空库：`days` 为空。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```rust
+// insert_log 内部用 chrono::Utc::now().timestamp() 落 time，
+// 测试里无法伪造历史日期 → 跨日桶断言永远失败。
+seed(&stores, ...);  // 全部归到"今天"
+assert_eq!(result.days.len(), 2);  // ✗ 只会有 1 个桶
+```
+
+#### Correct
+
+```rust
+// 跨日/窗口测试必须用 with_conn 手写不同 time 的 INSERT，
+// 绕过 insert_log 的 Utc::now：
+insert_at(&stores, today_start - 86_400 + 10, 200, "", "", "");  // 昨天
+```
