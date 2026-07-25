@@ -354,6 +354,12 @@ async fn exhausted_2xx_error_envelopes_return_502() {
         .await
         .unwrap();
     let body_str = String::from_utf8_lossy(&bytes);
-    assert!(body_str.contains("所有上游均返回错误"), "应包含汇总错误: {body_str}");
-    assert!(body_str.contains("模型已停用"), "应包含最后上游的错误详情: {body_str}");
+    assert!(
+        body_str.contains("所有上游均返回错误"),
+        "应包含汇总错误: {body_str}"
+    );
+    assert!(
+        body_str.contains("模型已停用"),
+        "应包含最后上游的错误详情: {body_str}"
+    );
 }
