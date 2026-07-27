@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref } from "vue";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Copy, Minus, Square, X } from "@lucide/vue";
+import { HButton } from "happier-ui";
 
 const win = getCurrentWindow();
 const isMaximized = ref(false);
@@ -59,42 +60,45 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex h-9 shrink-0 items-stretch bg-slate-900 text-slate-100 select-none">
+  <div class="flex h-11 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-2 select-none">
     <div
-      class="flex flex-1 items-center px-4 text-xs font-medium tracking-wide text-slate-400"
+      class="flex h-full flex-1 items-center px-2 text-sm font-semibold tracking-wide text-slate-800"
       data-tauri-drag-region
     >
       Model Hub
     </div>
-    <div class="flex items-stretch">
-      <button
-        class="inline-flex w-11 items-center justify-center text-slate-300 transition hover:bg-slate-700 hover:text-white"
-        type="button"
+    <div class="flex items-center gap-1">
+      <HButton
+        variant="ghost"
+        size="sm"
+        isIconOnly
         title="最小化"
         aria-label="最小化"
         @click="minimize"
       >
         <Minus :size="16" aria-hidden="true" />
-      </button>
-      <button
-        class="inline-flex w-11 items-center justify-center text-slate-300 transition hover:bg-slate-700 hover:text-white"
-        type="button"
+      </HButton>
+      <HButton
+        variant="ghost"
+        size="sm"
+        isIconOnly
         :title="isMaximized ? '还原' : '最大化'"
         :aria-label="isMaximized ? '还原' : '最大化'"
         @click="toggleMaximize"
       >
         <Copy v-if="isMaximized" :size="14" aria-hidden="true" />
         <Square v-else :size="14" aria-hidden="true" />
-      </button>
-      <button
-        class="inline-flex w-11 items-center justify-center text-slate-300 transition hover:bg-red-500 hover:text-white"
-        type="button"
+      </HButton>
+      <HButton
+        variant="ghost"
+        size="sm"
+        isIconOnly
         title="关闭"
         aria-label="关闭"
         @click="close"
       >
         <X :size="16" aria-hidden="true" />
-      </button>
+      </HButton>
     </div>
   </div>
 </template>

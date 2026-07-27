@@ -45,10 +45,12 @@ core:window:allow-close
 
 ## 布局与视觉
 
-- 标题栏深色底（`bg-slate-900`）与侧栏呼应，高度约 36px（`h-9`）。
+- 标题栏浅色底（`bg-white`），带底边框（`border-b border-slate-200`），高度 44px（`h-11`）。
+- 左右增加间距（`px-2`），按钮间有间距（`gap-1`）。
 - 左侧拖动区用 DOM 属性 `data-tauri-drag-region`（需 `allow-start-dragging`），与 overlay 一致；不用 JS 调 `startDragging`。
-- 右侧三按钮：最小化 / 最大化-还原 / 关闭；**按钮本身不得加 `data-tauri-drag-region`**，否则点击会被拖动区吞掉。
-- 图标用 `@lucide/vue`：最小化 `Minus`、最大化 `Square`、还原态 `Copy`、关闭 `X`；关闭按钮 hover 用红色系区分危险操作。
+- 右侧三按钮：最小化 / 最大化-还原 / 关闭；使用 `happier-ui` 的 `HButton`（`variant="ghost"` + `isIconOnly`）。
+- **按钮本身不得加 `data-tauri-drag-region`**，否则点击会被拖动区吞掉。
+- 图标用 `@lucide/vue`：最小化 `Minus`、最大化 `Square`、还原态 `Copy`、关闭 `X`。
 - 按钮含中文 `title` + `aria-label` 无障碍属性。
 
 ---
