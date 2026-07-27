@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
+import { Plus } from "@lucide/vue";
 import { useForm } from "@tanstack/vue-form";
 import {
   HButton,
@@ -168,13 +169,6 @@ onMounted(refresh);
 
 <template>
   <div class="space-y-6">
-    <HCard variant="outlined" padding="md">
-      <div class="flex items-center justify-between gap-2">
-        <h2 class="text-base font-semibold">供应商管理</h2>
-        <HButton variant="primary" type="button" @click="openCreate">新建供应商</HButton>
-      </div>
-    </HCard>
-
     <AppDialog
       :open="dialogOpen"
       :title="editingProviderId === null ? '新建供应商' : '编辑供应商'"
@@ -266,7 +260,21 @@ onMounted(refresh);
 
     <HCard variant="outlined" padding="md">
       <template #header>
-        <h2 class="text-base font-semibold">供应商列表</h2>
+        <div class="flex items-center justify-between gap-2">
+          <h2 class="text-base font-semibold">供应商</h2>
+          <HButton
+            variant="ghost"
+            size="sm"
+            isIconOnly
+            shape="circle"
+            title="新建供应商"
+            aria-label="新建供应商"
+            type="button"
+            @click="openCreate"
+          >
+            <Plus :size="18" aria-hidden="true" />
+          </HButton>
+        </div>
       </template>
       <p v-if="error && !dialogOpen" class="mb-3 text-sm text-rose-600">{{ error }}</p>
       <HEmpty v-if="items.length === 0" class="app-empty-compact" title="暂无供应商" />
