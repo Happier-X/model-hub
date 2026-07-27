@@ -50,6 +50,7 @@ export interface Group {
   created_at: string;
   /** 思考强度档位，默认 off。转发时按上游模型家族翻译成厂商字段。 */
   thinking_effort: ThinkingEffort;
+  source_provider_id?: number | null;
 }
 
 export interface RequestLog {
@@ -194,14 +195,17 @@ export const createGroup = (payload: {
   name: string;
   thinking_effort?: ThinkingEffort;
   items: { provider_id: number; upstream_model: string }[];
+  source_provider_id?: number | null;
 }) => invoke<Group>("create_group", { payload });
 export const updateGroup = (payload: {
   id: number;
   name: string;
   thinking_effort?: ThinkingEffort;
   items: { provider_id: number; upstream_model: string }[];
+  source_provider_id?: number | null;
 }) => invoke<Group>("update_group", { payload });
 export const deleteGroup = (id: number) => invoke<void>("delete_group", { id });
+export const syncGroupNow = (groupId: number) => invoke<Group>("sync_group_now", { groupId });
 
 export const listLogs = (query: LogQuery = {}) =>
   invoke<LogPage>("list_logs", {

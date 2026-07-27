@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/upstream-access.md", "reason": "需要修改允许列表，添加后台定时同步的记录在案的例外"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "需要在禁忌条款旁添加绑定分组后台同步的例外说明"}
+{"file": "src-tauri/src/db/migrate.rs", "reason": "需要通过 PRAGMA table_info 添加 source_provider_id 字段，并补充相关单测"}
+{"file": "src-tauri/src/domain/group.rs", "reason": "需要增删改查带上 source_provider_id 字段，并可能开放 replace_group_items 供外部异步调用"}
+{"file": "src-tauri/src/domain/provider.rs", "reason": "需要在 delete_provider 时级联解绑对应的 source_provider_id"}
+{"file": "src-tauri/src/commands.rs", "reason": "需要新增 perform_sync_bound_group 核心逻辑与 sync_group_now IPC 命令"}
+{"file": "src-tauri/src/proxy/runtime.rs", "reason": "需要在 proxy 的启动流程里挂载 24h 间隔的定时任务，注意跳过启动时触发及正确处理退出"}
+{"file": "src/api/tauri.ts", "reason": "需要补充 ts 接口和 syncGroupNow 方法"}
+{"file": "src/pages/GroupsPage.vue", "reason": "需要添加绑定选项、只读托管控制、立即同步按钮，并展示绑定标识"}

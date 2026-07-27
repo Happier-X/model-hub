@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useForm } from "@tanstack/vue-form";
-import { HButton, HCard, HEmpty, HInput, HSelect, type HSelectOption } from "happier-ui";
+import { HBadge, HButton, HCard, HEmpty, HInput, HSelect, type HSelectOption } from "happier-ui";
 import {
   createGroup,
   deleteGroup,
@@ -11,6 +11,7 @@ import {
   getModelLeaderboard,
   listGroups,
   listProviders,
+  syncGroupNow,
   updateGroup,
   type Group,
   type ModelLeaderboardSnapshot,
@@ -40,12 +41,14 @@ type GroupFormValues = {
   name: string;
   thinking_effort: ThinkingEffort;
   items: QueueItemDraft[];
+  source_provider_id?: number | null;
 };
 
 const defaultFormValues: GroupFormValues = {
   name: "",
   thinking_effort: "off",
   items: [],
+  source_provider_id: null,
 };
 
 const thinkingEffortOptions: HSelectOption[] = [
@@ -97,6 +100,11 @@ const providerSelectOptions = computed<HSelectOption[]>(() => [
   { value: 0, label: "选择供应商" },
   ...providers.value.map((p) => ({ value: p.id, label: p.name })),
 ]);
+
+const bindProviderOptions = computed<HSelectOption[]>(() => [
+  { value: 0, label: "不绑定" },
+  ...providers.value.map((p) => ({ value: p.id, label: p.name })),
+]);
 const leaderboard = ref<ModelLeaderboardSnapshot | null>(null);
 const leaderboardLoading = ref(false);
 const leaderboardError = ref("");
@@ -107,6 +115,7 @@ const form = useForm({
     name: defaultFormValues.name,
     thinking_effort: defaultFormValues.thinking_effort,
     items: [] as QueueItemDraft[],
+    source_provider_id: defaultFormValues.source_provider_id,
   },
   onSubmit: async ({ value }) => {
     if (saving.value) return;
@@ -119,6 +128,7 @@ const form = useForm({
         name: value.name,
         thinking_effort: value.thinking_effort,
         items: value.items.filter((i) => i.provider_id > 0 && i.upstream_model.trim()),
+        source_provider_id: value.source_provider_id || null,
       };
       if (mode === "update" && targetId !== null) {
         await updateGroup({ id: targetId, ...payload });
@@ -136,6 +146,8 @@ const form = useForm({
     }
   },
 });
+
+const isBound = computed(() => !!formValues.value.source_provider_id);
 
 /** 订阅表单 values，供队列操作与模板读取 */
 const formValues = form.useSelector((s) => s.values);
@@ -249,7 +261,7 @@ async function refresh() {
 
 function resetForm() {
   editingGroupId.value = null;
-  form.reset({ name: "", thinking_effort: "off", items: [] });
+  form.reset({ name: "", thinking_effort: "off", items: [], source_provider_id: null });
   modelOptions.value = {};
   fetchingModels.value = {};
   bulkProviderId.value = providers.value[0]?.id ?? 0;
@@ -278,6 +290,7 @@ function startEdit(g: Group) {
     name: g.name,
     thinking_effort: g.thinking_effort,
     items: g.items.map((i) => createQueueItem(i.provider_id, i.upstream_model)),
+    source_provider_id: g.source_provider_id || null,
   });
   modelOptions.value = {};
   fetchingModels.value = {};
@@ -566,6 +579,29 @@ async function exportToPi(groupId: number) {
   }
 }
 
+async function handleSyncNow() {
+  if (saving.value || !editingGroupId.value) return;
+  saving.value = true;
+  error.value = "";
+  message.value = "";
+  try {
+    const updatedGroup = await syncGroupNow(editingGroupId.value);
+    form.reset({
+      name: updatedGroup.name,
+      thinking_effort: updatedGroup.thinking_effort,
+      items: updatedGroup.items.map((i) => createQueueItem(i.provider_id, i.upstream_model)),
+      source_provider_id: updatedGroup.source_provider_id || null,
+    });
+    modelOptions.value = {};
+    fetchingModels.value = {};
+    message.value = "同步完成！模型列表已更新。";
+  } catch (e) {
+    error.value = extractInvokeError(e);
+  } finally {
+    saving.value = false;
+  }
+}
+
 onMounted(async () => {
   await refresh();
 });
@@ -619,12 +655,27 @@ onMounted(async () => {
                 </label>
               </template>
             </form.Field>
+            <form.Field name="source_provider_id">
+              <template #default="{ field }">
+                <label class="text-sm">
+                  <span class="mb-1 block text-slate-600">绑定供应商自动同步</span>
+                  <HSelect
+                    :options="bindProviderOptions"
+                    :model-value="field.state.value || 0"
+                    @update:model-value="(v) => field.handleChange(Number(v))"
+                  />
+                  <span class="mt-1 block text-xs text-slate-500">
+                    绑定后分组由选定的供应商托管，后台每 24h 自动全量同步其模型列表。
+                  </span>
+                </label>
+              </template>
+            </form.Field>
           </div>
 
           <div class="mt-4 space-y-2">
             <div class="flex flex-wrap items-center justify-between gap-2">
               <h3 class="text-sm font-medium">故障转移队列</h3>
-              <div class="flex flex-wrap items-center gap-3">
+              <div v-if="!isBound" class="flex flex-wrap items-center gap-3">
                 <label class="flex items-center gap-1.5 text-sm text-slate-600">
                   <span class="text-slate-500">排序方式</span>
                   <HSelect
@@ -655,8 +706,19 @@ onMounted(async () => {
                 <HButton variant="ghost" size="sm" type="button" @click="addItem">添加条目</HButton>
               </div>
             </div>
-            <p class="text-xs text-slate-500">{{ leaderboardStatusText }}</p>
+            <p v-if="!isBound" class="text-xs text-slate-500">{{ leaderboardStatusText }}</p>
+            <div v-if="isBound" class="rounded-lg border border-violet-100 bg-violet-50/60 p-3">
+              <div class="flex items-center justify-between">
+                <p class="text-sm text-violet-800">
+                  本分组由供应商托管，每 24h 自动同步，模型列表只读。
+                </p>
+                <HButton v-if="isEditing" variant="outline" size="sm" type="button" :disabled="saving" @click="handleSyncNow">
+                  立即同步
+                </HButton>
+              </div>
+            </div>
             <div
+              v-else
               class="flex flex-wrap items-end gap-2 rounded-lg border border-cyan-100 bg-cyan-50/60 p-3"
             >
               <label class="text-sm">
@@ -680,7 +742,7 @@ onMounted(async () => {
               <span class="pb-1 text-xs text-slate-500">按供应商 + 模型名去重，仅修改当前表单。</span>
             </div>
             <p v-if="bulkMessage" class="text-sm text-emerald-700">{{ bulkMessage }}</p>
-            <p class="text-xs text-slate-500">
+            <p v-if="!isBound" class="text-xs text-slate-500">
               可拖动左侧手柄调整故障转移优先级；上移/下移与「按模型能力排序」仅作用于当前表单，需点保存写入。本地分来自模型名启发式；外部分为
               OpenRouter 公开指标，未匹配回退本地。
             </p>
@@ -695,10 +757,11 @@ onMounted(async () => {
                     ? 'border-slate-300 bg-slate-50 opacity-80'
                     : 'border-slate-200 bg-white'
               "
-              @dragover="onDragOver(index, $event)"
-              @drop="onDrop(index, $event)"
+              @dragover="!isBound && onDragOver(index, $event)"
+              @drop="!isBound && onDrop(index, $event)"
             >
               <button
+                v-if="!isBound"
                 type="button"
                 class="cursor-grab select-none rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-500 active:cursor-grabbing"
                 title="拖动排序"
@@ -731,6 +794,7 @@ onMounted(async () => {
                 {{ queueDisplayScores[index]?.score }}
               </span>
               <HSelect
+                :disabled="isBound"
                 :options="providerSelectOptions"
                 :model-value="item.provider_id"
                 @update:model-value="(v) => updateItemAt(index, { provider_id: Number(v) })"
@@ -738,10 +802,11 @@ onMounted(async () => {
               <div class="flex min-w-[200px] flex-1 flex-col gap-1">
                 <div class="flex flex-wrap items-center gap-2">
                   <input
+                    :disabled="isBound"
                     :value="item.upstream_model"
                     :list="`upstream-models-${index}`"
                     placeholder="上游模型名"
-                    class="min-w-[160px] flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
+                    class="min-w-[160px] flex-1 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50 disabled:text-slate-500"
                     @input="
                       updateItemAt(index, {
                         upstream_model: ($event.target as HTMLInputElement).value,
@@ -752,6 +817,7 @@ onMounted(async () => {
                     <option v-for="mid in modelOptions[index] || []" :key="mid" :value="mid" />
                   </datalist>
                   <HButton
+                    v-if="!isBound"
                     variant="outline"
                     size="sm"
                     type="button"
@@ -763,7 +829,7 @@ onMounted(async () => {
                   </HButton>
                 </div>
                 <div
-                  v-if="modelOptions[index]?.length"
+                  v-if="modelOptions[index]?.length && !isBound"
                   class="flex max-h-28 flex-wrap gap-1 overflow-y-auto"
                 >
                   <button
@@ -778,15 +844,17 @@ onMounted(async () => {
                   </button>
                 </div>
               </div>
-              <HButton variant="ghost" size="sm" type="button" @click="moveItem(index, -1)">
-                上移
-              </HButton>
-              <HButton variant="ghost" size="sm" type="button" @click="moveItem(index, 1)">
-                下移
-              </HButton>
-              <HButton variant="danger-soft" size="sm" type="button" @click="removeItem(index)">
-                删除
-              </HButton>
+              <template v-if="!isBound">
+                <HButton variant="ghost" size="sm" type="button" @click="moveItem(index, -1)">
+                  上移
+                </HButton>
+                <HButton variant="ghost" size="sm" type="button" @click="moveItem(index, 1)">
+                  下移
+                </HButton>
+                <HButton variant="danger-soft" size="sm" type="button" @click="removeItem(index)">
+                  删除
+                </HButton>
+              </template>
             </div>
           </div>
 
@@ -832,6 +900,7 @@ onMounted(async () => {
             >
               思考 · {{ thinkingEffortLabels[g.thinking_effort] ?? g.thinking_effort }}
             </span>
+            <HBadge v-if="g.source_provider_id" variant="default" class="ml-2">自动同步</HBadge>
           </div>
           <div class="space-x-2 text-sm">
             <HButton

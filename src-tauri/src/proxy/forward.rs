@@ -402,7 +402,11 @@ fn claude_budget_tokens(effort: &str) -> Option<i64> {
 /// - `effort == "off"` → 入口直接 return，对所有家族都不改动 body。
 /// - 客户端已显式声明对应字段 → 保留，不覆盖。
 /// - 未识别家族 / 非推理模型 → 不注入。
-fn apply_thinking_effort(obj: &mut serde_json::Map<String, Value>, upstream_model: &str, effort: &str) {
+fn apply_thinking_effort(
+    obj: &mut serde_json::Map<String, Value>,
+    upstream_model: &str,
+    effort: &str,
+) {
     if effort == "off" {
         return;
     }
@@ -759,10 +763,7 @@ fn stream_body_from_prime(
                         }
                         if state.is_sse {
                             // SSE 注释行：客户端忽略，但足以让 chunked 传输保持活跃。
-                            return Some((
-                                Ok(Bytes::from_static(SSE_HEARTBEAT_BYTES)),
-                                state,
-                            ));
+                            return Some((Ok(Bytes::from_static(SSE_HEARTBEAT_BYTES)), state));
                         }
                         // 非 SSE：不注入任何字节，继续下一轮等待直到 idle 兜底。
                         continue;
@@ -1288,11 +1289,15 @@ mod tests {
     fn family_gpt5_supports_minimal() {
         assert!(matches!(
             thinking_family("gpt-5"),
-            ThinkingFamily::OpenAiReasoning { supports_minimal: true }
+            ThinkingFamily::OpenAiReasoning {
+                supports_minimal: true
+            }
         ));
         assert!(matches!(
             thinking_family("gpt-5-mini"),
-            ThinkingFamily::OpenAiReasoning { supports_minimal: true }
+            ThinkingFamily::OpenAiReasoning {
+                supports_minimal: true
+            }
         ));
     }
 
@@ -1300,11 +1305,15 @@ mod tests {
     fn family_o_series_no_minimal() {
         assert!(matches!(
             thinking_family("o3"),
-            ThinkingFamily::OpenAiReasoning { supports_minimal: false }
+            ThinkingFamily::OpenAiReasoning {
+                supports_minimal: false
+            }
         ));
         assert!(matches!(
             thinking_family("o1-preview"),
-            ThinkingFamily::OpenAiReasoning { supports_minimal: false }
+            ThinkingFamily::OpenAiReasoning {
+                supports_minimal: false
+            }
         ));
         // 词界：o1 出现在其它 token 中间不误伤。
         assert!(matches!(thinking_family("model-o1x"), ThinkingFamily::None));
@@ -1321,15 +1330,27 @@ mod tests {
             ThinkingFamily::ClaudeThinking
         ));
         // Claude haiku 不注入。
-        assert!(matches!(thinking_family("claude-3-haiku"), ThinkingFamily::None));
+        assert!(matches!(
+            thinking_family("claude-3-haiku"),
+            ThinkingFamily::None
+        ));
     }
 
     #[test]
     fn family_qwen3_thinking() {
-        assert!(matches!(thinking_family("qwen3-32b"), ThinkingFamily::QwenThinking));
-        assert!(matches!(thinking_family("qwen3-235b-a22b"), ThinkingFamily::QwenThinking));
+        assert!(matches!(
+            thinking_family("qwen3-32b"),
+            ThinkingFamily::QwenThinking
+        ));
+        assert!(matches!(
+            thinking_family("qwen3-235b-a22b"),
+            ThinkingFamily::QwenThinking
+        ));
         // qwen-turbo 不注入。
-        assert!(matches!(thinking_family("qwen-turbo"), ThinkingFamily::None));
+        assert!(matches!(
+            thinking_family("qwen-turbo"),
+            ThinkingFamily::None
+        ));
     }
 
     // ---- 思考强度：注入行为 ----
@@ -1337,7 +1358,11 @@ mod tests {
     #[test]
     fn off_never_injects_any_family() {
         for model in ["gpt-5", "o3", "claude-sonnet-4", "qwen3-32b"] {
-            let out = rewrite_model(&serde_json::json!({"model":"g","messages":[]}), model, "off");
+            let out = rewrite_model(
+                &serde_json::json!({"model":"g","messages":[]}),
+                model,
+                "off",
+            );
             let obj = out.as_object().unwrap();
             assert!(obj.get("reasoning_effort").is_none());
             assert!(obj.get("thinking").is_none());
@@ -1347,7 +1372,11 @@ mod tests {
 
     #[test]
     fn openai_injects_reasoning_effort() {
-        let out = rewrite_model(&serde_json::json!({"model":"g","messages":[]}), "gpt-5", "high");
+        let out = rewrite_model(
+            &serde_json::json!({"model":"g","messages":[]}),
+            "gpt-5",
+            "high",
+        );
         assert_eq!(out["reasoning_effort"], "high");
         // auto → medium。
         let out = rewrite_model(&serde_json::json!({"model":"g"}), "gpt-5", "auto");
@@ -1365,7 +1394,11 @@ mod tests {
 
     #[test]
     fn claude_injects_thinking_budget() {
-        let out = rewrite_model(&serde_json::json!({"model":"g"}), "claude-sonnet-4", "medium");
+        let out = rewrite_model(
+            &serde_json::json!({"model":"g"}),
+            "claude-sonnet-4",
+            "medium",
+        );
         assert_eq!(out["thinking"]["type"], "enabled");
         assert_eq!(out["thinking"]["budget_tokens"], 8192);
     }

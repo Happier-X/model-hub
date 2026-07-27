@@ -141,12 +141,26 @@ impl Stores {
 
     pub fn delete_provider(&self, id: i64) -> Result<(), AppError> {
         self.with_conn(|conn| {
-            let n = conn
+            let tx = conn
+                .unchecked_transaction()
+                .map_err(|e| AppError::Database(e.to_string()))?;
+
+            // 先解绑相关的分组
+            tx.execute(
+                "UPDATE groups SET source_provider_id = NULL WHERE source_provider_id = ?1",
+                [id],
+            )
+            .map_err(|e| AppError::Database(e.to_string()))?;
+
+            let n = tx
                 .execute("DELETE FROM providers WHERE id = ?1", [id])
                 .map_err(|e| AppError::Database(e.to_string()))?;
+
             if n == 0 {
                 return Err(AppError::Business("供应商不存在".into()));
             }
+
+            tx.commit().map_err(|e| AppError::Database(e.to_string()))?;
             Ok(())
         })
     }

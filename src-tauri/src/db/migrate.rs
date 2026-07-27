@@ -98,6 +98,15 @@ fn ensure_group_columns(conn: &Connection) -> Result<(), AppError> {
         )
         .map_err(|e| AppError::Database(format!("添加 groups.thinking_effort 字段失败: {e}")))?;
     }
+
+    // 自动同步绑定的源供应商 ID
+    if !columns.contains("source_provider_id") {
+        conn.execute(
+            "ALTER TABLE groups ADD COLUMN source_provider_id INTEGER",
+            [],
+        )
+        .map_err(|e| AppError::Database(format!("添加 groups.source_provider_id 字段失败: {e}")))?;
+    }
     Ok(())
 }
 
@@ -396,6 +405,39 @@ mod tests {
             )
             .unwrap();
         assert_eq!(created_at, group.1);
+    }
+
+    #[test]
+    fn migrate_adds_missing_source_provider_id_without_losing_data() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE groups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                thinking_effort TEXT NOT NULL DEFAULT 'off'
+            );
+            INSERT INTO groups (name, created_at, thinking_effort) VALUES ('legacy2', '2024-01-01T00:00:00Z', 'low');",
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let cols = table_column_names(&conn, "groups").unwrap();
+        assert!(cols.contains("source_provider_id"));
+
+        let row: (String, String, Option<i64>) = conn
+            .query_row(
+                "SELECT name, thinking_effort, source_provider_id FROM groups WHERE id = 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(row.0, "legacy2");
+        assert_eq!(row.1, "low");
+        assert_eq!(row.2, None);
+
+        migrate(&conn).unwrap(); // idempotent check
     }
 
     #[test]

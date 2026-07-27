@@ -112,6 +112,7 @@ pub fn run() {
             commands::create_group,
             commands::update_group,
             commands::delete_group,
+            commands::sync_group_now,
             commands::list_logs,
             commands::clear_logs,
             commands::purge_expired_logs,

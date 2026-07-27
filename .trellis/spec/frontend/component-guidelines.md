@@ -16,7 +16,7 @@
 8. 分组队列「按模型能力排序」只可修改当前表单，不得自动保存；支持本地启发式 / 外部通用 / 外部编码；外部分需标注 OpenRouter 来源与缓存状态，未匹配回退本地启发式；未知模型稳定排后，用户仍可拖拽微调。合同见 [model-queue-sort.md](./model-queue-sort.md)。
 9. **配置到 Pi**：入口在**分组页**列表行「配置到 Pi」；调用 `exportGroupToPiAgent(groupId)`；**无 Key UI / 无 Key 入参**；模型名=分组名，写入本机 `~/.pi/agent/models.json` 的单一 `providers.model-hub`（按 id upsert）。
 10. 信息架构无「API 密钥 / 客户端 Key」页面与导航。
-11. **上游访问**：禁止供应商页「测试连接」及任何自动/后台对用户上游的测活；**不**展示供应商熔断健康徽章，**不**调用 `listHealth`（已删除）；分组页「拉取模型」**仅**用户点击触发，不得在 `onMounted`/保存时自动拉取。合同见 backend [upstream-access.md](../backend/upstream-access.md)。
+11. **上游访问**：禁止供应商页「测试连接」及任何自动/后台对用户上游的测活；**不**展示供应商熔断健康徽章，**不**调用 `listHealth`（已删除）；分组页「拉取模型」**仅**用户点击触发，不得在 `onMounted`/保存时自动拉取。**例外**：当分组绑定了供应商开启「自动同步」时，代理在后台每 24h 自动全量覆盖分组，该模式下分组模型列表变为只读，禁用拖拽、编辑和删除条目。合同见 backend [upstream-access.md](../backend/upstream-access.md)。
 12. **故障转移**：分组队列始终按顺序故障转移，UI **无** `auto_failover` 开关；创建/更新分组 payload 不得再传该字段。
 13. **首页「最近成功请求」**：展示全局最近一次成功日志的分组 / 供应商 / 上游模型 / 时间（日志态，非队列首选）；调用 `getLastSuccessRequest()`；空态「暂无成功请求」；与今日统计一并刷新，独立错误文案；不轮询、不按分组展开。成功语义见 backend [logging-guidelines.md](../backend/logging-guidelines.md)。
 14. **页面职责**：首页只承载代理运行状态、Base URL、启停/刷新、请求统计与接入指引；端口修改、数据目录、应用更新和自动检查偏好统一放在设置页。

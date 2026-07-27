@@ -3,10 +3,11 @@
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
-use crate::domain::group::{CreateGroupPayload, Group, UpdateGroupPayload};
+use crate::domain::group::{CreateGroupPayload, Group, GroupItemInput, UpdateGroupPayload};
 use crate::domain::leaderboard::ModelLeaderboardSnapshot;
 use crate::domain::provider::{CreateProviderPayload, Provider, UpdateProviderPayload};
 use crate::domain::upstream_models::{fetch_upstream_model_ids, FetchProviderModelsPayload};
+use crate::domain::Stores;
 use crate::error::{AppError, InvokeError};
 use crate::paths;
 use crate::proxy::{ProxyHandle, ProxyStatus};
@@ -205,6 +206,79 @@ pub fn update_group(
 #[tauri::command]
 pub fn delete_group(proxy: State<'_, ProxyHandle>, id: i64) -> Result<(), InvokeError> {
     stores(&proxy)?.delete_group(id).map_err(Into::into)
+}
+
+pub async fn perform_sync_bound_group(stores: &Stores, group_id: i64) -> Result<(), AppError> {
+    let groups = stores.list_groups()?;
+    let group = groups
+        .into_iter()
+        .find(|g| g.id == group_id)
+        .ok_or_else(|| AppError::Business("分组不存在".into()))?;
+
+    let provider_id = group
+        .source_provider_id
+        .ok_or_else(|| AppError::Business("分组未绑定供应商".into()))?;
+
+    let provider = stores
+        .get_provider(provider_id)?
+        .ok_or_else(|| AppError::Business("绑定的供应商不存在".into()))?;
+
+    if !provider.enabled {
+        return Ok(());
+    }
+
+    let ids = fetch_upstream_model_ids(&provider.base_url, &provider.api_key).await?;
+
+    let items: Vec<GroupItemInput> = ids
+        .into_iter()
+        .map(|upstream_model| GroupItemInput {
+            provider_id,
+            upstream_model,
+        })
+        .collect();
+
+    stores.replace_group_items(group.id, &items)?;
+    Ok(())
+}
+
+pub async fn perform_sync_all_bound_groups(stores: &Stores) {
+    let groups = match stores.list_groups() {
+        Ok(g) => g,
+        Err(e) => {
+            tracing::warn!(error = %e, "后台同步：获取分组列表失败");
+            return;
+        }
+    };
+
+    for group in groups {
+        if group.source_provider_id.is_some() {
+            if let Err(e) = perform_sync_bound_group(stores, group.id).await {
+                tracing::warn!(
+                    error = %e,
+                    group_id = group.id,
+                    group_name = %group.name,
+                    "后台同步分组失败"
+                );
+            }
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn sync_group_now(
+    proxy: State<'_, ProxyHandle>,
+    group_id: i64,
+) -> Result<Group, InvokeError> {
+    let s = stores(&proxy)?;
+    perform_sync_bound_group(&s, group_id).await?;
+
+    // 重新获取最新的分组状态
+    let groups = s.list_groups()?;
+    let group = groups
+        .into_iter()
+        .find(|g| g.id == group_id)
+        .ok_or_else(|| AppError::Business("同步后获取分组失败".into()))?;
+    Ok(group)
 }
 
 #[tauri::command]

@@ -196,13 +196,27 @@ impl ProxyHandle {
 
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
         let state = AppState {
-            stores,
+            stores: stores.clone(),
             clients,
             forward_policy: ForwardPolicy::default(),
         };
 
+        let serve_fut = server::serve(bind.listener, state, shutdown_rx);
+        let timer_fut = async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(24 * 3600));
+            interval.tick().await; // 先消费掉立即返回的首个 tick，保证启动时不拉
+
+            loop {
+                interval.tick().await;
+                crate::commands::perform_sync_all_bound_groups(&stores).await;
+            }
+        };
+
         let join = self.tokio_rt.spawn(async move {
-            server::serve(bind.listener, state, shutdown_rx).await;
+            tokio::select! {
+                _ = serve_fut => {}
+                _ = timer_fut => {}
+            }
         });
 
         self.with_inner(|inner| {

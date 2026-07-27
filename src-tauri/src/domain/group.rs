@@ -22,6 +22,7 @@ pub struct Group {
     pub created_at: String,
     /// 思考强度档位：off|minimal|low|medium|high|auto，默认 off。
     pub thinking_effort: String,
+    pub source_provider_id: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -36,6 +37,8 @@ pub struct CreateGroupPayload {
     #[serde(default)]
     pub thinking_effort: Option<String>,
     pub items: Vec<GroupItemInput>,
+    #[serde(default)]
+    pub source_provider_id: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -45,6 +48,8 @@ pub struct UpdateGroupPayload {
     #[serde(default)]
     pub thinking_effort: Option<String>,
     pub items: Vec<GroupItemInput>,
+    #[serde(default)]
+    pub source_provider_id: Option<i64>,
 }
 
 /// 归一化思考强度档位；未知值回退 off。
@@ -150,10 +155,25 @@ impl Stores {
         Ok(())
     }
 
+    pub fn replace_group_items(
+        &self,
+        group_id: i64,
+        items: &[GroupItemInput],
+    ) -> Result<(), AppError> {
+        self.with_conn(|conn| {
+            let tx = conn
+                .unchecked_transaction()
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            Self::replace_items(&tx, group_id, items)?;
+            tx.commit().map_err(|e| AppError::Database(e.to_string()))?;
+            Ok(())
+        })
+    }
+
     pub fn list_groups(&self) -> Result<Vec<Group>, AppError> {
         self.with_conn(|conn| {
             let mut stmt = conn
-                .prepare("SELECT id, name, created_at, thinking_effort FROM groups ORDER BY id ASC")
+                .prepare("SELECT id, name, created_at, thinking_effort, source_provider_id FROM groups ORDER BY id ASC")
                 .map_err(|e| AppError::Database(e.to_string()))?;
             let rows = stmt
                 .query_map([], |row| {
@@ -162,12 +182,13 @@ impl Stores {
                         row.get::<_, String>(1)?,
                         row.get::<_, String>(2)?,
                         row.get::<_, String>(3)?,
+                        row.get::<_, Option<i64>>(4)?,
                     ))
                 })
                 .map_err(|e| AppError::Database(e.to_string()))?;
             let mut out = Vec::new();
             for r in rows {
-                let (id, name, created_at, thinking_effort) =
+                let (id, name, created_at, thinking_effort, source_provider_id) =
                     r.map_err(|e| AppError::Database(e.to_string()))?;
                 let items = Self::load_items(conn, id)?;
                 out.push(Group {
@@ -176,6 +197,7 @@ impl Stores {
                     items,
                     created_at,
                     thinking_effort,
+                    source_provider_id,
                 });
             }
             Ok(out)
@@ -186,7 +208,7 @@ impl Stores {
         self.with_conn(|conn| {
             let row = conn
                 .query_row(
-                    "SELECT id, name, created_at, thinking_effort FROM groups WHERE name = ?1",
+                    "SELECT id, name, created_at, thinking_effort, source_provider_id FROM groups WHERE name = ?1",
                     [name],
                     |row| {
                         Ok((
@@ -194,12 +216,13 @@ impl Stores {
                             row.get::<_, String>(1)?,
                             row.get::<_, String>(2)?,
                             row.get::<_, String>(3)?,
+                            row.get::<_, Option<i64>>(4)?,
                         ))
                     },
                 )
                 .optional()
                 .map_err(|e| AppError::Database(e.to_string()))?;
-            let Some((id, name, created_at, thinking_effort)) = row else {
+            let Some((id, name, created_at, thinking_effort, source_provider_id)) = row else {
                 return Ok(None);
             };
             let items = Self::load_items(conn, id)?;
@@ -209,6 +232,7 @@ impl Stores {
                 items,
                 created_at,
                 thinking_effort,
+                source_provider_id,
             }))
         })
     }
@@ -241,8 +265,8 @@ impl Stores {
                 .unchecked_transaction()
                 .map_err(|e| AppError::Database(e.to_string()))?;
             tx.execute(
-                "INSERT INTO groups (name, created_at, thinking_effort) VALUES (?1, ?2, ?3)",
-                params![name, created_at, effort],
+                "INSERT INTO groups (name, created_at, thinking_effort, source_provider_id) VALUES (?1, ?2, ?3, ?4)",
+                params![name, created_at, effort, payload.source_provider_id],
             )
             .map_err(|e| {
                 if e.to_string().contains("UNIQUE") {
@@ -275,8 +299,8 @@ impl Stores {
                 .map_err(|e| AppError::Database(e.to_string()))?;
             let n = tx
                 .execute(
-                    "UPDATE groups SET name=?1, thinking_effort=?2 WHERE id=?3",
-                    params![name, effort, payload.id],
+                    "UPDATE groups SET name=?1, thinking_effort=?2, source_provider_id=?3 WHERE id=?4",
+                    params![name, effort, payload.source_provider_id, payload.id],
                 )
                 .map_err(|e| {
                     if e.to_string().contains("UNIQUE") {
@@ -340,6 +364,7 @@ mod tests {
             .create_group(CreateGroupPayload {
                 name: "gpt".into(),
                 thinking_effort: None,
+                source_provider_id: None,
                 items: vec![
                     GroupItemInput {
                         provider_id: p2.id,
@@ -383,6 +408,7 @@ mod tests {
             .create_group(CreateGroupPayload {
                 name: "routing".into(),
                 thinking_effort: None,
+                source_provider_id: Some(p1.id),
                 items: vec![GroupItemInput {
                     provider_id: p1.id,
                     upstream_model: "model-a".into(),
@@ -391,12 +417,14 @@ mod tests {
             .unwrap();
         assert_eq!(s.list_groups().unwrap().len(), 1);
         assert_eq!(g.items.len(), 1);
+        assert_eq!(g.source_provider_id, Some(p1.id));
 
         let updated = s
             .update_group(UpdateGroupPayload {
                 id: g.id,
                 name: g.name.clone(),
                 thinking_effort: None,
+                source_provider_id: None,
                 items: vec![
                     GroupItemInput {
                         provider_id: p1.id,
@@ -450,6 +478,7 @@ mod tests {
             .create_group(CreateGroupPayload {
                 name: "g".into(),
                 thinking_effort: None,
+                source_provider_id: None,
                 items: vec![GroupItemInput {
                     provider_id: p.id,
                     upstream_model: "m".into(),
@@ -476,6 +505,7 @@ mod tests {
             .create_group(CreateGroupPayload {
                 name: "g".into(),
                 thinking_effort: Some("high".into()),
+                source_provider_id: None,
                 items: vec![GroupItemInput {
                     provider_id: p.id,
                     upstream_model: "m".into(),
@@ -490,6 +520,7 @@ mod tests {
                 id: g.id,
                 name: g.name.clone(),
                 thinking_effort: Some("bogus".into()),
+                source_provider_id: None,
                 items: vec![GroupItemInput {
                     provider_id: p.id,
                     upstream_model: "m".into(),
@@ -504,6 +535,7 @@ mod tests {
                 id: g.id,
                 name: g.name.clone(),
                 thinking_effort: Some("auto".into()),
+                source_provider_id: None,
                 items: vec![GroupItemInput {
                     provider_id: p.id,
                     upstream_model: "m".into(),

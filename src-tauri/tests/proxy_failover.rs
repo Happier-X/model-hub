@@ -48,6 +48,7 @@ async fn allows_missing_api_key() {
     let env = setup();
     env.stores
         .create_group(CreateGroupPayload {
+            source_provider_id: None,
             thinking_effort: None,
             name: "open-local".into(),
             items: vec![],
@@ -88,6 +89,7 @@ async fn models_lists_groups() {
     let env = setup();
     env.stores
         .create_group(CreateGroupPayload {
+            source_provider_id: None,
             thinking_effort: None,
             name: "demo-group".into(),
             items: vec![],
@@ -153,6 +155,7 @@ async fn failover_from_5xx_to_success() {
         .unwrap();
     env.stores
         .create_group(CreateGroupPayload {
+            source_provider_id: None,
             thinking_effort: None,
             name: "g1".into(),
             items: vec![
@@ -251,6 +254,7 @@ async fn stream_idle_timeout_single_failure_log() {
         .unwrap();
     env.stores
         .create_group(CreateGroupPayload {
+            source_provider_id: None,
             thinking_effort: None,
             name: "g-stream".into(),
             items: vec![GroupItemInput {
@@ -329,6 +333,7 @@ async fn stream_sse_heartbeat_keeps_alive_before_hard_timeout() {
         .unwrap();
     env.stores
         .create_group(CreateGroupPayload {
+            source_provider_id: None,
             thinking_effort: None,
             name: "g-hb".into(),
             items: vec![GroupItemInput {
@@ -413,6 +418,7 @@ async fn stream_success_single_ok_log() {
         .unwrap();
     env.stores
         .create_group(CreateGroupPayload {
+            source_provider_id: None,
             thinking_effort: None,
             name: "g-ok".into(),
             items: vec![GroupItemInput {
@@ -483,6 +489,7 @@ async fn non_stream_success_writes_log_and_stats() {
         .unwrap();
     env.stores
         .create_group(CreateGroupPayload {
+            source_provider_id: None,
             thinking_effort: None,
             name: "g-nonstream".into(),
             items: vec![GroupItemInput {
@@ -548,6 +555,7 @@ async fn stream_abort_on_drop_writes_log() {
         .unwrap();
     env.stores
         .create_group(CreateGroupPayload {
+            source_provider_id: None,
             thinking_effort: None,
             name: "g-abort".into(),
             items: vec![GroupItemInput {

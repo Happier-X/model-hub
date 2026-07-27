@@ -37,28 +37,28 @@
 2. 供应商页「测试连接」、空 chat、假 health、预热请求。
 3. 打开供应商/分组页、保存供应商时**自动**拉 `/models`。
 4. 为「健康展示」或恢复状态而**单独**发起上游请求。
-5. AI/自动化联调默认打用户上游；须用户**明确授权某次**操作。
+5. 自动同步的分组在被绑定的供应商 enabled 为 true 时，每 24h 后台全量同步其模型列表。此行为作为「用户预先授权」的例外处理。启动时不立即拉取以降低上游感知。
 
 ### 4. Validation & Error Matrix
 
 | 条件 | 行为 |
 |------|------|
-| 代码路径为启动/定时/测活 | **不得**发起上游 HTTP |
-| 用户未点击拉取模型 | 不得调用 `fetch_provider_models` |
+| 代码路径为启动/定时/测活 | **不得**发起上游 HTTP（例外：绑定的分组 24h 后台同步允许） |
+| 用户未点击拉取模型 | 不得调用 `fetch_provider_models`（例外：绑定的分组自动同步） |
 | 真实 Chat 候选失败 | 可按队列换源；仍属该次业务请求，不算后台测活 |
 | 转发前 body 含 `tools[].function.strict` | 剥离该字段后再转发；不改工具语义 |
 | 错误日志 | 不得打印完整上游 Key |
 
 ### 5. Good / Base / Bad Cases
 
-- **Good**：用户 Chat 失败后换队列下一源；用户点「拉取模型」后填入 datalist。
+- **Good**：用户 Chat 失败后换队列下一源；用户点「拉取模型」后填入 datalist；绑定了上游的分组每 24h 自动全量同步。
 - **Base**：供应商/分组页不展示熔断健康；无 `list_health` 调用。
 - **Bad**：供应商表单「测试连接」；保存供应商时自动 GET models；每分钟 ping 上游。
 
 ### 6. Tests Required
 
 - 代理集成：故障转移不依赖独立测活接口。
-- 审计/评审：无 `setInterval`/启动钩子调用 `fetch_provider_models` 或对 `providers.base_url` 发空请求。
+- 审计/评审：无 `setInterval`/启动钩子调用 `fetch_provider_models`（已绑定的自动同步分组除外，但需确保启动时不触发）或对 `providers.base_url` 发空请求。
 - 前端：供应商页无「测试连接」类按钮；分组页拉取仅 `@click`；无健康徽章/listHealth。
 
 ### 7. Wrong vs Correct

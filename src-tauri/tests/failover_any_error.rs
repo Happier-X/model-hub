@@ -56,6 +56,7 @@ fn add_two_candidates(env: &Env, first_url: &str, second_url: &str, group: &str)
         .unwrap();
     env.stores
         .create_group(CreateGroupPayload {
+            source_provider_id: None,
             thinking_effort: None,
             name: group.into(),
             items: vec![
@@ -454,6 +455,7 @@ async fn exhausted_2xx_error_envelopes_return_502() {
         .unwrap();
     env.stores
         .create_group(CreateGroupPayload {
+            source_provider_id: None,
             thinking_effort: None,
             name: "all-200-err".into(),
             items: vec![
