@@ -1052,3 +1052,24 @@ Session summary was not supplied.
 ### Next Steps
 
 - None - task complete
+
+
+## Session 28: 主窗口标题栏改用 happier-ui 图标按钮
+
+**Date**: 2026-07-27
+**Task**: 主窗口标题栏改用 happier-ui 图标按钮
+**Branch**: `master`
+
+### Summary
+
+将主窗口自定义标题栏的窗口控制按钮（最小化/最大化-还原/关闭）从原生 button+lucide 改为 happier-ui 的 HButton（variant=ghost、isIconOnly、size=sm），标题栏背景由深色 bg-slate-900 改为浅色 bg-white + 底边框，高度调至 h-11。同步更新 desktop-titlebar.md spec 记录新的浅色主题与 HButton 契约。类型检查通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `17ff10d` | (see git log) |
+
+### Status
+
+[OK] **Completed**
