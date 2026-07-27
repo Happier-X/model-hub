@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { Plus } from "@lucide/vue";
 import { useForm } from "@tanstack/vue-form";
 import { HBadge, HButton, HCard, HEmpty, HInput, HSelect, type HSelectOption } from "happier-ui";
 import {
@@ -556,13 +557,6 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-6">
-    <HCard variant="outlined" padding="md">
-      <div class="flex items-center justify-between gap-2">
-        <h2 class="text-base font-semibold">分组管理</h2>
-        <HButton variant="primary" type="button" @click="openCreate">新建分组</HButton>
-      </div>
-    </HCard>
-
     <AppDialog
       :open="dialogOpen"
       :title="isEditing ? '编辑分组' : '新建分组'"
@@ -812,7 +806,21 @@ onMounted(async () => {
 
     <HCard variant="outlined" padding="md">
       <template #header>
-        <h2 class="text-base font-semibold">分组列表</h2>
+        <div class="flex items-center justify-between gap-2">
+          <h2 class="text-base font-semibold">分组</h2>
+          <HButton
+            variant="ghost"
+            size="sm"
+            isIconOnly
+            shape="circle"
+            title="新建分组"
+            aria-label="新建分组"
+            type="button"
+            @click="openCreate"
+          >
+            <Plus :size="18" aria-hidden="true" />
+          </HButton>
+        </div>
       </template>
       <p class="mb-3 text-xs text-slate-500">
         「配置到 Pi」会将该分组名写入本机
