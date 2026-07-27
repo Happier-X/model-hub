@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 29
+- **Total Sessions**: 30
 - **Last Active**: 2026-07-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1096 | Active |
+| `journal-1.md` | ~1118 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 30 | 2026-07-27 | 模型排序改用 OpenRouter 榜单并支持分层模糊匹配 | `b1b31d0`, `5f5377b` | `master` |
 | 29 | 2026-07-27 | 主窗口三段式布局仅主区滚动 | `58e86d3` | `master` |
 | 28 | 2026-07-27 | 主窗口标题栏改用 happier-ui 图标按钮 | `17ff10d` | `master` |
 | 27 | 2026-07-25 | 修复流式 SSE 帧错误信封漏检导致不换源 | `f392572` | `master` |

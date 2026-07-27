@@ -1094,3 +1094,25 @@ Session summary was not supplied.
 ### Status
 
 [OK] **Completed**
+
+
+## Session 30: 模型排序改用 OpenRouter 榜单并支持分层模糊匹配
+
+**Date**: 2026-07-27
+**Task**: 模型排序改用 OpenRouter 榜单并支持分层模糊匹配
+**Branch**: `master`
+
+### Summary
+
+砍掉了前端硬编码的本地启发式模型打分，分组队列完全以 OpenRouter 榜单的 intelligence_score 作为单一排序指标。引入了三层模糊匹配机制（精确 -> 归一化增强 -> 前缀+判别 token 护栏），在匹配到前缀且剩余部分不含 mini/pro 等关键档位 token 时允许近似命中，从而解决上游模型名命名不规范导致的漏配问题，同时死守档位护栏宁可未匹配也不错配。UI 精简，移除了排序方式下拉，模型项不再混合展示本地和外部分数，未能匹配上榜单的模型将直接沉底且保持彼此之前的相对顺序。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b1b31d0` | (see git log) |
+| `5f5377b` | (see git log) |
+
+### Status
+
+[OK] **Completed**
