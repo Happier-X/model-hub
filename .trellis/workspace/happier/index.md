@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 28
+- **Total Sessions**: 29
 - **Last Active**: 2026-07-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1075 | Active |
+| `journal-1.md` | ~1096 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 29 | 2026-07-27 | 主窗口三段式布局仅主区滚动 | `58e86d3` | `master` |
 | 28 | 2026-07-27 | 主窗口标题栏改用 happier-ui 图标按钮 | `17ff10d` | `master` |
 | 27 | 2026-07-25 | 修复流式 SSE 帧错误信封漏检导致不换源 | `f392572` | `master` |
 | 26 | 2026-07-25 | 升级 happier-ui 0.0.3 + 新组件替换手写控件 | `ce7f322` | `master` |

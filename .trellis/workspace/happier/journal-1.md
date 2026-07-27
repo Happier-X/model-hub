@@ -1073,3 +1073,24 @@ Session summary was not supplied.
 ### Status
 
 [OK] **Completed**
+
+
+## Session 29: 主窗口三段式布局仅主区滚动
+
+**Date**: 2026-07-27
+**Task**: 主窗口三段式布局仅主区滚动
+**Branch**: `master`
+
+### Summary
+
+将 AppShell 外壳锁成固定框架：最外层 h-screen + overflow-hidden + flex-col，下方横向区域 flex min-h-0 flex-1 overflow-hidden（左 HSidebar 固定 + 右 main 占满剩余宽度），右主区内仅 RouterView 容器 overflow-auto 纵向滚动。质量检查发现并修复滚动容器缺 min-h-0 导致 overflow-auto 失效的问题（RouterView 外层改为 min-h-0 flex-1 overflow-auto）。typecheck/lint 通过。component-guidelines.md 新增「应用外壳布局」契约，记录 flex 子项 min-height:auto 坑与每层补 min-h-0/min-w-0 的修复。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `58e86d3` | (see git log) |
+
+### Status
+
+[OK] **Completed**
