@@ -21,13 +21,10 @@ import {
 import AppDialog from "../components/AppDialog.vue";
 import {
   buildExternalScoreIndex,
-  hybridSortKey,
-  scoreModelCapability,
-  sortByHybridCapability,
-  sortByModelCapability,
-  type ExternalSortMetric,
-  type MatchedExternalScore,
-  type QueueSortMode,
+  matchModelToLeaderboard,
+  sortQueueByLeaderboard,
+  type ExternalLeaderboardEntry,
+  type LeaderboardIndex,
 } from "../utils/modelCapability";
 import { getGroupSaveMode } from "../utils/groupSaveMode";
 
@@ -88,13 +85,6 @@ const bulkAddingModels = ref(false);
 const bulkMessage = ref("");
 const dragFromIndex = ref<number | null>(null);
 const dragOverIndex = ref<number | null>(null);
-const sortMode = ref<QueueSortMode>("local");
-
-const sortModeOptions: HSelectOption[] = [
-  { value: "local", label: "本地启发式" },
-  { value: "external_intelligence", label: "外部通用能力" },
-  { value: "external_coding", label: "外部编码能力" },
-];
 
 const providerSelectOptions = computed<HSelectOption[]>(() => [
   { value: 0, label: "选择供应商" },
@@ -193,34 +183,30 @@ function updateItemAt(
 
 const providerMap = computed(() => new Map(providers.value.map((p) => [p.id, p])));
 
-const externalIndex = computed(() => {
-  if (sortMode.value === "local" || !leaderboard.value) return null;
-  const metric: ExternalSortMetric =
-    sortMode.value === "external_coding" ? "coding" : "intelligence";
-  return buildExternalScoreIndex(leaderboard.value.models, metric);
+const externalIndex = computed<LeaderboardIndex | null>(() => {
+  if (!leaderboard.value) return null;
+  return buildExternalScoreIndex(leaderboard.value.models);
 });
 
 const leaderboardStatusText = computed(() => {
   if (leaderboardLoading.value) return "榜单加载中…";
   if (!leaderboard.value) {
-    return leaderboardError.value || "尚未加载外部榜单（使用外部排序时将自动拉取）";
+    return leaderboardError.value || "尚未加载外部榜单（排序时将自动拉取）";
   }
   const t = formatUnix(leaderboard.value.fetched_at_unix);
   const parts = [
-    `来源 ${leaderboard.value.source === "openrouter" ? "OpenRouter" : leaderboard.value.source}`,
-    `${leaderboard.value.models.length} 条`,
+    `OpenRouter ${leaderboard.value.models.length} 条`,
     `更新于 ${t}`,
   ];
   if (leaderboard.value.cache_hit) parts.push("缓存命中");
-  if (leaderboard.value.stale) parts.push("陈旧缓存（网络失败已回退）");
-  // 强制刷新失败但仍有旧快照时，补充错误提示
+  if (leaderboard.value.stale) parts.push("陈旧缓存");
   if (leaderboardError.value) parts.push(`刷新失败：${leaderboardError.value}`);
   return parts.join(" · ");
 });
 
-/** 每条队列的展示分（按 index 缓存，避免模板内多次调用 displayScoreOf）。 */
+/** 每条队列的展示分（按 index 缓存，避免模板内多次调用）。 */
 const queueDisplayScores = computed(() =>
-  formValues.value.items.map((item) => displayScoreOf(item.upstream_model)),
+  formValues.value.items.map((item) => matchModelToLeaderboard(item.upstream_model, externalIndex.value)),
 );
 
 function formatUnix(unix: number): string {
@@ -250,7 +236,6 @@ async function loadLeaderboard(forceRefresh = false) {
 }
 
 async function ensureLeaderboardForExternalSort() {
-  if (sortMode.value === "local") return true;
   if (leaderboard.value && !leaderboardLoading.value) return true;
   await loadLeaderboard(false);
   return !!leaderboard.value;
@@ -400,39 +385,6 @@ function onDragEnd() {
   dragOverIndex.value = null;
 }
 
-function capabilityOf(modelId: string) {
-  return scoreModelCapability(modelId);
-}
-
-function displayScoreOf(modelId: string): {
-  label: string;
-  score: number;
-  source: "local" | "openrouter";
-  recognized: boolean;
-  external: MatchedExternalScore | null;
-} {
-  const local = scoreModelCapability(modelId);
-  if (sortMode.value !== "local" && externalIndex.value) {
-    const { external } = hybridSortKey(modelId, externalIndex.value);
-    if (external) {
-      return {
-        label: local.recognized ? local.label : "外部榜单",
-        score: external.score,
-        source: "openrouter",
-        recognized: true,
-        external,
-      };
-    }
-  }
-  return {
-    label: local.label,
-    score: local.score,
-    source: "local",
-    recognized: local.recognized,
-    external: null,
-  };
-}
-
 function applySortedItems(sorted: QueueItemDraft[], msg: string) {
   const items = formValues.value.items;
   const oldIndexByUid = new Map(items.map((item, index) => [item.uid, index]));
@@ -460,37 +412,23 @@ async function sortQueueByCapability() {
     return;
   }
 
-  if (sortMode.value !== "local") {
-    const ok = await ensureLeaderboardForExternalSort();
-    if (!ok) {
-      bulkMessage.value =
-        "外部榜单不可用，已保持当前顺序。可改用「本地启发式」排序，或检查网络后强制刷新榜单。";
-      return;
-    }
-  }
-
-  const before = items.map((item) => item.uid);
-  const sorted =
-    sortMode.value === "local"
-      ? sortByModelCapability(items, (item) => item.upstream_model)
-      : sortByHybridCapability(items, (item) => item.upstream_model, externalIndex.value);
-
-  const after = sorted.map((item) => item.uid);
-  if (before.every((uid, index) => uid === after[index])) {
+  const ok = await ensureLeaderboardForExternalSort();
+  if (!ok) {
     bulkMessage.value =
-      sortMode.value === "local"
-        ? "当前顺序已符合本地启发式排序"
-        : "当前顺序已符合所选外部榜单排序（未匹配项已回退本地）";
+      "外部榜单不可用，已保持当前顺序。请检查网络后强制刷新榜单。";
     return;
   }
 
-  const modeHint =
-    sortMode.value === "local"
-      ? "已按本地模型名启发式排序（分数越高越优先）；未识别模型排后。"
-      : sortMode.value === "external_coding"
-        ? "已按 OpenRouter 编码能力排序；未匹配或无分模型回退本地启发式。"
-        : "已按 OpenRouter 通用能力排序；未匹配或无分模型回退本地启发式。";
-  applySortedItems(sorted, `${modeHint}点击“保存”后生效，仍可拖拽微调。`);
+  const before = items.map((item) => item.uid);
+  const sorted = sortQueueByLeaderboard(items, (item) => item.upstream_model, externalIndex.value);
+
+  const after = sorted.map((item) => item.uid);
+  if (before.every((uid, index) => uid === after[index])) {
+    bulkMessage.value = "当前顺序已符合 OpenRouter 榜单排序（未匹配项保持原序）";
+    return;
+  }
+
+  applySortedItems(sorted, "已按 OpenRouter 通用能力排序；未匹配项已沉底。点击“保存”后生效，仍可拖拽微调。");
 }
 
 async function pullModels(index: number) {
@@ -685,15 +623,6 @@ onMounted(async () => {
             <div class="flex flex-wrap items-center justify-between gap-2">
               <h3 class="text-sm font-medium">故障转移队列</h3>
               <div v-if="!isBound" class="flex flex-wrap items-center gap-3">
-                <label class="flex items-center gap-1.5 text-sm text-slate-600">
-                  <span class="text-slate-500">排序方式</span>
-                  <HSelect
-                    class="w-40"
-                    :options="sortModeOptions"
-                    :model-value="sortMode"
-                    @update:model-value="(v) => (sortMode = v as QueueSortMode)"
-                  />
-                </label>
                 <HButton
                   variant="ghost"
                   size="sm"
@@ -757,8 +686,7 @@ onMounted(async () => {
             </div>
             <p v-if="bulkMessage" class="text-sm text-emerald-700">{{ bulkMessage }}</p>
             <p v-if="!isBound" class="text-xs text-slate-500">
-              可拖动左侧手柄调整故障转移优先级；上移/下移与「按模型能力排序」仅作用于当前表单，需点保存写入。本地分来自模型名启发式；外部分为
-              OpenRouter 公开指标，未匹配回退本地。
+              可拖动左侧手柄调整故障转移优先级；上移/下移与「按模型能力排序」仅作用于当前表单，需点保存写入。外部分数为 OpenRouter 公开智能指标。
             </p>
             <div
               v-for="(item, index) in formValues.items"
@@ -789,23 +717,20 @@ onMounted(async () => {
               <span
                 class="rounded-full px-2 py-0.5 text-[11px] tabular-nums"
                 :class="
-                  queueDisplayScores[index]?.source === 'openrouter'
+                  queueDisplayScores[index]
                     ? 'bg-emerald-50 text-emerald-800'
-                    : queueDisplayScores[index]?.recognized
-                      ? 'bg-violet-50 text-violet-700'
-                      : 'bg-slate-100 text-slate-500'
+                    : 'bg-slate-100 text-slate-500'
                 "
                 :title="
-                  queueDisplayScores[index]?.source === 'openrouter'
-                    ? `OpenRouter 分数 ${queueDisplayScores[index]?.score}（本地启发式 ${capabilityOf(item.upstream_model).score}）`
-                    : `本地启发式能力分 ${queueDisplayScores[index]?.score}`
+                  queueDisplayScores[index]
+                    ? `OpenRouter 分数 ${queueDisplayScores[index]?.score}（匹配层级：${queueDisplayScores[index]?.tier}）`
+                    : '未匹配到 OpenRouter 榜单数据'
                 "
               >
-                {{ queueDisplayScores[index]?.source === "openrouter" ? "OpenRouter" : "本地" }}
-                ·
-                {{ queueDisplayScores[index]?.label }}
-                ·
-                {{ queueDisplayScores[index]?.score }}
+                <template v-if="queueDisplayScores[index]">
+                  OpenRouter · {{ queueDisplayScores[index]?.score }}
+                </template>
+                <template v-else>未匹配</template>
               </span>
               <HSelect
                 :disabled="isBound"

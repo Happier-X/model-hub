@@ -1,6 +1,6 @@
 # 分组队列模型排序
 
-> 本地启发式 + OpenRouter 外部分数混合排序、匹配与 UI 约定。
+> OpenRouter 榜单排序与分层模糊匹配契约。
 
 ---
 
@@ -8,7 +8,7 @@
 
 ### 1. Scope / Trigger
 
-- Trigger：GroupsPage 对故障转移队列按模型能力重排；依赖 IPC 榜单与本地启发式，跨层合同与错配风险需固定。
+- Trigger：GroupsPage 对故障转移队列按模型能力重排；完全依赖 IPC 透传的 OpenRouter 榜单，不设本地硬编码打分。
 
 ### 2. Signatures
 
@@ -19,8 +19,6 @@ export interface LeaderboardModel {
   canonical_slug?: string | null
   name?: string | null
   intelligence_score?: number | null
-  coding_score?: number | null
-  agentic_score?: number | null
 }
 
 export interface ModelLeaderboardSnapshot {
@@ -30,26 +28,20 @@ export interface ModelLeaderboardSnapshot {
   cache_hit: boolean
   models: LeaderboardModel[]
 }
-
-export const getModelLeaderboard = (forceRefresh = false) =>
-  invoke<ModelLeaderboardSnapshot>("get_model_leaderboard", {
-    forceRefresh,
-  })
 ```
 
 ```ts
 // src/utils/modelCapability.ts
-export type QueueSortMode =
-  | "local"
-  | "external_intelligence"
-  | "external_coding"
+export type MatchTier = "exact" | "normalized" | "prefix";
 
-export function hybridSortKey(
-  modelId: string,
-  index: Map<string, MatchedExternalScore> | null,
-): { key: number; external: MatchedExternalScore | null; local: ModelCapability }
+export interface MatchedExternalScore {
+  score: number; // intelligence_score
+  leaderboardId: string;
+  sourceLabel: string;
+  tier: MatchTier;
+}
 
-export function sortByHybridCapability<T>(
+export function sortQueueByLeaderboard<T>(
   items: readonly T[],
   getModelId: (item: T) => string,
   index: Map<string, MatchedExternalScore> | null,
@@ -60,75 +52,74 @@ export function sortByHybridCapability<T>(
 
 **排序方式**
 
-| 模式 | 外部分字段 | 未命中 |
-|------|------------|--------|
-| `local` | 不用榜单 | 本地启发式 `scoreModelCapability` |
-| `external_intelligence` | `intelligence_score` | 回退本地 |
-| `external_coding` | `coding_score` | 回退本地 |
+- 仅单一指标：按 OpenRouter `intelligence_score` 降序排序。
+- **未命中沉底**：匹配不到榜单的模型，整体排在所有命中模型之后。
+- **稳定排序**：同分项、或都是未匹配项时，彼此保持原下标相对顺序。
 
-**混合 key**
+**分层匹配**
 
-- 外部命中且有分：`key = 1_000_000 + external_score * 1_000`（保证外部命中整体高于本地分带）。
-- 未匹配 / 无对应分 / 无 index：`key = local.score`。
-- 稳定排序：`b.key - a.key`，同 key 保持原下标顺序。
+上游模型名映射到 OpenRouter 榜单，按顺序采取三层尝试（命中即返回，若单层多候选则取分数最高者）：
 
-**匹配（高置信）**
-
-- 归一化：小写、去厂商前缀、去日期后缀、统一分隔符/常见变体（见 `normalizeModelIdForMatch`）。
-- **仅**归一化后 key **完全相等** 命中；禁止子串/模糊匹配。
-- 索引可由 `id`、`canonical_slug`、`name` 建 key；同 key 冲突时取更高分（有意策略）。
+1. **精确（exact）**：双侧归一化 key 完全相等。
+2. **归一化增强（normalized）**：两侧剥离厂商前缀、日期、渠道（`-latest` / `-instruct` / `-chat` 等）、量化后缀（`fp8` / `gguf` 等），再比较是否完全相等。
+3. **受控近似（prefix）**：仅当一侧的增强 key 是另一侧前缀（以 `-` 为边界），且**被截掉的剩余部分不含档位判别 token** 时，才允许命中。
+   - 判别 token 包含：`mini`、`nano`、`pro`、`large`、`haiku`、`sonnet`、`opus`、`max` 等词，以及参数量段（`7b`、`72b`）。
+   - 目的：宁可未匹配，绝不错配。如 `gpt-4o` 绝不得前缀命中 `gpt-4o-mini`。
 
 **UI / 表单**
 
 - 排序 **只改当前表单** `form.items`，**不得**自动 `save`。
-- 展示：来源（OpenRouter/本地）、系列标签、分数；榜单状态含更新时间、条数、缓存命中/陈旧；强制刷新失败时状态行可附错误。
+- 展示：命中时显示 `OpenRouter · {分数}`，未命中时灰底显示 `未匹配`。
+- 榜单状态含更新时间、条数、缓存或陈旧；刷新失败时附中文错误提示。
 - 用户仍可拖拽微调顺序。
 
 ### 4. Validation & Error Matrix
 
 | 条件 | 行为 |
 |------|------|
-| 选外部排序且尚无榜单 | 先 `getModelLeaderboard(false)`；失败 toast/状态文案，可继续本地排序 |
-| 强制刷新失败但有旧快照 | 保留旧快照，状态提示「刷新失败：…」 |
-| 模型未匹配 | 标签显示本地启发式，按本地分排序 |
-| `invoke` 失败 | 不伪造空成功快照；错误可行动中文 |
+| 点击排序且尚无榜单 | 先 `getModelLeaderboard(false)`；如果失败（断网且无缓存），toast 中文提示，队列保持原顺序 |
+| 模型未匹配 | 标签显示「未匹配」，排序时沉底且保持原相对顺序 |
+| `invoke` 失败 | 不伪造空成功快照；抛出真实可行动的错误信息 |
 
 ### 5. Good/Base/Bad Cases
 
-- **Good**：`deepseek-r1` 与榜单 id 归一化相等 → 用外部分，key ≥ `1_000_000`。
-- **Base**：仅本地模式 → 不依赖网络，与既有启发式一致。
-- **Bad**：`claude-sonnet-3` 不得误配成其它 Claude；裸 `claude` 不得高置信命中具体版本。
+- **Good (Exact)**：`deepseek-r1` 归一化相等 → exact 命中。
+- **Good (Prefix)**：`gpt-4o-custom` → 剥离 `custom`（非判别 token）后前缀命中 `gpt-4o`。
+- **Base (Miss)**：`company-internal-model` 不在榜单 → 未匹配沉底。
+- **Bad (Guardrail)**：`gpt-4o-mini` → 剩余部分含 `mini`（判别 token）→ 不得命中榜单的 `gpt-4o`。
 
 ### 6. Tests Required
 
-- `matchExternalScore`：精确命中 / 不误配邻近名。
-- `hybridSortKey`：命中外部分带；未命中等于本地分。
-- `sortByHybridCapability`：外部优先、未命中回退、同 key 稳定。
-- 既有本地启发式单测保持通过。
+- `matchModelToLeaderboard`：精确命中、归一化去噪命中、前缀命中、护栏拦截错配案例（必须包含 `mini/sonnet` 等档位词防线测试）。
+- `sortQueueByLeaderboard`：命中降序在前、未匹配沉底、同分或同状态时稳定保持原序。
 
 ### 7. Wrong vs Correct
 
 #### Wrong
 
 ```ts
-// 模糊包含匹配 → 错配风险
-if (leaderboardId.includes(localId)) useExternal()
+// 模糊包含匹配 → 极易发生档位错配
+if (leaderboardId.includes(localId)) match()
 // 排序后立刻 saveGroup
 await saveGroup(form)
+// 回退到本地硬编码打分兜底
+if (!hit) useLocalScore()
 ```
 
 #### Correct
 
 ```ts
-const key = normalizeModelIdForMatch(modelId)
-const hit = index.get(key) // 仅全等
+// 受控匹配：前缀且无判别 token 冲突
+const hit = matchModelToLeaderboard(modelId, index)
 // 只改 form.items，提示用户保存
-form.items = sortByHybridCapability(...)
+applySortedItems(sorted, "已按能力排序...")
+// 未匹配模型统一沉底
+if (!a.match && b.match) return 1
 ```
 
 ---
 
 ## 与组件规范关系
 
-- 延续 `component-guidelines.md`：能力排序不自动保存、未知模型稳定偏后、可拖拽微调。
-- 外部模式增加来源标注与缓存状态，评分仍须可读。
+- 延续 `component-guidelines.md`：能力排序不自动保存、可拖拽微调。
+- 外部模式直接作为唯一指标，精简交互理解成本。

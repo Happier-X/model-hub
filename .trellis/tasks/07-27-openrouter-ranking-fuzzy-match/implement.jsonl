@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/model-queue-sort.md", "reason": "本任务直接改写的排序/匹配契约来源，实现时需据此更新签名、匹配分层与 UI 约定"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端整体约定与技术栈（happier-ui / tanstack form / invoke-only），改 GroupsPage 与 utils 时遵循"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "TS 与 invoke 类型约定，改 modelCapability 类型与 tauri 榜单类型时遵循"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量底线，落地实现与单测时对齐"}
