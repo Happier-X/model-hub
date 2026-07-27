@@ -40,9 +40,9 @@ onMounted(checkUpdateOnAppStartup);
 </script>
 
 <template>
-  <div class="flex min-h-screen flex-col bg-slate-100 text-slate-900">
+  <div class="flex h-screen flex-col overflow-hidden bg-slate-100 text-slate-900">
     <AppTitleBar />
-    <div class="flex min-h-0 flex-1">
+    <div class="flex min-h-0 flex-1 overflow-hidden">
       <HSidebar
         :items="navItems"
         :model-value="route.path"
@@ -77,7 +77,7 @@ onMounted(checkUpdateOnAppStartup);
         <header class="border-b border-slate-200 bg-white px-6 py-4">
           <h1 class="text-xl font-semibold">{{ title }}</h1>
         </header>
-        <div class="flex-1 overflow-auto p-6">
+        <div class="min-h-0 flex-1 overflow-auto p-6">
           <RouterView />
         </div>
       </main>

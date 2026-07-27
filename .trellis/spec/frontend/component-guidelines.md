@@ -22,6 +22,33 @@
 14. **页面职责**：首页只承载代理运行状态、Base URL、启停/刷新、请求统计与接入指引；端口修改、数据目录、应用更新和自动检查偏好统一放在设置页。
 15. **启动更新检查**：应用壳层仅在挂载时读取一次 `check_update_on_startup`；发现新版本只展示可关闭提示和设置页入口，探测后立即关闭 `Update` 资源，不自动下载或安装。
 
+## 应用外壳布局（AppShell）
+
+固定框架「上 titlebar + 下(左侧栏 + 右主区)」，滚动只发生在右主区内容容器。契约：
+
+- 最外层锁视口高度并禁止自身滚动：`h-screen overflow-hidden` + `flex-col`（**不要**用 `min-h-screen`，它允许整体高度撑破视口，导致 body/最外层出现滚动条，把 titlebar、侧栏一起滚走）。
+- 顶部 `AppTitleBar` 固定高度（`h-11 shrink-0`），不参与滚动。
+- 下方横向区域 `flex min-h-0 flex-1 overflow-hidden`：左侧 `HSidebar` 固定，右侧 `main` 用 `flex min-w-0 flex-1 flex-col` 占满剩余宽度。
+- 右主区内：更新提示条（如有）+ 页面标题 `header` 固定不滚，只有最下方的 `RouterView` 容器可纵向溢出滚动。
+
+> **Warning**: flex 子项默认 `min-height: auto` / `min-width: auto`，内容超长时会撑高/撑宽父项，使祖先的 `overflow-auto` / `overflow-hidden` 失效——滚动条跑到外层而非目标容器。
+>
+> 修复：在 flex 链路每一层补 `min-h-0`（纵向）/ `min-w-0`（横向），把子项约束回可用空间内。**滚动容器自身也要带 `min-h-0`**：`RouterView` 外层必须写 `min-h-0 flex-1 overflow-auto`，只写 `flex-1 overflow-auto` 会漏——内容超长时 main 整体溢出、`overflow-auto` 不生效。
+
+```vue
+<!-- 正确：h-screen 锁死 + 每层 min-h-0/min-w-0，仅内容容器滚动 -->
+<div class="flex h-screen flex-col overflow-hidden">
+  <AppTitleBar />
+  <div class="flex min-h-0 flex-1 overflow-hidden">
+    <HSidebar ... />
+    <main class="flex min-w-0 flex-1 flex-col">
+      <!-- 更新提示条 / header：固定不滚 -->
+      <div class="min-h-0 flex-1 overflow-auto p-6"><RouterView /></div>
+    </main>
+  </div>
+</div>
+```
+
 ## 状态与生命周期
 
 - 局部交互使用 `ref` / `reactive` / `computed`；**对话框业务表单字段**用 TanStack Form（见 3.2），不与页面级 `reactive` 双源。
