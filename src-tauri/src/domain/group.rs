@@ -23,6 +23,7 @@ pub struct Group {
     /// 思考强度档位：off|minimal|low|medium|high|auto，默认 off。
     pub thinking_effort: String,
     pub source_provider_id: Option<i64>,
+    pub last_sync_at: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -173,7 +174,7 @@ impl Stores {
     pub fn list_groups(&self) -> Result<Vec<Group>, AppError> {
         self.with_conn(|conn| {
             let mut stmt = conn
-                .prepare("SELECT id, name, created_at, thinking_effort, source_provider_id FROM groups ORDER BY id ASC")
+                .prepare("SELECT id, name, created_at, thinking_effort, source_provider_id, last_sync_at FROM groups ORDER BY id ASC")
                 .map_err(|e| AppError::Database(e.to_string()))?;
             let rows = stmt
                 .query_map([], |row| {
@@ -183,12 +184,13 @@ impl Stores {
                         row.get::<_, String>(2)?,
                         row.get::<_, String>(3)?,
                         row.get::<_, Option<i64>>(4)?,
+                        row.get::<_, Option<i64>>(5)?,
                     ))
                 })
                 .map_err(|e| AppError::Database(e.to_string()))?;
             let mut out = Vec::new();
             for r in rows {
-                let (id, name, created_at, thinking_effort, source_provider_id) =
+                let (id, name, created_at, thinking_effort, source_provider_id, last_sync_at) =
                     r.map_err(|e| AppError::Database(e.to_string()))?;
                 let items = Self::load_items(conn, id)?;
                 out.push(Group {
@@ -198,6 +200,7 @@ impl Stores {
                     created_at,
                     thinking_effort,
                     source_provider_id,
+                    last_sync_at,
                 });
             }
             Ok(out)
@@ -208,7 +211,7 @@ impl Stores {
         self.with_conn(|conn| {
             let row = conn
                 .query_row(
-                    "SELECT id, name, created_at, thinking_effort, source_provider_id FROM groups WHERE name = ?1",
+                    "SELECT id, name, created_at, thinking_effort, source_provider_id, last_sync_at FROM groups WHERE name = ?1",
                     [name],
                     |row| {
                         Ok((
@@ -217,12 +220,13 @@ impl Stores {
                             row.get::<_, String>(2)?,
                             row.get::<_, String>(3)?,
                             row.get::<_, Option<i64>>(4)?,
+                            row.get::<_, Option<i64>>(5)?,
                         ))
                     },
                 )
                 .optional()
                 .map_err(|e| AppError::Database(e.to_string()))?;
-            let Some((id, name, created_at, thinking_effort, source_provider_id)) = row else {
+            let Some((id, name, created_at, thinking_effort, source_provider_id, last_sync_at)) = row else {
                 return Ok(None);
             };
             let items = Self::load_items(conn, id)?;
@@ -233,6 +237,7 @@ impl Stores {
                 created_at,
                 thinking_effort,
                 source_provider_id,
+                last_sync_at,
             }))
         })
     }
@@ -324,6 +329,21 @@ impl Stores {
         self.with_conn(|conn| {
             let n = conn
                 .execute("DELETE FROM groups WHERE id = ?1", [id])
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            if n == 0 {
+                return Err(AppError::Business("分组不存在".into()));
+            }
+            Ok(())
+        })
+    }
+
+    pub fn touch_group_synced_at(&self, group_id: i64, unix: i64) -> Result<(), AppError> {
+        self.with_conn(|conn| {
+            let n = conn
+                .execute(
+                    "UPDATE groups SET last_sync_at = ?1 WHERE id = ?2",
+                    params![unix, group_id],
+                )
                 .map_err(|e| AppError::Database(e.to_string()))?;
             if n == 0 {
                 return Err(AppError::Business("分组不存在".into()));

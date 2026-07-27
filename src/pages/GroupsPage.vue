@@ -149,6 +149,15 @@ const form = useForm({
 
 const isBound = computed(() => !!formValues.value.source_provider_id);
 
+/** 绑定态「上次同步」文案：优先取当前编辑分组的 last_sync_at。 */
+const boundLastSyncText = computed(() => {
+  if (editingGroupId.value === null) return "尚未同步";
+  const g = groups.value.find((item) => item.id === editingGroupId.value);
+  const ts = g?.last_sync_at;
+  if (ts == null || ts <= 0) return "尚未同步";
+  return formatUnix(ts);
+});
+
 /** 订阅表单 values，供队列操作与模板读取 */
 const formValues = form.useSelector((s) => s.values);
 
@@ -708,10 +717,15 @@ onMounted(async () => {
             </div>
             <p v-if="!isBound" class="text-xs text-slate-500">{{ leaderboardStatusText }}</p>
             <div v-if="isBound" class="rounded-lg border border-violet-100 bg-violet-50/60 p-3">
-              <div class="flex items-center justify-between">
-                <p class="text-sm text-violet-800">
-                  本分组由供应商托管，每 24h 自动同步，模型列表只读。
-                </p>
+              <div class="flex items-center justify-between gap-2">
+                <div class="space-y-1">
+                  <p class="text-sm text-violet-800">
+                    本分组由供应商托管，每 24h 自动同步，模型列表只读。
+                  </p>
+                  <p class="text-xs text-violet-600">
+                    上次同步：{{ boundLastSyncText }}
+                  </p>
+                </div>
                 <HButton v-if="isEditing" variant="outline" size="sm" type="button" :disabled="saving" @click="handleSyncNow">
                   立即同步
                 </HButton>

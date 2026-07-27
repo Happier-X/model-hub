@@ -51,6 +51,8 @@ export interface Group {
   /** 思考强度档位，默认 off。转发时按上游模型家族翻译成厂商字段。 */
   thinking_effort: ThinkingEffort;
   source_provider_id?: number | null;
+  /** 最后一次成功同步的 unix 秒；null/undefined 表示尚未同步。 */
+  last_sync_at?: number | null;
 }
 
 export interface RequestLog {

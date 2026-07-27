@@ -20,6 +20,10 @@ pub const DEFAULT_HOST: &str = "127.0.0.1";
 pub const PORT_SCAN_ATTEMPTS: u16 = 50;
 /// `stop` 时等待 graceful shutdown 的最长时间；超时则 abort 服务任务以释放端口。
 pub const PROXY_STOP_GRACE: Duration = Duration::from_secs(3);
+/// 代理启动后先静默这段时间才做首次同步检查，降低上游对启动瞬间的感知。
+pub const SYNC_STARTUP_DELAY: Duration = Duration::from_secs(5 * 60);
+/// 后台同步检查间隔：每小时检查一次过期的绑定分组。
+pub const SYNC_CHECK_INTERVAL: Duration = Duration::from_secs(3600);
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -203,12 +207,13 @@ impl ProxyHandle {
 
         let serve_fut = server::serve(bind.listener, state, shutdown_rx);
         let timer_fut = async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(24 * 3600));
-            interval.tick().await; // 先消费掉立即返回的首个 tick，保证启动时不拉
-
+            // 启动后先静默 5 分钟，绝不在启动瞬间批量打上游。
+            tokio::time::sleep(SYNC_STARTUP_DELAY).await;
+            let mut interval = tokio::time::interval(SYNC_CHECK_INTERVAL);
             loop {
+                // 首个 tick 立即返回：静默期结束后立刻做一次过期检查。
                 interval.tick().await;
-                crate::commands::perform_sync_all_bound_groups(&stores).await;
+                crate::commands::perform_due_bound_groups(&stores).await;
             }
         };
 

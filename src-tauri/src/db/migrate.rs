@@ -107,6 +107,12 @@ fn ensure_group_columns(conn: &Connection) -> Result<(), AppError> {
         )
         .map_err(|e| AppError::Database(format!("添加 groups.source_provider_id 字段失败: {e}")))?;
     }
+
+    // 最后一次成功同步时间（unix 秒，可空；NULL = 从未同步）。跨重启累计 24h 倒计时用。
+    if !columns.contains("last_sync_at") {
+        conn.execute("ALTER TABLE groups ADD COLUMN last_sync_at INTEGER", [])
+            .map_err(|e| AppError::Database(format!("添加 groups.last_sync_at 字段失败: {e}")))?;
+    }
     Ok(())
 }
 
@@ -438,6 +444,55 @@ mod tests {
         assert_eq!(row.2, None);
 
         migrate(&conn).unwrap(); // idempotent check
+    }
+
+    #[test]
+    fn migrate_adds_missing_last_sync_at_without_losing_data() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE groups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                thinking_effort TEXT NOT NULL DEFAULT 'off',
+                source_provider_id INTEGER
+            );
+            INSERT INTO groups (name, created_at, thinking_effort, source_provider_id)
+            VALUES ('legacy3', '2024-01-01T00:00:00Z', 'high', 7);",
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let cols = table_column_names(&conn, "groups").unwrap();
+        assert!(cols.contains("last_sync_at"));
+
+        let row: (String, String, Option<i64>, Option<i64>) = conn
+            .query_row(
+                "SELECT name, thinking_effort, source_provider_id, last_sync_at
+                 FROM groups WHERE id = 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(row.0, "legacy3");
+        assert_eq!(row.1, "high");
+        assert_eq!(row.2, Some(7));
+        assert_eq!(row.3, None, "旧库无此列，追加后默认 NULL");
+
+        // 写入时间戳后再次迁移应幂等
+        conn.execute(
+            "UPDATE groups SET last_sync_at = ?1 WHERE id = 1",
+            [1_700_000_000i64],
+        )
+        .unwrap();
+        migrate(&conn).unwrap();
+        let ts: Option<i64> = conn
+            .query_row("SELECT last_sync_at FROM groups WHERE id = 1", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(ts, Some(1_700_000_000));
     }
 
     #[test]

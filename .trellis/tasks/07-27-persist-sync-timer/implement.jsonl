@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/upstream-access.md", "reason": "把后台同步例外从「24h 连续运行定时」更新为「每小时检查 + 启动后 5 分钟静默 + 距上次同步 ≥24h 才拉 + 多分组 5 秒错峰」"}
+{"file": "src-tauri/src/db/migrate.rs", "reason": "在 ensure_group_columns 幂等追加 last_sync_at INTEGER 可空列，并比照 source_provider_id 单测补迁移单测"}
+{"file": "src-tauri/src/domain/group.rs", "reason": "Group 加 last_sync_at 字段，list_groups/get_group_by_name 补 SELECT 与映射，新增 touch_group_synced_at 原子写时间方法"}
+{"file": "src-tauri/src/commands.rs", "reason": "perform_sync_bound_group 成功后写时间；新增 perform_due_bound_groups（过期判定 + 5 秒错峰）替换无条件全量；常量 SYNC_STALE_AFTER_SECS / SYNC_STAGGER"}
+{"file": "src-tauri/src/proxy/runtime.rs", "reason": "timer_fut 改为启动后 sleep 5 分钟再每小时 interval tick 调 perform_due_bound_groups；不再跳首个 tick；select 退出语义不变"}
+{"file": "src/api/tauri.ts", "reason": "Group 接口加 last_sync_at?: number | null"}
+{"file": "src/pages/GroupsPage.vue", "reason": "绑定态只读区展示「上次同步：{formatUnix} / 尚未同步」，复用已有 formatUnix"}

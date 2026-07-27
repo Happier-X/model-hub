@@ -12,6 +12,9 @@ use crate::error::{AppError, InvokeError};
 use crate::paths;
 use crate::proxy::{ProxyHandle, ProxyStatus};
 
+use std::time::Duration;
+use tokio::time::sleep;
+
 fn stores(proxy: &ProxyHandle) -> Result<crate::domain::Stores, InvokeError> {
     proxy.ensure_stores().map_err(Into::into)
 }
@@ -238,10 +241,17 @@ pub async fn perform_sync_bound_group(stores: &Stores, group_id: i64) -> Result<
         .collect();
 
     stores.replace_group_items(group.id, &items)?;
+
+    let now = chrono::Utc::now().timestamp();
+    stores.touch_group_synced_at(group.id, now)?;
+
     Ok(())
 }
 
-pub async fn perform_sync_all_bound_groups(stores: &Stores) {
+pub const SYNC_STALE_AFTER_SECS: i64 = 24 * 3600;
+pub const SYNC_STAGGER: Duration = Duration::from_secs(5);
+
+pub async fn perform_due_bound_groups(stores: &Stores) {
     let groups = match stores.list_groups() {
         Ok(g) => g,
         Err(e) => {
@@ -250,16 +260,35 @@ pub async fn perform_sync_all_bound_groups(stores: &Stores) {
         }
     };
 
+    let now = chrono::Utc::now().timestamp();
+    let mut first = true;
+
     for group in groups {
-        if group.source_provider_id.is_some() {
-            if let Err(e) = perform_sync_bound_group(stores, group.id).await {
-                tracing::warn!(
-                    error = %e,
-                    group_id = group.id,
-                    group_name = %group.name,
-                    "后台同步分组失败"
-                );
-            }
+        if group.source_provider_id.is_none() {
+            continue;
+        }
+
+        let due = match group.last_sync_at {
+            None => true,
+            Some(t) => now - t >= SYNC_STALE_AFTER_SECS,
+        };
+
+        if !due {
+            continue;
+        }
+
+        if !first {
+            sleep(SYNC_STAGGER).await;
+        }
+        first = false;
+
+        if let Err(e) = perform_sync_bound_group(stores, group.id).await {
+            tracing::warn!(
+                error = %e,
+                group_id = group.id,
+                group_name = %group.name,
+                "后台同步分组失败"
+            );
         }
     }
 }

@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "校验 last_sync_at 加列方式是否符合已有 ensure_*_columns 幂等约定"}
+{"file": ".trellis/spec/backend/upstream-access.md", "reason": "校验新调度行为（启动 5 分钟静默 + 每小时检查 + 24h 过期 + 错峰）是否严格落在例外条件内，无启动瞬间批量打上游"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "校验 Group.last_sync_at 的 snake_case 实体契约与前端类型对齐"}
