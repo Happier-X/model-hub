@@ -49,6 +49,67 @@
 </div>
 ```
 
+## 页面内部表格滚动模式（AppShell 整体滚动的对偶）
+
+默认 AppShell 滚动发生在右主区 `<div class="min-h-0 flex-1 overflow-auto p-6">` 包裹的 RouterView 容器
+（页面整体滚动）。**例外场景**：当某页要求"表格恰好占满页高、仅表格 body 滚动、底部分页器不滚"
+时（供应商页 `ProvidersPage`），该页走"表格内部滚动"模式，与整体滚动模式互斥。
+
+### 适用判定
+
+- 页面内容仅一个表格 + 分页器（无长表单 / 无多分区卡片堆叠）。
+- 用户预期"表头钉住、行区域滚动、翻页紧贴表底"，而非整页卷动。
+- 供应商页（数十条数据）从全量加载切换到前端假分页时使用此模式。
+
+### 实现合同（供应商页模式）
+
+```vue
+<template>
+  <!-- 1. 页面根节点：h-full 撑满 + overflow-hidden 防整页滚动 -->
+  <div class="h-full flex flex-col overflow-hidden">
+    <!-- 2. HCard：flex-1 min-h-0 吃掉页高；class fallthrough 落到 <article class="h-card"> -->
+    <HCard variant="outlined" padding="md" class="min-h-0 flex-1 flex flex-col">
+      <template #header><!-- 标题 + 新建按钮（固定不滚） --></template>
+      <HEmpty v-if="items.length === 0" ... />
+      <template v-else>
+        <!-- 3. 表格滚动区：min-h-0 flex-1 overflow-y-auto，仅此区滚动 -->
+        <div class="min-h-0 flex-1 overflow-y-auto">
+          <HTable :data="pagedItems" :sticky-header="true" ... />
+        </div>
+        <!-- 4. 分页器：在滚动区之外，shrink-0 不被压缩，mt-3 右对齐 -->
+        <div v-if="items.length > pageSize" class="mt-3 flex justify-end shrink-0">
+          <HPagination :current="page" :total="items.length" :page-size="pageSize"
+            @change="({ current }) => goPage(current)" />
+        </div>
+      </template>
+    </HCard>
+  </div>
+</template>
+
+<style scoped>
+/* 5. HCard 内部 .h-card__body slot 容器默认是普通 div（无 flex），
+   必须用 :deep 让它 flex-1 + min-h-0 参与卡片 flex 列布局，否则 body 不撑高、表格滚动区塌缩为 0。 */
+:deep(.h-card) { display: flex; flex-direction: column; }
+:deep(.h-card__body) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+</style>
+```
+
+### 关键点（坑）
+
+- **`:sticky-header` 需滚动祖先**：`.h-table--sticky .h-table__th` 用 `position: sticky; top: 0`，
+  sticky 相对最近滚动祖先定位。`.h-table-wrapper` 只有 `overflow-x: auto`（无纵向滚动），
+  所以**必须在 wrapper 外再套一层 `overflow-y-auto` 容器**，sticky 表头才会粘住。
+- **`.h-card__body` 默认不 flex**：HCard 库 CSS 中 `.h-card__header/.h-card__body/.h-card__footer` 仅
+  `padding` + `border-top`，无 `display:flex`。直接在 HCard 上加 `flex flex-col` 只让 `<article>`
+  变 flex 列，**body 容器自身仍是块级且无 `flex-1`，不会撑满剩余高度**——必须 `:deep(.h-card__body)`。
+- **分页器必须在滚动区外**：若放进 `overflow-y-auto` 内，会随表格行一起滚动消失。用 `shrink-0` 防止被压缩。
+- **前端假分页**：后端 `list_providers` 无分页参数，前端对全量 `items` 切片传 `HTable :data`，
+  `total` 传 `items.length`（全量数），`page` 为页面级 ref，`refresh()` 后重置 `page=1`。
+- **乐观更新改 `items` 非 `pagedItems`**：行内开关等局部更新操作真源是 `items`（全量），
+  `pagedItems` 是 computed slice 自动反映；分页与乐观更新正交。
+- **不破坏 AppShell 契约**：此模式不改动 AppShell `.overflow-auto .p-6` 容器，只在页面内用
+  `h-full overflow-hidden` + flex 列把滚动从主区"接管"到表格内部；其他页面仍走整体滚动模式。
+
 ## 状态与生命周期
 
 - 局部交互使用 `ref` / `reactive` / `computed`；**对话框业务表单字段**用 TanStack Form（见 3.2），不与页面级 `reactive` 双源。
