@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { Plus } from "@lucide/vue";
 import { useForm } from "@tanstack/vue-form";
 import {
@@ -8,6 +8,7 @@ import {
   HCheckbox,
   HEmpty,
   HInput,
+  HPagination,
   HSwitch,
   HTable,
   type HTableColumn,
@@ -42,6 +43,10 @@ const defaultFormValues: ProviderFormValues = {
 };
 
 const items = ref<Provider[]>([]);
+const page = ref(1);
+const pageSize = 10;
+const totalPages = computed(() => Math.max(1, Math.ceil(items.value.length / pageSize) || 1));
+const pagedItems = computed(() => items.value.slice((page.value - 1) * pageSize, page.value * pageSize));
 
 const providerColumns: HTableColumn[] = [
   { key: "name", title: "名称" },
@@ -91,6 +96,7 @@ const form = useForm({
 async function refresh() {
   try {
     items.value = await listProviders();
+    page.value = 1;
     error.value = "";
   } catch (e) {
     error.value = extractInvokeError(e);
@@ -167,6 +173,10 @@ async function remove(id: number) {
   }
 }
 
+function goPage(next: number) {
+  page.value = Math.min(Math.max(1, next), totalPages.value);
+}
+
 // 行内开关启停：乐观更新本地 -> 整行更新到后端 -> 成功用返回值同步 / 失败回滚并报错
 async function toggleProviderEnabled(p: Provider, next: boolean) {
   if (togglingIds.value.has(p.id)) return;
@@ -201,7 +211,7 @@ onMounted(refresh);
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="h-full flex flex-col overflow-hidden">
     <AppDialog
       :open="dialogOpen"
       :title="editingProviderId === null ? '新建供应商' : '编辑供应商'"
@@ -291,7 +301,7 @@ onMounted(refresh);
       </section>
     </AppDialog>
 
-    <HCard variant="outlined" padding="md">
+    <HCard variant="outlined" padding="md" class="min-h-0 flex-1 flex flex-col">
       <template #header>
         <div class="flex items-center justify-between gap-2">
           <h2 class="text-base font-semibold">供应商</h2>
@@ -310,48 +320,78 @@ onMounted(refresh);
         </div>
       </template>
       <p v-if="error && !dialogOpen" class="mb-3 text-sm text-rose-600">{{ error }}</p>
+      <p v-if="items.length > 0" class="mb-3 text-sm text-slate-600">共 {{ items.length }} 个供应商</p>
       <HEmpty v-if="items.length === 0" class="app-empty-compact" title="暂无供应商" />
-      <!-- HTable data 只接受 Record<string, unknown>[]，interface 无索引签名需双重断言；等 happier-ui#9 泛型化后简化 -->
-      <HTable
-        v-else
-        :columns="providerColumns"
-        :data="items as unknown as Record<string, unknown>[]"
-        row-key="id"
-        class="text-sm"
-      >
-        <template #cell="{ column, row }">
-          <template v-if="column.key === 'name'">
-            <span class="font-medium">{{ (row as Provider).name }}</span>
-          </template>
-          <template v-else-if="column.key === 'base_url'">
-            <span class="font-mono text-xs">{{ (row as Provider).base_url }}</span>
-          </template>
-          <template v-else-if="column.key === 'enabled'">
-            <HSwitch
-              :model-value="(row as Provider).enabled"
-              :disabled="togglingIds.has((row as Provider).id) || saving"
-              :aria-label="`${(row as Provider).name} 启用`"
-              @update:model-value="toggleProviderEnabled(row as Provider, $event)"
-            />
-          </template>
-          <template v-else-if="column.key === 'actions'">
-            <span class="space-x-2">
-              <HButton variant="outline" size="sm" type="button" @click="startEdit(row as Provider)">
-                编辑
-              </HButton>
-              <HButton
-                variant="danger-soft"
-                size="sm"
-                type="button"
-                @click="remove((row as Provider).id)"
-              >
-                删除
-              </HButton>
-            </span>
-          </template>
-          <template v-else>{{ (row as Provider)[column.key as keyof Provider] }}</template>
-        </template>
-      </HTable>
+      <template v-else>
+        <!-- 表格滚动区：flex-1 撑满，min-h-0 overflow-y-auto 仅表格 body 滚动 -->
+        <div class="min-h-0 flex-1 overflow-y-auto">
+          <!-- HTable data 只接受 Record<string, unknown>[]，interface 无索引签名需双重断言；等 happier-ui#9 泛型化后简化 -->
+          <HTable
+            :columns="providerColumns"
+            :data="pagedItems as unknown as Record<string, unknown>[]"
+            row-key="id"
+            :sticky-header="true"
+            class="text-sm"
+          >
+            <template #cell="{ column, row }">
+              <template v-if="column.key === 'name'">
+                <span class="font-medium">{{ (row as Provider).name }}</span>
+              </template>
+              <template v-else-if="column.key === 'base_url'">
+                <span class="font-mono text-xs">{{ (row as Provider).base_url }}</span>
+              </template>
+              <template v-else-if="column.key === 'enabled'">
+                <HSwitch
+                  :model-value="(row as Provider).enabled"
+                  :disabled="togglingIds.has((row as Provider).id) || saving"
+                  :aria-label="`${(row as Provider).name} 启用`"
+                  @update:model-value="toggleProviderEnabled(row as Provider, $event)"
+                />
+              </template>
+              <template v-else-if="column.key === 'actions'">
+                <span class="space-x-2">
+                  <HButton variant="outline" size="sm" type="button" @click="startEdit(row as Provider)">
+                    编辑
+                  </HButton>
+                  <HButton
+                    variant="danger-soft"
+                    size="sm"
+                    type="button"
+                    @click="remove((row as Provider).id)"
+                  >
+                    删除
+                  </HButton>
+                </span>
+              </template>
+              <template v-else>{{ (row as Provider)[column.key as keyof Provider] }}</template>
+            </template>
+          </HTable>
+        </div>
+        <!-- 分页器：表格滚动区之后，不随表格滚动 -->
+        <div v-if="items.length > pageSize" class="mt-3 flex justify-end shrink-0">
+          <HPagination
+            :current="page"
+            :total="items.length"
+            :page-size="pageSize"
+            @change="({ current }) => goPage(current)"
+          />
+        </div>
+      </template>
     </HCard>
   </div>
 </template>
+
+<style scoped>
+/* 让 HCard (.h-card) 内部 .h-card__body slot 容器参与 flex 列布局并撑满高度 */
+:deep(.h-card) {
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.h-card__body) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+</style>
