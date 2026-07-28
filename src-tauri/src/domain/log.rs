@@ -60,7 +60,7 @@ impl Default for LogQuery {
 pub const LOG_RETENTION_DAYS: i64 = 7;
 
 /// 默认保留的最大条数（仅保留最新的 N 条，按 id 倒序）。
-pub const LOG_MAX_ROWS: i64 = 1000;
+pub const LOG_MAX_ROWS: i64 = 10000;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct LogPage {
@@ -857,11 +857,11 @@ mod tests {
     }
 
     #[test]
-    fn default_purge_uses_seven_days_and_one_thousand_rows() {
+    fn default_purge_uses_seven_days_and_default_row_limit() {
         let (_dir, stores) = setup();
         let now = chrono::Utc::now().timestamp();
         insert_at(&stores, now - 8 * 86_400, 200, "", "", "");
-        for _ in 0..1001 {
+        for _ in 0..10001 {
             insert_at(&stores, now, 200, "", "", "");
         }
 

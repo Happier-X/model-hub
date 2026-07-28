@@ -60,7 +60,7 @@ const items = ref<RequestLog[]>([]);
 const total = ref(0);
 const storedTotal = ref(0);
 const retentionDays = ref(7);
-const maxRows = ref(1000);
+const maxRows = ref(10000);
 const page = ref(1);
 const pageSize = ref(50);
 const groupName = ref("");
@@ -96,7 +96,7 @@ async function refresh() {
     total.value = result.total;
     storedTotal.value = result.stored_total ?? result.total;
     retentionDays.value = result.retention_days ?? 7;
-    maxRows.value = result.max_rows ?? 1000;
+    maxRows.value = result.max_rows ?? 10000;
     page.value = result.page;
     pageSize.value = result.page_size;
     error.value = "";
