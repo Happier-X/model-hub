@@ -804,7 +804,7 @@ onMounted(async () => {
       </section>
     </AppDialog>
 
-    <HCard variant="outlined" padding="md">
+    <HCard variant="outlined" padding="md" class="min-h-0 flex-1 flex flex-col">
       <template #header>
         <div class="flex items-center justify-between gap-2">
           <h2 class="text-base font-semibold">分组</h2>
@@ -822,21 +822,22 @@ onMounted(async () => {
           </HButton>
         </div>
       </template>
-      <p class="mb-3 text-xs text-slate-500">
+      <p class="mb-3 shrink-0 text-xs text-slate-500">
         「配置到 Pi」会将该分组名写入本机
         <code class="rounded bg-slate-100 px-1">~/.pi/agent/models.json</code>
         的
         <code class="rounded bg-slate-100 px-1">model-hub</code>
         （固定占位 Key，无需客户端密钥）。
       </p>
-      <p v-if="message" class="mb-3 whitespace-pre-line text-sm text-emerald-700">{{ message }}</p>
-      <p v-if="error && !dialogOpen" class="mb-3 text-sm text-rose-600">{{ error }}</p>
-      <HEmpty v-if="groups.length === 0" class="app-empty-compact" title="暂无分组" />
-      <div
-        v-for="g in groups"
-        :key="g.id"
-        class="mb-4 rounded-lg border border-slate-100 p-4 last:mb-0"
-      >
+      <p v-if="message" class="mb-3 shrink-0 whitespace-pre-line text-sm text-emerald-700">{{ message }}</p>
+      <p v-if="error && !dialogOpen" class="mb-3 shrink-0 text-sm text-rose-600">{{ error }}</p>
+      <HEmpty v-if="groups.length === 0" class="app-empty-compact shrink-0" title="暂无分组" />
+      <div v-if="groups.length > 0" class="min-h-0 flex-1 overflow-y-auto">
+        <div
+          v-for="g in groups"
+          :key="g.id"
+          class="mb-4 rounded-lg border border-slate-100 p-4 last:mb-0"
+        >
         <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div>
             <span class="font-semibold">{{ g.name }}</span>
