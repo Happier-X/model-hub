@@ -8,6 +8,7 @@ import {
   HCheckbox,
   HEmpty,
   HInput,
+  HSwitch,
   HTable,
   type HTableColumn,
   HTextarea,
@@ -54,6 +55,8 @@ const editingProviderId = ref<number | null>(null);
 const dialogOpen = ref(false);
 const saving = ref(false);
 const pasteText = ref("");
+// 行内启用开关进行中的 id 集合，用于 disabled 防重复点击
+const togglingIds = ref<Set<number>>(new Set());
 
 const form = useForm({
   defaultValues: { ...defaultFormValues },
@@ -161,6 +164,36 @@ async function remove(id: number) {
     await refresh();
   } catch (e) {
     error.value = extractInvokeError(e);
+  }
+}
+
+// 行内开关启停：乐观更新本地 -> 整行更新到后端 -> 成功用返回值同步 / 失败回滚并报错
+async function toggleProviderEnabled(p: Provider, next: boolean) {
+  if (togglingIds.value.has(p.id)) return;
+  const previous = p.enabled;
+  // 乐观更新
+  const target = items.value.find((it) => it.id === p.id);
+  if (target) target.enabled = next;
+  togglingIds.value = new Set(togglingIds.value).add(p.id);
+  try {
+    const updated = await updateProvider({
+      id: p.id,
+      name: p.name,
+      base_url: p.base_url,
+      api_key: p.api_key,
+      enabled: next,
+    });
+    // 以服务端返回为准同步
+    const sync = items.value.find((it) => it.id === p.id);
+    if (sync) Object.assign(sync, updated);
+  } catch (e) {
+    const failed = items.value.find((it) => it.id === p.id);
+    if (failed) failed.enabled = previous;
+    error.value = extractInvokeError(e);
+  } finally {
+    const nextSet = new Set(togglingIds.value);
+    nextSet.delete(p.id);
+    togglingIds.value = nextSet;
   }
 }
 
@@ -294,7 +327,12 @@ onMounted(refresh);
             <span class="font-mono text-xs">{{ (row as Provider).base_url }}</span>
           </template>
           <template v-else-if="column.key === 'enabled'">
-            {{ (row as Provider).enabled ? "启用" : "停用" }}
+            <HSwitch
+              :model-value="(row as Provider).enabled"
+              :disabled="togglingIds.has((row as Provider).id) || saving"
+              :aria-label="`${(row as Provider).name} 启用`"
+              @update:model-value="toggleProviderEnabled(row as Provider, $event)"
+            />
           </template>
           <template v-else-if="column.key === 'actions'">
             <span class="space-x-2">
