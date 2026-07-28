@@ -235,18 +235,9 @@ onUnmounted(() => {
     <p v-if="error" class="text-sm text-rose-600">{{ error }}</p>
 
     <HCard variant="outlined" padding="md">
-      <div class="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
-        <span
-          >筛选 {{ total }} 条 · 库内 {{ storedTotal }} 条 · 第 {{ page }} / {{ totalPages }} 页</span
-        >
-        <HPagination
-          :current="page"
-          :total="total"
-          :page-size="pageSize"
-          :disabled="loading"
-          @change="({ current }) => goPage(current)"
-        />
-      </div>
+      <p class="mb-3 text-sm text-slate-600">
+        筛选 {{ total }} 条 · 库内 {{ storedTotal }} 条 · 第 {{ page }} / {{ totalPages }} 页
+      </p>
       <!-- HTable data 只接受 Record<string, unknown>[]，interface 无索引签名需双重断言；等 happier-ui#9 泛型化后简化 -->
       <HTable
         :columns="logColumns"
@@ -285,6 +276,15 @@ onUnmounted(() => {
           <template v-else>{{ (row as RequestLog)[column.key as keyof RequestLog] }}</template>
         </template>
       </HTable>
+      <div class="mt-3 flex justify-end">
+        <HPagination
+          :current="page"
+          :total="total"
+          :page-size="pageSize"
+          :disabled="loading"
+          @change="({ current }) => goPage(current)"
+        />
+      </div>
     </HCard>
   </div>
 </template>
