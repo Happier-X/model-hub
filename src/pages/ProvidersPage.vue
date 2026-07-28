@@ -336,7 +336,7 @@ onMounted(refresh);
           </template>
           <template v-else-if="column.key === 'actions'">
             <span class="space-x-2">
-              <HButton variant="ghost" size="sm" type="button" @click="startEdit(row as Provider)">
+              <HButton variant="outline" size="sm" type="button" @click="startEdit(row as Provider)">
                 编辑
               </HButton>
               <HButton
