@@ -75,9 +75,9 @@ pub fn run() {
                         }
                     }
                 }
-                label if label == overlay::OVERLAY_LABEL => {
+                label if label == overlay::OVERLAY_LABEL => match event {
                     // overlay 关闭仅隐藏；真正退出仍由托盘退出触发。
-                    if let WindowEvent::CloseRequested { api, .. } = event {
+                    WindowEvent::CloseRequested { api, .. } => {
                         let exiting = window
                             .app_handle()
                             .try_state::<AppExitState>()
@@ -88,7 +88,13 @@ pub fn run() {
                             let _ = window.hide();
                         }
                     }
-                }
+                    WindowEvent::ScaleFactorChanged { .. } | WindowEvent::Resized(_) => {
+                        if let Err(err) = overlay::restore_overlay_geometry(window) {
+                            tracing::warn!(error = %err, "恢复悬浮状态条几何信息失败");
+                        }
+                    }
+                    _ => {}
+                },
                 _ => {}
             }
         })

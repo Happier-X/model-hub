@@ -1,7 +1,8 @@
 //! 桌面悬浮状态条窗口：动态创建、显隐与默认定位。
 
 use tauri::{
-    AppHandle, Manager, PhysicalPosition, Position, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+    AppHandle, LogicalSize, Manager, PhysicalPosition, Position, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder, Window,
 };
 
 use crate::{error::AppError, paths, settings};
@@ -94,6 +95,44 @@ pub fn ensure_overlay(app: &AppHandle) -> Result<WebviewWindow, AppError> {
         .set_position(Position::Physical(position))
         .map_err(AppError::from)?;
     Ok(window)
+}
+
+/// 在显示器拓扑或 DPI 变化后恢复悬浮条的固定尺寸与可见位置。
+///
+/// `Resized` 也会由本函数的尺寸修正触发，因此仅在物理像素差异超过 1px 时重新设定尺寸；
+/// 位置同样只在 clamp 后发生变化时更新，避免窗口事件递归。
+pub fn restore_overlay_geometry(window: &Window) -> Result<(), AppError> {
+    let monitor = match window.current_monitor().map_err(AppError::from)? {
+        Some(monitor) => monitor,
+        None => window
+            .app_handle()
+            .primary_monitor()
+            .map_err(AppError::from)?
+            .ok_or_else(|| AppError::Business("无法获取显示器信息".into()))?,
+    };
+    let scale = monitor.scale_factor();
+    let expected_width = (OVERLAY_WIDTH * scale).round() as u32;
+    let expected_height = (OVERLAY_HEIGHT * scale).round() as u32;
+    let actual_size = window.inner_size().map_err(AppError::from)?;
+
+    if actual_size.width.abs_diff(expected_width) > 1
+        || actual_size.height.abs_diff(expected_height) > 1
+    {
+        window
+            .set_size(LogicalSize::new(OVERLAY_WIDTH, OVERLAY_HEIGHT))
+            .map_err(AppError::from)?;
+    }
+
+    let current = window.outer_position().map_err(AppError::from)?;
+    let current = PhysicalPosition::new(current.x, current.y);
+    let clamped = clamp_to_primary_work_area(window.app_handle(), current)?;
+    if clamped != current {
+        window
+            .set_position(Position::Physical(clamped))
+            .map_err(AppError::from)?;
+    }
+
+    Ok(())
 }
 
 pub fn set_overlay_visible(app: &AppHandle, visible: bool) -> Result<(), AppError> {
