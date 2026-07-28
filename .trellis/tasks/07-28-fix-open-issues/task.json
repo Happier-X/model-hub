@@ -1,0 +1,30 @@
+{
+  "id": "fix-open-issues",
+  "name": "fix-open-issues",
+  "title": "修复 3 个 open issues (#1 #2 #3)",
+  "description": "父任务：依次修复 GitHub Issues #1(今日请求总显示1000)、#2(热力图只展示当天)、#3(悬浮条切屏后变小无法拖动)。每个 issue 一个子任务独立修+验证。",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "happier",
+  "assignee": "happier",
+  "createdAt": "2026-07-28",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-28-issue1-today-requests-1000",
+    "07-28-issue2-heatmap-only-today",
+    "07-28-issue3-overlay-screen-change"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
