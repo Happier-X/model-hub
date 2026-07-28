@@ -556,7 +556,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="h-full flex flex-col overflow-hidden">
     <AppDialog
       :open="dialogOpen"
       :title="isEditing ? '编辑分组' : '新建分组'"
@@ -879,6 +879,21 @@ onMounted(async () => {
           </li>
         </ol>
       </div>
+        </div>
     </HCard>
   </div>
 </template>
+
+<style scoped>
+:deep(.h-card) {
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.h-card__body) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+</style>

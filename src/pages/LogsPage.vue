@@ -174,7 +174,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div class="h-full flex flex-col overflow-hidden">
+    <!-- 筛选卡片：顶部不滚 -->
     <HCard variant="outlined" padding="md">
       <div class="flex flex-wrap items-end gap-3">
         <div class="w-40" @keydown.enter="applyFilters">
@@ -231,22 +232,25 @@ onUnmounted(() => {
       </p>
     </HCard>
 
-    <p v-if="message" class="text-sm text-emerald-700">{{ message }}</p>
-    <p v-if="error" class="text-sm text-rose-600">{{ error }}</p>
+    <p v-if="message" class="shrink-0 text-sm text-emerald-700">{{ message }}</p>
+    <p v-if="error" class="shrink-0 text-sm text-rose-600">{{ error }}</p>
 
-    <HCard variant="outlined" padding="md">
-      <p class="mb-3 text-sm text-slate-600">
+    <HCard variant="outlined" padding="md" class="min-h-0 flex-1 flex flex-col">
+      <p class="mb-3 shrink-0 text-sm text-slate-600">
         筛选 {{ total }} 条 · 库内 {{ storedTotal }} 条 · 第 {{ page }} / {{ totalPages }} 页
       </p>
-      <!-- HTable data 只接受 Record<string, unknown>[]，interface 无索引签名需双重断言；等 happier-ui#9 泛型化后简化 -->
-      <HTable
-        :columns="logColumns"
-        :data="items as unknown as Record<string, unknown>[]"
-        row-key="id"
-        :loading="loading"
-        empty-text="暂无日志"
-        class="text-xs"
-      >
+      <!-- 表格区：flex-1 min-h-0 overflow-y-auto 仅表格 body 滚动 -->
+      <div class="min-h-0 flex-1 overflow-y-auto">
+        <!-- HTable data 只接受 Record<string, unknown>[]，interface 无索引签名需双重断言；等 happier-ui#9 泛型化后简化 -->
+        <HTable
+          :columns="logColumns"
+          :data="items as unknown as Record<string, unknown>[]"
+          row-key="id"
+          :loading="loading"
+          :sticky-header="true"
+          empty-text="暂无日志"
+          class="text-xs"
+        >
         <template #cell="{ column, row }">
           <template v-if="column.key === 'time'">
             <span class="whitespace-nowrap">{{ formatTime((row as RequestLog).time) }}</span>
@@ -275,8 +279,10 @@ onUnmounted(() => {
           </template>
           <template v-else>{{ (row as RequestLog)[column.key as keyof RequestLog] }}</template>
         </template>
-      </HTable>
-      <div class="mt-3 flex justify-end">
+        </HTable>
+      </div>
+      <!-- 分页器：表格滚动区之外，不随表格滚动 -->
+      <div class="mt-3 flex justify-end shrink-0">
         <HPagination
           :current="page"
           :total="total"
@@ -288,3 +294,17 @@ onUnmounted(() => {
     </HCard>
   </div>
 </template>
+
+<style scoped>
+:deep(.h-card) {
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.h-card__body) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+</style>
