@@ -832,55 +832,81 @@ onMounted(async () => {
       <p v-if="message" class="mb-3 shrink-0 whitespace-pre-line text-sm text-emerald-700">{{ message }}</p>
       <p v-if="error && !dialogOpen" class="mb-3 shrink-0 text-sm text-rose-600">{{ error }}</p>
       <HEmpty v-if="groups.length === 0" class="app-empty-compact shrink-0" title="暂无分组" />
-      <div v-if="groups.length > 0" class="min-h-0 flex-1 overflow-y-auto">
-        <div
-          v-for="g in groups"
-          :key="g.id"
-          class="mb-4 rounded-lg border border-slate-100 p-4 last:mb-0"
-        >
-        <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <span class="font-semibold">{{ g.name }}</span>
-            <span
-              v-if="g.thinking_effort && g.thinking_effort !== 'off'"
-              class="ml-2 rounded-full bg-violet-50 px-2 py-0.5 text-[11px] text-violet-700"
-              title="思考强度档位"
-            >
-              思考 · {{ thinkingEffortLabels[g.thinking_effort] ?? g.thinking_effort }}
-            </span>
-            <HBadge v-if="g.source_provider_id" variant="default" class="ml-2">自动同步</HBadge>
-          </div>
-          <div class="space-x-2 text-sm">
-            <HButton
-              variant="ghost"
-              size="sm"
-              type="button"
-              :disabled="exportingPiId === g.id"
-              @click="exportToPi(g.id)"
-            >
-              {{ exportingPiId === g.id ? "配置中…" : "配置到 Pi" }}
-            </HButton>
-            <HButton variant="ghost" size="sm" type="button" @click="startEdit(g)">编辑</HButton>
-            <HButton variant="danger-soft" size="sm" type="button" @click="remove(g.id)">
-              删除
-            </HButton>
-          </div>
-        </div>
-        <ol class="space-y-2 text-sm">
-          <li
-            v-for="(item, idx) in g.items"
-            :key="item.id"
-            class="flex flex-wrap items-center gap-2 text-slate-700"
+      <div
+        v-if="groups.length > 0"
+        class="min-h-0 flex-1 overflow-y-auto pr-1"
+      >
+        <!-- 卡片网格：每个分组一张卡片，自上而下 含 标题/标签 → 数量概览 → 模型队列 → 操作区。
+             octopus 风格：卡片本体分层次表达（border + 浅 bg），无策略 tab。 -->
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <article
+            v-for="g in groups"
+            :key="g.id"
+            class="group-card flex flex-col rounded-xl border border-slate-200 bg-white p-4 transition
+                   hover:border-cyan-300 hover:bg-cyan-50/30"
           >
-            <span class="text-slate-400">{{ idx + 1 }}.</span>
-            <span>{{
-              providerMap.get(item.provider_id)?.name || item.provider_name || item.provider_id
-            }}</span>
-            <span class="font-mono text-xs text-slate-500">{{ item.upstream_model }}</span>
-          </li>
-        </ol>
-      </div>
+            <!-- 头部：分组名 + 思考强度 + 自动同步标签 -->
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="break-all text-base font-semibold text-slate-800">{{ g.name }}</span>
+              <span
+                v-if="g.thinking_effort && g.thinking_effort !== 'off'"
+                class="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] text-violet-700"
+                title="思考强度档位"
+              >
+                思考 · {{ thinkingEffortLabels[g.thinking_effort] ?? g.thinking_effort }}
+              </span>
+              <HBadge v-if="g.source_provider_id" variant="default">自动同步</HBadge>
+            </div>
+
+            <!-- 概览条：模型数量 + 故障转移说明 -->
+            <p class="mt-1 text-xs text-slate-500">
+              {{ g.items.length }} 个模型 · 队列顺序即故障转移优先级
+            </p>
+
+            <!-- 模型队列：固定最高高度 + 滚动，超出截断 -->
+            <ol class="mt-3 max-h-44 space-y-1.5 overflow-y-auto pr-1 text-sm">
+              <li
+                v-for="(item, idx) in g.items"
+                :key="item.id"
+                class="flex items-start gap-2 rounded-md px-1.5 py-1 text-slate-700 hover:bg-slate-50"
+              >
+                <span class="w-5 shrink-0 text-xs tabular-nums text-slate-400">{{ idx + 1 }}.</span>
+                <div class="min-w-0 flex-1">
+                  <span class="block truncate text-slate-600">
+                    {{
+                      providerMap.get(item.provider_id)?.name || item.provider_name || item.provider_id
+                    }}
+                  </span>
+                  <span class="block truncate font-mono text-xs text-slate-500">{{ item.upstream_model }}</span>
+                </div>
+              </li>
+            </ol>
+
+            <!-- 操作区：卡片底部，吸附对齐 -->
+            <div class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-slate-100 pt-3">
+              <HButton
+                variant="outline"
+                size="sm"
+                type="button"
+                :disabled="exportingPiId === g.id"
+                @click="exportToPi(g.id)"
+              >
+                {{ exportingPiId === g.id ? "配置中…" : "配置到 Pi" }}
+              </HButton>
+              <HButton variant="ghost" size="sm" type="button" @click="startEdit(g)">编辑</HButton>
+              <HButton
+                variant="danger-soft"
+                size="sm"
+                type="button"
+                class="ml-auto"
+                @click="remove(g.id)"
+              >
+                删除
+              </HButton>
+            </div>
+          </article>
         </div>
+      </div>
     </HCard>
   </div>
 </template>
