@@ -1,0 +1,7 @@
+[
+  {"file": "changelog/v0.0.8.md", "reason": "创建或更新 changelog"},
+  {"file": "package.json", "reason": "同步版本号"},
+  {"file": "src-tauri/Cargo.toml", "reason": "同步版本号"},
+  {"file": "src-tauri/tauri.conf.json", "reason": "同步版本号"},
+  {"file": "src-tauri/tauri.release.conf.json", "reason": "同步版本号"}
+]
