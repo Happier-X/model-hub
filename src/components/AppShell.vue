@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { X } from "@lucide/vue";
 import { useRoute, useRouter, RouterLink, RouterView } from "vue-router";
-import { HSidebar, type HSidebarItem } from "happier-ui";
+import { HButton, HSidebar, type HSidebarItem } from "happier-ui";
 import { checkForUpdate, getShellPrefs } from "../api/tauri";
 import AppTitleBar from "./AppTitleBar.vue";
 
@@ -64,15 +64,17 @@ onMounted(checkUpdateOnAppStartup);
           <RouterLink class="shrink-0 font-medium text-cyan-800 hover:text-cyan-950" to="/settings">
             前往设置
           </RouterLink>
-          <button
-            class="inline-flex size-7 shrink-0 items-center justify-center rounded text-cyan-700 hover:bg-cyan-100 hover:text-cyan-950"
-            type="button"
-            title="关闭更新提示"
+          <HButton
+            variant="ghost"
+            size="sm"
+            isIconOnly
+            shape="circle"
             aria-label="关闭更新提示"
+            title="关闭更新提示"
             @click="availableVersion = ''"
           >
             <X :size="16" aria-hidden="true" />
-          </button>
+          </HButton>
         </div>
         <header class="border-b border-slate-200 bg-white px-6 py-4">
           <h1 class="text-xl font-semibold">{{ title }}</h1>

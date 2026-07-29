@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef } from "vue";
-import { HButton, HCard, HCheckbox, HInput } from "happier-ui";
+import { HButton, HCard, HCheckbox, HInput, HProgress } from "happier-ui";
 import {
   checkForUpdate,
   downloadAndInstallUpdate,
@@ -372,8 +372,21 @@ onUnmounted(() => {
         </div>
       </div>
 
+      <!-- 下载进行中：HProgress 进度条 + 辅助文本 -->
+      <div v-if="updatePhase === 'downloading'" class="mt-3 space-y-1">
+        <HProgress
+          :value="downloadLoaded"
+          :max="downloadTotal ?? 0"
+          :indeterminate="!downloadTotal"
+          size="md"
+          variant="primary"
+          rounded
+        />
+        <p class="text-sm text-emerald-700">{{ updateMessage }}</p>
+      </div>
+      <!-- 其他状态：纯文本 -->
       <p
-        v-if="updateMessage"
+        v-else-if="updateMessage"
         class="mt-3 text-sm"
         :class="updatePhase === 'available' ? 'text-cyan-800' : 'text-emerald-700'"
       >
