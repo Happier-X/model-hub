@@ -1,0 +1,2 @@
+{"file":".trellis/spec/frontend/index.md","reason":"确认前端技术栈、组件库及页面规范入口"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"遵循 Vue、happier-ui、Tailwind 卡片与滚动布局约定"}
