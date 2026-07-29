@@ -88,7 +88,13 @@ pub fn run() {
                             let _ = window.hide();
                         }
                     }
-                    WindowEvent::ScaleFactorChanged { .. } | WindowEvent::Resized(_) => {
+                    // 监听变换/缩放/移动三事件：
+                    // - ScaleFactorChanged: DPI 改变时（跨不同 DPI 显示器）
+                    // - Resized: 窗口物理尺寸改变时
+                    // - Moved: 窗口位置改变时（同 DPI 显示器切屏时仅有此事件）
+                    WindowEvent::ScaleFactorChanged { .. }
+                    | WindowEvent::Resized(_)
+                    | WindowEvent::Moved(_) => {
                         if let Err(err) = overlay::restore_overlay_geometry(window) {
                             tracing::warn!(error = %err, "恢复悬浮状态条几何信息失败");
                         }
