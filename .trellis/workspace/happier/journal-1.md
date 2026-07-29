@@ -1147,3 +1147,33 @@ Session summary was not supplied.
 ### Status
 
 [OK] **Completed**
+
+
+## Session 32: 用组件库替换手写 UI 实现
+
+**Date**: 2026-07-29
+**Task**: 用组件库替换手写 UI 实现
+**Branch**: `master`
+
+### Summary
+
+将 AppShell 更新通知栏关闭按钮替换为 HButton，SettingsPage 下载进度替换为 HProgress。
+
+### Main Changes
+
+- AppShell.vue: 更新提示栏关闭按钮 native button → HButton
+- SettingsPage.vue: 下载进度纯文本 → HProgress 进度条组件
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2b40d24` | (see git log) |
+
+### Testing
+
+- [OK] pnpm typecheck / lint / build 全部通过
+
+### Status
+
+[OK] **Completed**
