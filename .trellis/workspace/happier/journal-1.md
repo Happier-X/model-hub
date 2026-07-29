@@ -1116,3 +1116,34 @@ Session summary was not supplied.
 ### Status
 
 [OK] **Completed**
+
+
+## Session 31: 分组卡片响应式布局改造
+
+**Date**: 2026-07-29
+**Task**: 分组卡片响应式布局改造
+**Branch**: `master`
+
+### Summary
+
+将 GroupsPage.vue 分组列表改为 Octopus 风格的响应式卡片网格布局（grid-cols-1 / sm:2 / xl:3），保留所有业务逻辑。
+
+### Main Changes
+
+- GroupsPage.vue 分组列表改为响应式网格卡片
+- 卡片展示分组名、思考强度、自动同步标签、模型队列、操作按钮
+- 模型队列 max-h-44 卡片内滚动，hover 边框变 cyan-300
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `442e07f` | (see git log) |
+
+### Testing
+
+- [OK] pnpm typecheck / lint / build 全部通过
+
+### Status
+
+[OK] **Completed**
