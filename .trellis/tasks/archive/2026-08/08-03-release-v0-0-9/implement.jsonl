@@ -1,0 +1,2 @@
+{"file":"changelog/v0.0.8.md","reason":"作为 v0.0.9 changelog 的格式模板"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"发布涉及前后端多文件同步版本号，需跨层一致性思考"}

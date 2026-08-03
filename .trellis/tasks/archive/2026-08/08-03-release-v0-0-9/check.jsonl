@@ -1,0 +1,2 @@
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"执行前端 lint/typecheck/build 质量验证"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"核对发布变更不破坏前端规范"}
