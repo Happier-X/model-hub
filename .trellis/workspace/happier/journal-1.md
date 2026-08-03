@@ -1208,3 +1208,24 @@ Session summary was not supplied.
 ### Status
 
 [OK] **Completed**
+
+
+## Session 34: 修复首页热力图 TDZ 遮蔽
+
+**Date**: 2026-08-03
+**Task**: 修复首页热力图 TDZ 遮蔽
+**Branch**: `master`
+
+### Summary
+
+定位首页热力图不展示根因为 heatmapData 中 const daily = daily.value 触发 TDZ ReferenceError；改名为 counts 并保留 365 天补全逻辑；将「computed/回调禁止与外层 ref 同名」写入 frontend state-management 规范。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cc49501` | (see git log) |
+
+### Status
+
+[OK] **Completed**
