@@ -21,6 +21,7 @@
 4. 共享状态确有多个远离组件需要时，优先使用组合式函数或 provide/inject；只有复杂度明确增长后才评估 Pinia。
 5. 应用不维护用户会话状态。
 6. **Tauri Resource 类实例**（如 `@tauri-apps/plugin-updater` 的 `Update`）必须用 `shallowRef` / `markRaw` 保存，**禁止**放入深层 `ref` / `reactive`。深层代理会破坏 JS 私有成员，调用 `downloadAndInstall` 等实例方法时抛出 `Cannot read private member...`。
+7. **`computed` / 回调内禁止与外层 `ref` / `reactive` 同名局部变量**。`const` 存在暂时性死区（TDZ），`const daily = daily.value` 会在求值时抛 `ReferenceError: Cannot access 'daily' before initialization`，构建产物常表现为 `const G=G.value`。正确写法：内部另起名（如 `const counts = daily.value`）。首页热力图曾因此整块不渲染。
 
 ## 禁止模式
 
@@ -28,3 +29,4 @@
 - 网络或 IPC 错误时用空数据覆盖上一次有效内容且不提示。
 - 为侧栏开关等简单状态引入大型状态框架。
 - 把依赖私有字段的原生类实例（尤其是 Tauri Resource）放进深层响应式容器。
+- 在 `computed` / 事件回调里声明与外层响应式状态同名的 `const`/`let` 局部变量（TDZ 遮蔽）。

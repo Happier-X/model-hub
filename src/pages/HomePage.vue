@@ -29,19 +29,19 @@ const dailyError = ref("");
 const dailyLoading = ref(false);
 
 const heatmapData = computed<HHeatmapData>(() => {
-  const daily = daily.value;
-  if (!daily) return [];
+  const counts = daily.value;
+  if (!counts) return [];
   // 后端只返回有记录的日（count>0）；补全 365 天全网格，让 HHeatmap 不依赖数据的实际时间范围。
   const dayMs = 86_400_000;
   // end_unix 是“今日次日 00:00”的 unix 秒；向前取 365 天（含今日）。
-  const endMs = daily.end_unix * 1000;
+  const endMs = counts.end_unix * 1000;
   const startMs = endMs - 365 * dayMs;
   // 后端 days 由 day_start_unix 升序，借成 Map 供 O(1) 查。
   const byDay = new Map<number, number>();
-  for (const d of daily.days) byDay.set(d.day_start_unix, d.count);
+  for (const d of counts.days) byDay.set(d.day_start_unix, d.count);
   const out: HHeatmapData = [];
   for (let t = startMs; t < endMs; t += dayMs) {
-    // daily 的 day_start_unix 是 unix 秒，除以 1000 换回去。
+    // counts 的 day_start_unix 是 unix 秒，除以 1000 换回去。
     const dayStartUnix = Math.round(t / 1000);
     out.push({ timestamp: t, value: byDay.get(dayStartUnix) ?? 0 });
   }
