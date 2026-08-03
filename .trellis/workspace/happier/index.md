@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 32
-- **Last Active**: 2026-07-29
+- **Total Sessions**: 33
+- **Last Active**: 2026-08-03
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1179 | Active |
+| `journal-1.md` | ~1210 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 33 | 2026-08-03 | 发布 v0.0.9 | `3b89c7f` | `master` |
 | 32 | 2026-07-29 | 用组件库替换手写 UI 实现 | `2b40d24` | `master` |
 | 31 | 2026-07-29 | 分组卡片响应式布局改造 | `442e07f` | `master` |
 | 30 | 2026-07-27 | 模型排序改用 OpenRouter 榜单并支持分层模糊匹配 | `b1b31d0`, `5f5377b` | `master` |

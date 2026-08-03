@@ -1177,3 +1177,34 @@ Session summary was not supplied.
 ### Status
 
 [OK] **Completed**
+
+
+## Session 33: 发布 v0.0.9
+
+**Date**: 2026-08-03
+**Task**: 发布 v0.0.9
+**Branch**: `master`
+
+### Summary
+
+发布 v0.0.9：同步版本文件、新建 changelog、打 tag 推远端触发 release-windows CI。
+
+### Main Changes
+
+- 新建 changelog/v0.0.9.md 记录 3 项变更
+- 5 个版本文件 package/Cargo.toml/Cargo.lock/tauri.conf/release.conf 同步为 0.0.9
+- 打 tag v0.0.9 推送远端触发 release-windows GitHub Actions
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3b89c7f` | (see git log) |
+
+### Testing
+
+- [OK] pnpm build 通过
+
+### Status
+
+[OK] **Completed**
