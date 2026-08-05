@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/model-queue-sort.md", "reason": "检查排序语义是否保持（降序/沉底/稳定/不自动保存）与来源标签"}
+{"file": ".trellis/spec/backend/upstream-access.md", "reason": "检查公共 URL 允许项更新、无用户 Key、无后台探测"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "检查错误文案与 sanitize"}
+{"file": ".trellis/tasks/08-05-model-rank-llm-benchmark/prd.md", "reason": "对照 AC1–AC5 验收"}
+{"file": ".trellis/tasks/08-05-model-rank-llm-benchmark/design.md", "reason": "对照数据流与解析设计"}

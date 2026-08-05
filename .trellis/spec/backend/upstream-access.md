@@ -18,7 +18,7 @@
 | `proxy/forward.rs` 转发 Chat | 仅处理客户端发来的真实 `/v1/chat/completions` |
 | `fetch_provider_models` IPC | 仅管理台用户**主动点击**「拉取模型」/批量添加时调用 |
 | 本机 `GET /health` | 仅本机代理自检，不使用供应商 Key |
-| OpenRouter 榜单 `leaderboard` | 固定公共 URL，**禁止**附带用户供应商 Key |
+| llm_benchmark 榜单 `leaderboard` | 固定公共 raw GitHub URL（datasets.json + logic 月榜 CSV），**禁止**附带用户供应商 Key |
 
 **已移除**：`list_health` / 供应商熔断健康快照。不得再添加「只读熔断内存」类 IPC 作为测活替代。
 
@@ -28,7 +28,7 @@
 
 1. 真实用户 Chat → 代理按分组队列顺序故障转移转发上游（响应提交前任意失败换下一启用候选项；无熔断跳过）。
 2. 用户在分组页点击「拉取模型」或「批量添加供应商模型」→ `GET {base}/models`（或兼容路径）。
-3. OpenRouter 公共 Models API（无用户 Key）。
+3. llm_benchmark 公共榜单（raw GitHub：datasets.json 定位 + logic 月榜 CSV；无用户 Key）。
 4. 转发前清洗请求体：`rewrite_model` 重写顶层 `model` 为上游模型名，并剥离 `tools[].function.strict`（OpenAI Structured Outputs 字段，部分兼容上游不支持，原样透传会报 `tool.function.strict is not supported`）。流式与非流式路径共用该清洗。
 
 **禁止**
@@ -88,6 +88,6 @@ async function pullModels(index: number) {
 ## Anti-Patterns
 
 - 把「刷新健康」实现成对每个供应商请求 `/v1/models` 或 chat。
-- 用用户 Key 请求 OpenRouter 或其它第三方做测活。
+- 用用户 Key 请求任何公共榜单或其它第三方做测活。
 - 在 AI 会话中未经用户同意对真实上游做联调请求。
 - 以熔断状态机或健康徽章名义恢复对用户上游的探测。

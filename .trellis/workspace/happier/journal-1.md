@@ -1268,3 +1268,34 @@ Session summary was not supplied.
 ### Status
 
 [OK] **Completed**
+
+---
+
+## 2026-08-05 模型能力排序改用 llm_benchmark 榜单（08-05-model-rank-llm-benchmark）
+
+### 背景
+
+- 分组「按模型能力排序」原基于 OpenRouter 榜单（`intelligence_score`），数据源切换为 llm2014/llm_benchmark 的 logic 综合榜「极限分数」。
+- 决策：D1=仅 logic 榜；D2=M1 展示名净化（剥 `(...)` 档位 + 纯 4 位日期段，两侧对称归一化）+ 现有分层匹配；D3=datasets.json 动态定位最新 logic 月榜 CSV + 新缓存文件名；D4=极限分数。
+
+### 关键发现
+
+- **datasets.json 顶层是 `{"datasets":[...]}` 对象而非数组**（设计文档写的是数组，实测纠正）；字段 `category/reportDate/tableIndex/title/csv`。
+- logic CSV 全字段带引号（`"模型","极限分数",...`），模型名可能含括号/空格（`GPT-5.5 (xhigh)`、`DeepSeek V4 Flash 0731 (max)`），需手写 CSV 解析（引号内逗号、`""` 转义），表头按列名定位。
+- 全量 `cargo test` 因 Tauri 桌面 crate rlib 格式问题失败（zip/brotli/infer），**stash 后同样失败 = 既有环境问题**，非本次改动引入；`cargo test --lib` 正常（114/114）。
+
+### 实现
+
+- 后端 `leaderboard.rs`：删 OpenRouter URL；`LLM_BENCHMARK_DATASETS_URL`/`LLM_BENCHMARK_BASE`/`LLM_BENCHMARK_CATEGORY="logic"`；手写 `parse_llm_benchmark_csv`（表头定位、坏行跳过、空榜报错）；`locate_latest_logic_csv`（对象顶层 + 最新 reportDate + 同月优先「月榜」title）；两步 GET；`source="llm_benchmark"` 三处；缓存文件换名 `model-leaderboard-llm-benchmark.json`。
+- 前端 `modelCapability.ts`：`normalizeModelIdForMatch` 先剥 `(...)`（在分隔符归一前）再剥纯 4 位数字段（`/^\d{4}$/` 按段过滤）；`sourceLabel="llm_benchmark"`。`GroupsPage.vue` 3 处文案。`tauri.ts` 注释。
+- spec：`model-queue-sort.md`/`model-leaderboard.md`（重写）/`upstream-access.md`/`error-handling.md`/`backend/index.md`/`component-guidelines.md` 全部替换表述。
+
+### 验证
+
+- [OK] pnpm typecheck / eslint --max-warnings 0 / pnpm test:unit 18/18
+- [OK] cargo test --lib domain::leaderboard 16/16；全量 --lib 114/114
+- [OK] trellis-check AC1–AC5 全绿（2 条非阻塞建议：压缩冗长注释已处理；「月榜」title 依赖记录在案）
+
+### Status
+
+[OK] 待提交归档

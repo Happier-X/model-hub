@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/frontend/model-queue-sort.md", "reason": "排序契约：单一分数降序/未匹配沉底/稳定/仅改表单；需更新来源表述与匹配说明"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "分组页展示文案与榜单 UI 约定"}
+{"file": ".trellis/spec/backend/upstream-access.md", "reason": "公共榜单 URL 允许项：OpenRouter 替换为 llm_benchmark raw GitHub，仍无用户 Key"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "typecheck/lint/单测质量底线"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "后端错误文案约定"}
+{"file": ".trellis/tasks/08-05-model-rank-llm-benchmark/prd.md", "reason": "需求与 AC"}
+{"file": ".trellis/tasks/08-05-model-rank-llm-benchmark/design.md", "reason": "数据流与解析设计"}
+{"file": ".trellis/tasks/08-05-model-rank-llm-benchmark/implement.md", "reason": "执行清单与验证命令"}

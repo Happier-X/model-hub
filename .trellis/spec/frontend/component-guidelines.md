@@ -13,7 +13,7 @@
 5. 列表必须覆盖加载、空数据和错误状态。
 6. 表单中的上游 Key 输入使用密码类型；不向用户展示完整上游 Key。
 7. 应用无登录页，首屏直接进入主布局。
-8. 分组队列「按模型能力排序」只可修改当前表单，不得自动保存；支持本地启发式 / 外部通用 / 外部编码；外部分需标注 OpenRouter 来源与缓存状态，未匹配回退本地启发式；未知模型稳定排后，用户仍可拖拽微调。合同见 [model-queue-sort.md](./model-queue-sort.md)。
+8. 分组队列「按模型能力排序」只可修改当前表单，不得自动保存；排序依据为 llm_benchmark 外部榜单（logic 综合榜「极限分数」），未命中模型稳定排后，用户仍可拖拽微调。合同见 [model-queue-sort.md](./model-queue-sort.md)。
 9. **配置到 Pi**：入口在**分组页**列表行「配置到 Pi」；调用 `exportGroupToPiAgent(groupId)`；**无 Key UI / 无 Key 入参**；模型名=分组名，写入本机 `~/.pi/agent/models.json` 的单一 `providers.model-hub`（按 id upsert）。
 10. 信息架构无「API 密钥 / 客户端 Key」页面与导航。
 11. **上游访问**：禁止供应商页「测试连接」及任何自动/后台对用户上游的测活；**不**展示供应商熔断健康徽章，**不**调用 `listHealth`（已删除）；分组页「拉取模型」**仅**用户点击触发，不得在 `onMounted`/保存时自动拉取。**例外**：当分组绑定了供应商开启「自动同步」时，代理在后台每 24h 自动全量覆盖分组，该模式下分组模型列表变为只读，禁用拖拽、编辑和删除条目。合同见 backend [upstream-access.md](../backend/upstream-access.md)。

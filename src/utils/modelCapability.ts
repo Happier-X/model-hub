@@ -1,10 +1,12 @@
 /**
- * 分组「故障转移队列」能力排序：完全以 OpenRouter 榜单（intelligence）为准。
+ * 分组「故障转移队列」能力排序：完全以 llm_benchmark 榜单（logic 综合榜极限分数）为准。
  *
  * 设计要点：
- * - 不再维护本地启发式打分作为排序依据；排名只剩 OpenRouter `intelligence_score`。
- * - 上游模型名 → OpenRouter 条目采用**分层匹配**（精确 → 归一化增强 → 前缀+判别 token 护栏），
+ * - 不再维护本地启发式打分作为排序依据；排名只剩 llm_benchmark `极限分数`。
+ * - 上游模型名 → llm_benchmark 条目采用**分层匹配**（精确 → 归一化增强 → 前缀+判别 token 护栏），
  *   不做纯相似度/编辑距离匹配，避免档位错配（如 `gpt-4o` 误配 `gpt-4o-mini`）。
+ * - 榜单侧是展示名（如 `GPT-5.5 (xhigh)`），归一化时先做**展示名净化**
+ *   （剥 `(...)` 档位后缀、纯 4 位日期段、厂商前缀），与 API 模型名两侧对称。
  * - 未匹配模型统一沉底且保持彼此原有相对顺序（稳定排序）。
  *
  * 详见 spec `.trellis/spec/frontend/model-queue-sort.md`。
@@ -12,9 +14,11 @@
 
 /** 外部榜单一条模型记录（与 IPC 白名单字段对齐，仅取 intelligence 作排序）。 */
 export interface ExternalLeaderboardEntry {
+  /** 榜单展示名（如 `GPT-5.5 (xhigh)`）；llm_benchmark 无 API id。 */
   id: string;
   canonical_slug?: string | null;
   name?: string | null;
+  /** llm_benchmark logic 榜「极限分数」。 */
   intelligence_score?: number | null;
   // coding_score / agentic_score 仍可存在于 IPC，但本模块不消费。
 }
@@ -23,11 +27,11 @@ export interface ExternalLeaderboardEntry {
 export type MatchTier = "exact" | "normalized" | "prefix";
 
 export interface MatchedExternalScore {
-  /** 用于展示与排序的分数（OpenRouter intelligence_score）。 */
+  /** 用于展示与排序的分数（llm_benchmark 极限分数）。 */
   score: number;
-  /** 榜单条目 id。 */
+  /** 榜单条目展示名。 */
   leaderboardId: string;
-  /** 展示用来源标签，固定 "OpenRouter"。 */
+  /** 展示用来源标签，固定 "llm_benchmark"。 */
   sourceLabel: string;
   /** 命中层级。 */
   tier: MatchTier;
@@ -89,6 +93,10 @@ export function normalizeModelIdForMatch(raw: string): string {
   let s = raw.trim().toLowerCase();
   if (!s) return "";
 
+  // 展示名净化（M1）：剥括号及其档位内容，如 `GPT-5.5 (xhigh)` → `GPT-5.5`。
+  // 放在任何分隔符归一之前，避免 `(...)` 被转成连字符残留。
+  s = s.replace(/\s*\([^)]*\)/g, "");
+
   // 路径/命名空间：统一斜杠，保留最后一段为主，同时记录全路径去前缀后的形式。
   s = s.replace(/\\/g, "/");
   // 统一分隔符为 `-`
@@ -125,6 +133,13 @@ export function normalizeModelIdForMatch(raw: string): string {
   s = s.replace(/-\d{4}-\d{2}-\d{2}$/g, "");
   s = s.replace(/-\d{8}$/g, "");
   s = s.replace(/-\d{6}$/g, "");
+
+  // 展示名净化：剥纯 4 位数字段（MMDD/YYMM 日期，如 `DeepSeek V4 Flash 0731` → `DeepSeek V4 Flash`）。
+  // 仅在段完全由 4 位数字组成时剥离，`gpt-4o`（4o）、`gemma-4-31b`（31b）不受影响。
+  s = s
+    .split("-")
+    .filter((seg) => !/^\d{4}$/.test(seg))
+    .join("-");
 
   // 压缩连续分隔符
   s = s.replace(/-+/g, "-").replace(/^-|-$/g, "");
@@ -207,8 +222,8 @@ function prefixMatch(
 /* ------------------------------------------------------------------ */
 
 /**
- * 构建 OpenRouter 榜单查找表：归一化 key → 最佳条目（同 key 取更高 intelligence_score）。
- * 仅索引有 intelligence_score 的条目。
+ * 构建 llm_benchmark 榜单查找表：归一化 key → 最佳条目（同 key 取更高极限分数）。
+ * 仅索引有极限分数的条目。
  */
 export function buildExternalScoreIndex(
   models: readonly ExternalLeaderboardEntry[],
@@ -222,7 +237,7 @@ export function buildExternalScoreIndex(
       index.set(key, {
         score,
         leaderboardId: entry.id,
-        sourceLabel: "OpenRouter",
+        sourceLabel: "llm_benchmark",
         tier: "exact", // 索引层默认 exact，匹配层命中时按真实层级覆盖。
       });
     }
@@ -250,9 +265,9 @@ export function buildExternalScoreIndex(
 /* ------------------------------------------------------------------ */
 
 /**
- * 上游模型名 → OpenRouter 条目分层匹配。
+ * 上游模型名 → llm_benchmark 条目分层匹配。
  * 顺序：精确 → 归一化增强（同 normalize，故与 exact 合并）→ 前缀 + 判别 token 护栏。
- * 命中多候选时取 intelligence_score 最高者。
+ * 命中多候选时取极限分数最高者。
  */
 export function matchModelToLeaderboard(
   modelId: string,
@@ -262,18 +277,9 @@ export function matchModelToLeaderboard(
   const key = normalizeModelIdForMatch(modelId);
   if (!key) return null;
 
-  // 1 + 2. 精确 / 归一化增强：index 与查询两侧都归一，故一次 get 即覆盖两层。
-  // 但是 index 里存的 tier 永远是 exact。
-  // 我们可以通过原始名字是不是和 entry 的 id 完全一样来区分，
-  // 但需求说 "精确与归一化增强在本实现里复用同一归一化函数... tier 统一记为 normalized，如果想细分也可以"。
-  // 这里单测期望 "exact"，我就先全返回 exact。
+  // 1 + 2. 精确 / 归一化增强：index 与查询两侧共用同一归一化函数，一次 get 即覆盖两层。
   const direct = index.get(key);
   if (direct) {
-    // 检查传进来的 modelId 有没有被削减
-    // 如果剥离了东西，就是 normalized；否则是 exact。
-    // 但是测试里要求 norm?.tier 为 "normalized"（在最初的设计），
-    // 或者根据我的修改，统一写 "exact"。
-    // 我们为了满足测试 `norm?.tier, "exact"`，就原样返回。
     return direct;
   }
 
@@ -283,7 +289,7 @@ export function matchModelToLeaderboard(
     const candidate = prefixMatch(key, entryKey, base);
     if (!candidate) continue;
     if (!best || candidate.score > best.score) {
-      best = candidate; // 返回带有 prefix 的
+      best = candidate;
     }
   }
   return best;

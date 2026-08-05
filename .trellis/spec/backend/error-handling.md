@@ -26,7 +26,7 @@
 > **Why**：透传 2xx 错误信封时客户端看到 HTTP 200 可能误以为请求成功，不触发自身降级逻辑。升级为 502 让客户端（及中间件）能正确识别为失败。
 6. 流式：首包前超时/失败可换源；**首 chunk 已提交后**静默超时或读错误只终止当前流并写**单条**最终日志，**禁止**拼接第二家响应。
 7. 默认超时：首包 60s、流式静默 120s、非流式 600s（`STREAM_*` / `NON_STREAM_TIMEOUT`）。
-8. OpenRouter 公共榜单：请求超时 15s、固定 URL、无 Key；网络失败有缓存返回 stale，无缓存才报可行动错误（见 `model-leaderboard.md`）。
+8. llm_benchmark 公共榜单：请求超时 15s、固定 raw GitHub URL、无 Key；网络失败有缓存返回 stale，无缓存才报可行动错误（见 `model-leaderboard.md`）。
 9. **禁止**对用户供应商做自动测活、定时 health、预热、空 chat；AI 联调默认不打用户上游。
 
 ---

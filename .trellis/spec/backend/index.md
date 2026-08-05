@@ -31,7 +31,7 @@
 | [Error Handling](./error-handling.md) | 壳错误与 HTTP 错误 | Current |
 | [Logging Guidelines](./logging-guidelines.md) | 日志与脱敏 | Current |
 | [Quality Guidelines](./quality-guidelines.md) | 质量门禁 | Current |
-| [Model Leaderboard](./model-leaderboard.md) | OpenRouter 榜单 IPC / 缓存 / 白名单 | Current |
+| [Model Leaderboard](./model-leaderboard.md) | llm_benchmark 榜单 IPC / 缓存 / 白名单 | Current |
 | [Upstream Access](./upstream-access.md) | 禁止用户上游测活；允许真实 Chat 与点击拉模型 | Current |
 | [Stream Forwarding](./stream-forwarding.md) | 流式续传超时、SSE 心跳保活、日志四态、换源边界 | Current |
 | [Thinking Effort](./thinking-effort.md) | 分组思考强度档位 → 各厂商字段翻译、家族识别、迁移 | Current |

@@ -191,7 +191,7 @@ const leaderboardStatusText = computed(() => {
   }
   const t = formatUnix(leaderboard.value.fetched_at_unix);
   const parts = [
-    `OpenRouter ${leaderboard.value.models.length} 条`,
+    `llm_benchmark ${leaderboard.value.models.length} 条`,
     `更新于 ${t}`,
   ];
   if (leaderboard.value.cache_hit) parts.push("缓存命中");
@@ -493,11 +493,11 @@ async function sortQueueByCapability() {
 
   const after = sorted.map((item) => item.uid);
   if (before.every((uid, index) => uid === after[index])) {
-    formMessage.value = "当前顺序已符合 OpenRouter 榜单排序（未匹配项保持原序）";
+    formMessage.value = "当前顺序已符合 llm_benchmark 榜单排序（未匹配项保持原序）";
     return;
   }
 
-  applySortedItems(sorted, "已按 OpenRouter 通用能力排序；未匹配项已沉底。点击“保存”后生效，仍可拖拽微调。");
+  applySortedItems(sorted, "已按 llm_benchmark 综合能力排序；未匹配项已沉底。点击“保存”后生效，仍可拖拽微调。");
 }
 
 async function handleSyncNow() {
@@ -779,12 +779,12 @@ onMounted(async () => {
                     "
                     :title="
                       queueDisplayScores[index]
-                        ? `OpenRouter 分数 ${queueDisplayScores[index]?.score}（匹配层级：${queueDisplayScores[index]?.tier}）`
-                        : '未匹配到 OpenRouter 榜单数据'
+                        ? `llm_benchmark 分数 ${queueDisplayScores[index]?.score}（匹配层级：${queueDisplayScores[index]?.tier}）`
+                        : '未匹配到 llm_benchmark 榜单数据'
                     "
                   >
                     <template v-if="queueDisplayScores[index]">
-                      OpenRouter · {{ queueDisplayScores[index]?.score }}
+                      llm_benchmark · {{ queueDisplayScores[index]?.score }}
                     </template>
                     <template v-else>未匹配</template>
                   </span>

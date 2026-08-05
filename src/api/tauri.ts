@@ -239,7 +239,7 @@ export interface ExportToPiResult {
 export const exportGroupToPiAgent = (groupId: number) =>
   invoke<ExportToPiResult>("export_group_to_pi_agent", { groupId });
 
-/** OpenRouter 公共榜单模型（白名单字段）。 */
+/** llm_benchmark 公共榜单模型（白名单字段）。 */
 export interface LeaderboardModel {
   id: string;
   canonical_slug?: string | null;
@@ -257,7 +257,7 @@ export interface ModelLeaderboardSnapshot {
   models: LeaderboardModel[];
 }
 
-/** 获取 OpenRouter 模型榜单；默认用 24h 缓存，forceRefresh 时尝试网络。 */
+/** 获取 llm_benchmark 模型榜单；默认用 24h 缓存，forceRefresh 时尝试网络。 */
 export const getModelLeaderboard = (forceRefresh = false) =>
   invoke<ModelLeaderboardSnapshot>("get_model_leaderboard", {
     forceRefresh,

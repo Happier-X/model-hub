@@ -395,7 +395,7 @@ pub fn export_group_to_pi_agent(
     })
 }
 
-/// 获取 OpenRouter 公共模型榜单（24h 缓存；可强制刷新；网络失败时 stale 回退）。
+/// 获取 llm_benchmark 公共模型榜单（24h 缓存；可强制刷新；网络失败时 stale 回退）。
 #[tauri::command]
 pub async fn get_model_leaderboard(
     app: AppHandle,

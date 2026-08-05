@@ -20,6 +20,43 @@ test("归一化剥离厂商前缀、日期、渠道与量化后缀", () => {
   assert.equal(normalizeModelIdForMatch("deepseek-r1-gguf"), "deepseek-r1");
 });
 
+test("展示名净化（M1）：剥括号档位与纯 4 位日期段", () => {
+  // llm_benchmark 展示名 → 归一化后与 API 名对齐
+  assert.equal(normalizeModelIdForMatch("GPT-5.5 (xhigh)"), "gpt-5-5");
+  assert.equal(normalizeModelIdForMatch("Kimi-K3 (max)"), "kimi-k3");
+  assert.equal(normalizeModelIdForMatch("DeepSeek V4 Flash 0731 (max)"), "deepseek-v4-flash");
+  assert.equal(normalizeModelIdForMatch("Gemini 3.5 Flash Lite (high)"), "gemini-3-5-flash-lite");
+  assert.equal(normalizeModelIdForMatch("Qwen3.7-Max (xhigh)"), "qwen3-7-max");
+  assert.equal(normalizeModelIdForMatch("Gemma 4 31B"), "gemma-4-31b");
+  // 不含括号的普通 API 名不受影响（4o / 31b 非纯 4 位数字段）
+  assert.equal(normalizeModelIdForMatch("gpt-4o"), "gpt-4o");
+  assert.equal(normalizeModelIdForMatch("gemma-4-31b"), "gemma-4-31b");
+});
+
+test("llm_benchmark 展示名 ↔ API 名跨侧命中", () => {
+  const entries: ExternalLeaderboardEntry[] = [
+    { id: "GPT-5.5 (xhigh)", name: "GPT-5.5 (xhigh)", intelligence_score: 83.8 },
+    { id: "Kimi-K3 (max)", name: "Kimi-K3 (max)", intelligence_score: 82.91 },
+    { id: "DeepSeek V4 Flash 0731 (max)", name: "DeepSeek V4 Flash 0731 (max)", intelligence_score: 68.12 },
+    { id: "Gemma 4 31B", name: "Gemma 4 31B", intelligence_score: 27.91 },
+  ];
+  const index = buildExternalScoreIndex(entries);
+
+  // API 名命中对应展示名
+  const hit1 = matchModelToLeaderboard("openai/gpt-5.5", index);
+  assert.equal(hit1?.score, 83.8);
+  assert.equal(hit1?.sourceLabel, "llm_benchmark");
+  const hit2 = matchModelToLeaderboard("moonshot/kimi-k3", index);
+  assert.equal(hit2?.score, 82.91);
+  const hit3 = matchModelToLeaderboard("deepseek/deepseek-v4-flash", index);
+  assert.equal(hit3?.score, 68.12);
+  const hit4 = matchModelToLeaderboard("google/gemma-4-31b", index);
+  assert.equal(hit4?.score, 27.91);
+
+  // 未收录模型不命中
+  assert.equal(matchModelToLeaderboard("company-internal-model", index), null);
+});
+
 test("分层匹配：精确/归一化命中与多候选择优", () => {
   const entries: ExternalLeaderboardEntry[] = [
     { id: "openai/gpt-4o", intelligence_score: 85 },
