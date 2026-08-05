@@ -21,6 +21,8 @@
 13. **首页「最近成功请求」**：展示全局最近一次成功日志的分组 / 供应商 / 上游模型 / 时间（日志态，非队列首选）；调用 `getLastSuccessRequest()`；空态「暂无成功请求」；与今日统计一并刷新，独立错误文案；不轮询、不按分组展开。成功语义见 backend [logging-guidelines.md](../backend/logging-guidelines.md)。
 14. **页面职责**：首页只承载代理运行状态、Base URL、启停/刷新、请求统计与接入指引；端口修改、数据目录、应用更新和自动检查偏好统一放在设置页。
 15. **启动更新检查**：应用壳层仅在挂载时读取一次 `check_update_on_startup`；发现新版本只展示可关闭提示和设置页入口，探测后立即关闭 `Update` 资源，不自动下载或安装。
+16. **分组卡片内即时编辑**：分组页卡片支持拖拽排序 / 删成员即时保存（`update_group` 全量 `items` 替换）。子组件（`src/components/groups/GroupCard.vue`）用**乐观本地态**展示新顺序：`localItems` 初始化自 props、`watch(() => props.group.items)` 随服务端回写同步；操作时先改 `localItems` 再 `emit('persist-items', items)`，页面收到后组装完整 payload 并 `updateGroup`，成功后用服务端返回替换 `groups[idx]`，失败 `error + refresh()` 回滚。同一分组保存中通过 `cardSavingIds`（`Set<number>`）禁用冲突操作，避免全量替换写穿。绑定分组（`source_provider_id` 非空）卡片内不渲染拖拽/删除且拖拽事件守卫返回。删除分组用卡片内覆盖层二次确认，**禁止** `window.confirm`。
+17. **分组双栏选模对话框（octopus 风格）**：新建/编辑共用 `AppDialog size="wide"` + `@tanstack/vue-form`；左栏按供应商手风琴选模、右栏已选队列拖拽/删除/清空。**左栏模型加载合同**：`useProviderModelCache`（`src/composables/useProviderModelCache.ts`）按 `provider_id` 缓存，`ensure(id)` 仅 `ready` 时直接返回、否则拉取并防并发（inflight map）；**只在用户展开手风琴 / 点刷新 / 点「全部加入」时调用**，打开对话框、`onMounted`、保存均不预拉（D4=L1，见 upstream-access）。去重 key 为 `` `${provider_id}\u0000${upstream_model.trim()}` ``；「全部加入」只追加未在队列中的模型。绑定态左栏禁用、右栏只读，保留「立即同步」。
 
 ## 应用外壳布局（AppShell）
 

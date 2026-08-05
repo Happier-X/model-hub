@@ -1,30 +1,31 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { Plus } from "@lucide/vue";
+import { ChevronDown, Plus } from "@lucide/vue";
 import { useForm } from "@tanstack/vue-form";
-import { HBadge, HButton, HCard, HEmpty, HInput, HSelect, type HSelectOption } from "happier-ui";
+import { HButton, HCard, HEmpty, HInput, HSelect, type HSelectOption } from "happier-ui";
 import {
   createGroup,
   deleteGroup,
   exportGroupToPiAgent,
   extractInvokeError,
-  fetchProviderModels,
   getModelLeaderboard,
   listGroups,
   listProviders,
   syncGroupNow,
   updateGroup,
   type Group,
+  type GroupItem,
   type ModelLeaderboardSnapshot,
   type Provider,
   type ThinkingEffort,
 } from "../api/tauri";
 import AppDialog from "../components/AppDialog.vue";
+import GroupCard from "../components/groups/GroupCard.vue";
+import { useProviderModelCache } from "../composables/useProviderModelCache";
 import {
   buildExternalScoreIndex,
   matchModelToLeaderboard,
   sortQueueByLeaderboard,
-  type ExternalLeaderboardEntry,
   type LeaderboardIndex,
 } from "../utils/modelCapability";
 import { getGroupSaveMode } from "../utils/groupSaveMode";
@@ -78,24 +79,21 @@ const editingGroupId = ref<number | null>(null);
 const isEditing = computed(() => editingGroupId.value !== null);
 const saving = ref(false);
 const dialogOpen = ref(false);
-/** 每条队列条目拉取到的上游模型 id 列表 */
-const modelOptions = ref<Record<number, string[]>>({});
-const fetchingModels = ref<Record<number, boolean>>({});
-const bulkProviderId = ref(0);
-const bulkAddingModels = ref(false);
-const bulkMessage = ref("");
-const dragFromIndex = ref<number | null>(null);
-const dragOverIndex = ref<number | null>(null);
+/** 卡片即时保存中的分组 id 集合 */
+const cardSavingIds = ref<Set<number>>(new Set());
 
-const providerSelectOptions = computed<HSelectOption[]>(() => [
-  { value: 0, label: "选择供应商" },
-  ...providers.value.map((p) => ({ value: p.id, label: p.name })),
-]);
+/** 双栏对话框：左侧供应商模型缓存（仅展开/刷新触发拉取，禁止预拉） */
+const modelCache = useProviderModelCache();
+const expandedProviders = ref<Set<number>>(new Set());
+const leftFilter = ref("");
+/** 表单内提示（排序/全部加入反馈） */
+const formMessage = ref("");
 
 const bindProviderOptions = computed<HSelectOption[]>(() => [
   { value: 0, label: "不绑定" },
   ...providers.value.map((p) => ({ value: p.id, label: p.name })),
 ]);
+
 const leaderboard = ref<ModelLeaderboardSnapshot | null>(null);
 const leaderboardLoading = ref(false);
 const leaderboardError = ref("");
@@ -158,6 +156,12 @@ const editingGroupName = computed(() => {
   return g?.name ?? formValues.value.name;
 });
 
+const providerMap = computed(() => new Map(providers.value.map((p) => [p.id, p])));
+
+function providerName(providerId: number, fallbackName?: string): string {
+  return providerMap.value.get(providerId)?.name || fallbackName || String(providerId);
+}
+
 function createQueueItem(providerId: number, upstreamModel: string): QueueItemDraft {
   return {
     uid: nextItemUid++,
@@ -170,19 +174,10 @@ function setItems(next: QueueItemDraft[]) {
   form.setFieldValue("items", next);
 }
 
-function updateItemAt(
-  index: number,
-  patch: Partial<Pick<QueueItemDraft, "provider_id" | "upstream_model">>,
-) {
-  const items = formValues.value.items;
-  const current = items[index];
-  if (!current) return;
-  const next = items.slice();
-  next[index] = { ...current, ...patch };
-  setItems(next);
-}
-
-const providerMap = computed(() => new Map(providers.value.map((p) => [p.id, p])));
+/** 已选队列的去重 key：provider_id + upstream_model（AC7）。 */
+const selectedItemKeys = computed(
+  () => new Set(formValues.value.items.map((i) => `${i.provider_id}\u0000${i.upstream_model.trim()}`)),
+);
 
 const externalIndex = computed<LeaderboardIndex | null>(() => {
   if (!leaderboard.value) return null;
@@ -224,13 +219,8 @@ async function loadLeaderboard(forceRefresh = false) {
   leaderboardError.value = "";
   try {
     leaderboard.value = await getModelLeaderboard(forceRefresh);
-    if (leaderboard.value.stale) {
-      // stale 状态由结构化快照展示；它仍是可用的成功结果。
-      leaderboardError.value = "";
-    }
   } catch (e) {
     leaderboardError.value = extractInvokeError(e);
-    // 失败不影响本地排序；保留旧快照（若有）
   } finally {
     leaderboardLoading.value = false;
   }
@@ -245,9 +235,6 @@ async function ensureLeaderboardForExternalSort() {
 async function refresh() {
   try {
     [groups.value, providers.value] = await Promise.all([listGroups(), listProviders()]);
-    if (!bulkProviderId.value && providers.value.length > 0) {
-      bulkProviderId.value = providers.value[0]?.id ?? 0;
-    }
     error.value = "";
   } catch (e) {
     error.value = extractInvokeError(e);
@@ -257,10 +244,9 @@ async function refresh() {
 function resetForm() {
   editingGroupId.value = null;
   form.reset({ name: "", thinking_effort: "off", items: [], source_provider_id: null });
-  modelOptions.value = {};
-  fetchingModels.value = {};
-  bulkProviderId.value = providers.value[0]?.id ?? 0;
-  bulkMessage.value = "";
+  expandedProviders.value = new Set();
+  leftFilter.value = "";
+  formMessage.value = "";
   error.value = "";
   message.value = "";
 }
@@ -279,6 +265,7 @@ function closeDialog() {
 function startEdit(g: Group) {
   error.value = "";
   message.value = "";
+  formMessage.value = "";
   editingGroupId.value = g.id;
   dialogOpen.value = true;
   form.reset({
@@ -287,74 +274,168 @@ function startEdit(g: Group) {
     items: g.items.map((i) => createQueueItem(i.provider_id, i.upstream_model)),
     source_provider_id: g.source_provider_id || null,
   });
-  modelOptions.value = {};
-  fetchingModels.value = {};
+  expandedProviders.value = new Set();
+  leftFilter.value = "";
   dragFromIndex.value = null;
   dragOverIndex.value = null;
-  bulkMessage.value = "";
 }
 
-function addItem() {
-  const first = providers.value[0];
-  setItems([...formValues.value.items, createQueueItem(first?.id ?? 0, "gpt-4o-mini")]);
+// ---------------------------------------------------------------------------
+// 卡片内即时编辑
+// ---------------------------------------------------------------------------
+
+function persistGroupItems(group: Group, nextItems: GroupItem[]) {
+  if (cardSavingIds.value.has(group.id)) return;
+  cardSavingIds.value = new Set(cardSavingIds.value).add(group.id);
+  error.value = "";
+  const payload = {
+    id: group.id,
+    name: group.name,
+    thinking_effort: group.thinking_effort,
+    source_provider_id: group.source_provider_id ?? null,
+    items: nextItems.map((i) => ({ provider_id: i.provider_id, upstream_model: i.upstream_model })),
+  };
+  void (async () => {
+    try {
+      const updated = await updateGroup(payload);
+      // 以服务端返回为准替换本地，避免假成功
+      const idx = groups.value.findIndex((g) => g.id === group.id);
+      if (idx >= 0) {
+        groups.value = [...groups.value.slice(0, idx), updated, ...groups.value.slice(idx + 1)];
+      }
+    } catch (e) {
+      error.value = extractInvokeError(e);
+      await refresh();
+    } finally {
+      cardSavingIds.value = new Set([...cardSavingIds.value].filter((id) => id !== group.id));
+    }
+  })();
 }
+
+async function removeGroup(id: number) {
+  if (cardSavingIds.value.has(id)) return;
+  cardSavingIds.value = new Set(cardSavingIds.value).add(id);
+  error.value = "";
+  try {
+    await deleteGroup(id);
+    await refresh();
+  } catch (e) {
+    error.value = extractInvokeError(e);
+    await refresh();
+  } finally {
+    cardSavingIds.value = new Set([...cardSavingIds.value].filter((gid) => gid !== id));
+  }
+}
+
+async function exportToPi(groupId: number) {
+  exportingPiId.value = groupId;
+  message.value = "";
+  try {
+    const result = await exportGroupToPiAgent(groupId);
+    error.value = "";
+    message.value = `已写入 Pi 配置：${result.path}\n模型 ${result.provider_id}/${result.group_name}（当前 model-hub 共 ${result.model_count} 个模型），Base URL ${result.base_url}。请在 Pi 中打开 /model 选择 model-hub/${result.group_name}。`;
+  } catch (e) {
+    error.value = extractInvokeError(e);
+  } finally {
+    exportingPiId.value = null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 双栏对话框：左侧供应商手风琴
+// ---------------------------------------------------------------------------
+
+function toggleProvider(providerId: number) {
+  const next = new Set(expandedProviders.value);
+  if (next.has(providerId)) {
+    next.delete(providerId);
+  } else {
+    next.add(providerId);
+    // D4=L1：首次展开才拉取；已缓存则直接展示
+    void modelCache.ensure(providerId).catch(() => {});
+  }
+  expandedProviders.value = next;
+}
+
+function addModelFromLeft(providerId: number, modelId: string) {
+  if (isBound.value) return;
+  const m = modelId.trim();
+  if (!m) return;
+  if (selectedItemKeys.value.has(`${providerId}\u0000${m}`)) return;
+  setItems([...formValues.value.items, createQueueItem(providerId, m)]);
+}
+
+async function addAllFromProvider(providerId: number) {
+  if (isBound.value) return;
+  let models = modelCache.getModels(providerId);
+  if (models.length === 0) {
+    try {
+      models = await modelCache.ensure(providerId);
+    } catch {
+      return;
+    }
+  }
+  const items = formValues.value.items.slice();
+  const existing = new Set(items.map((i) => `${i.provider_id}\u0000${i.upstream_model.trim()}`));
+  let added = 0;
+  for (const raw of models) {
+    const m = raw.trim();
+    if (!m) continue;
+    const key = `${providerId}\u0000${m}`;
+    if (existing.has(key)) continue;
+    items.push(createQueueItem(providerId, m));
+    existing.add(key);
+    added += 1;
+  }
+  setItems(items);
+  formMessage.value =
+    added > 0
+      ? `已加入 ${added} 个模型，点击“保存”后生效`
+      : "队列已包含该供应商全部模型";
+}
+
+/** 左侧已加载模型：关键词过滤 + 已选剔除（AC7）。 */
+function filteredProviderModels(providerId: number): string[] {
+  const models = modelCache.getModels(providerId);
+  const kw = leftFilter.value.trim().toLowerCase();
+  return models.filter((m) => {
+    if (selectedItemKeys.value.has(`${providerId}\u0000${m.trim()}`)) return false;
+    return !kw || m.toLowerCase().includes(kw);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 双栏对话框：右侧队列
+// ---------------------------------------------------------------------------
+
+const dragFromIndex = ref<number | null>(null);
+const dragOverIndex = ref<number | null>(null);
 
 function reorderQueue(from: number, to: number) {
+  if (isBound.value) return;
   const items = formValues.value.items;
-  if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) {
-    return;
-  }
-
+  if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) return;
   const nextItems = items.slice();
   const [movedItem] = nextItems.splice(from, 1);
   nextItems.splice(to, 0, movedItem);
-
-  const indexOrder = items.map((_, i) => i);
-  const [movedIndex] = indexOrder.splice(from, 1);
-  indexOrder.splice(to, 0, movedIndex);
-
-  const nextOptions: Record<number, string[]> = {};
-  const nextFetching: Record<number, boolean> = {};
-  indexOrder.forEach((oldIndex, newIndex) => {
-    if (modelOptions.value[oldIndex]) {
-      nextOptions[newIndex] = modelOptions.value[oldIndex];
-    }
-    if (fetchingModels.value[oldIndex]) {
-      nextFetching[newIndex] = fetchingModels.value[oldIndex];
-    }
-  });
-
   setItems(nextItems);
-  modelOptions.value = nextOptions;
-  fetchingModels.value = nextFetching;
-  bulkMessage.value = "队列顺序已调整，点击“保存”后生效";
 }
 
-function moveItem(index: number, delta: number) {
-  reorderQueue(index, index + delta);
+function removeQueueItem(index: number) {
+  if (isBound.value) return;
+  setItems(formValues.value.items.filter((_, i) => i !== index));
 }
 
-function removeItem(index: number) {
-  const items = formValues.value.items;
-  setItems(items.filter((_, i) => i !== index));
-  const nextOptions: Record<number, string[]> = {};
-  const nextFetching: Record<number, boolean> = {};
-  items.forEach((_, newIndex) => {
-    if (newIndex === index) return;
-    const mapped = newIndex > index ? newIndex - 1 : newIndex;
-    const oldIndex = newIndex;
-    if (modelOptions.value[oldIndex]) {
-      nextOptions[mapped] = modelOptions.value[oldIndex];
-    }
-    if (fetchingModels.value[oldIndex]) {
-      nextFetching[mapped] = fetchingModels.value[oldIndex];
-    }
-  });
-  modelOptions.value = nextOptions;
-  fetchingModels.value = nextFetching;
+function clearQueue() {
+  if (isBound.value) return;
+  setItems([]);
 }
 
 function onDragStart(index: number, event: DragEvent) {
+  if (isBound.value) {
+    event.preventDefault();
+    return;
+  }
   dragFromIndex.value = index;
   dragOverIndex.value = index;
   if (event.dataTransfer) {
@@ -364,6 +445,7 @@ function onDragStart(index: number, event: DragEvent) {
 }
 
 function onDragOver(index: number, event: DragEvent) {
+  if (isBound.value) return;
   event.preventDefault();
   if (event.dataTransfer) {
     event.dataTransfer.dropEffect = "move";
@@ -387,36 +469,22 @@ function onDragEnd() {
 }
 
 function applySortedItems(sorted: QueueItemDraft[], msg: string) {
-  const items = formValues.value.items;
-  const oldIndexByUid = new Map(items.map((item, index) => [item.uid, index]));
-  const nextOptions: Record<number, string[]> = {};
-  const nextFetching: Record<number, boolean> = {};
-  sorted.forEach((item, newIndex) => {
-    const oldIndex = oldIndexByUid.get(item.uid);
-    if (oldIndex === undefined) return;
-    if (modelOptions.value[oldIndex]) nextOptions[newIndex] = modelOptions.value[oldIndex];
-    if (fetchingModels.value[oldIndex]) nextFetching[newIndex] = fetchingModels.value[oldIndex];
-  });
-
   setItems(sorted);
-  modelOptions.value = nextOptions;
-  fetchingModels.value = nextFetching;
   dragFromIndex.value = null;
   dragOverIndex.value = null;
-  bulkMessage.value = msg;
+  formMessage.value = msg;
 }
 
 async function sortQueueByCapability() {
   const items = formValues.value.items;
   if (items.length < 2) {
-    bulkMessage.value = "队列条目少于 2 条，无需排序";
+    formMessage.value = "队列条目少于 2 条，无需排序";
     return;
   }
 
   const ok = await ensureLeaderboardForExternalSort();
   if (!ok) {
-    bulkMessage.value =
-      "外部榜单不可用，已保持当前顺序。请检查网络后强制刷新榜单。";
+    formMessage.value = "外部榜单不可用，已保持当前顺序。请检查网络后强制刷新榜单。";
     return;
   }
 
@@ -425,106 +493,11 @@ async function sortQueueByCapability() {
 
   const after = sorted.map((item) => item.uid);
   if (before.every((uid, index) => uid === after[index])) {
-    bulkMessage.value = "当前顺序已符合 OpenRouter 榜单排序（未匹配项保持原序）";
+    formMessage.value = "当前顺序已符合 OpenRouter 榜单排序（未匹配项保持原序）";
     return;
   }
 
   applySortedItems(sorted, "已按 OpenRouter 通用能力排序；未匹配项已沉底。点击“保存”后生效，仍可拖拽微调。");
-}
-
-async function pullModels(index: number) {
-  const item = formValues.value.items[index];
-  if (!item || !item.provider_id) {
-    error.value = "请先选择供应商，再拉取模型";
-    return;
-  }
-  fetchingModels.value = { ...fetchingModels.value, [index]: true };
-  try {
-    const ids = await fetchProviderModels({ provider_id: item.provider_id });
-    modelOptions.value = { ...modelOptions.value, [index]: ids };
-    error.value = "";
-    if (ids.length === 0) {
-      error.value = "上游返回空模型列表，请手填上游模型名";
-    }
-  } catch (e) {
-    error.value = extractInvokeError(e);
-  } finally {
-    fetchingModels.value = { ...fetchingModels.value, [index]: false };
-  }
-}
-
-function pickModel(index: number, modelId: string) {
-  updateItemAt(index, { upstream_model: modelId });
-}
-
-async function bulkAddProviderModels() {
-  const providerId = bulkProviderId.value;
-  if (!providerId) {
-    error.value = "请先选择要批量添加模型的供应商";
-    return;
-  }
-  bulkAddingModels.value = true;
-  bulkMessage.value = "";
-  try {
-    const ids = await fetchProviderModels({ provider_id: providerId });
-    if (ids.length === 0) {
-      error.value = "上游返回空模型列表，队列未修改";
-      return;
-    }
-
-    const items = formValues.value.items.slice();
-    const existing = new Set(
-      items.map((item) => `${item.provider_id}\u0000${item.upstream_model.trim()}`),
-    );
-    let added = 0;
-    let skipped = 0;
-    for (const rawId of ids) {
-      const modelId = rawId.trim();
-      if (!modelId) {
-        skipped += 1;
-        continue;
-      }
-      const key = `${providerId}\u0000${modelId}`;
-      if (existing.has(key)) {
-        skipped += 1;
-        continue;
-      }
-      items.push(createQueueItem(providerId, modelId));
-      existing.add(key);
-      added += 1;
-    }
-    setItems(items);
-    error.value = "";
-    bulkMessage.value = `已添加 ${added} 个模型${skipped > 0 ? `，跳过 ${skipped} 个重复或空模型` : ""}；点击“保存”后生效`;
-  } catch (e) {
-    error.value = extractInvokeError(e);
-  } finally {
-    bulkAddingModels.value = false;
-  }
-}
-
-async function remove(id: number) {
-  if (!confirm("确认删除该分组？")) return;
-  try {
-    await deleteGroup(id);
-    await refresh();
-  } catch (e) {
-    error.value = extractInvokeError(e);
-  }
-}
-
-async function exportToPi(groupId: number) {
-  exportingPiId.value = groupId;
-  message.value = "";
-  try {
-    const result = await exportGroupToPiAgent(groupId);
-    error.value = "";
-    message.value = `已写入 Pi 配置：${result.path}\n模型 ${result.provider_id}/${result.group_name}（当前 model-hub 共 ${result.model_count} 个模型），Base URL ${result.base_url}。请在 Pi 中打开 /model 选择 model-hub/${result.group_name}。`;
-  } catch (e) {
-    error.value = extractInvokeError(e);
-  } finally {
-    exportingPiId.value = null;
-  }
 }
 
 async function handleSyncNow() {
@@ -540,8 +513,6 @@ async function handleSyncNow() {
       items: updatedGroup.items.map((i) => createQueueItem(i.provider_id, i.upstream_model)),
       source_provider_id: updatedGroup.source_provider_id || null,
     });
-    modelOptions.value = {};
-    fetchingModels.value = {};
     message.value = "同步完成！模型列表已更新。";
   } catch (e) {
     error.value = extractInvokeError(e);
@@ -571,7 +542,7 @@ onMounted(async () => {
         </p>
         <p class="mb-3 text-sm text-slate-500">分组名 = 客户端 model；队列顺序即故障转移优先级。</p>
         <form class="space-y-3" @submit.prevent="form.handleSubmit()">
-          <div class="grid gap-3 md:grid-cols-2">
+          <div class="grid gap-3 md:grid-cols-3">
             <form.Field name="name">
               <template #default="{ field }">
                 <HInput
@@ -591,7 +562,7 @@ onMounted(async () => {
                     @update:model-value="(v) => field.handleChange(v as ThinkingEffort)"
                   />
                   <span class="mt-1 block text-xs text-slate-500">
-                    代理转发时按上游模型家族翻译为对应字段；客户端自带则不覆盖。Claude 需自备足够 max_tokens。
+                    代理转发时按上游模型家族翻译为对应字段；客户端自带则不覆盖。
                   </span>
                 </label>
               </template>
@@ -606,188 +577,231 @@ onMounted(async () => {
                     @update:model-value="(v) => field.handleChange(Number(v))"
                   />
                   <span class="mt-1 block text-xs text-slate-500">
-                    绑定后分组由选定的供应商托管，后台每 24h 自动全量同步其模型列表。
+                    绑定后分组由选定供应商托管，后台每 24h 自动全量同步其模型列表。
                   </span>
                 </label>
               </template>
             </form.Field>
           </div>
 
-          <div class="mt-4 space-y-2">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <h3 class="text-sm font-medium">故障转移队列</h3>
-              <div v-if="!isBound" class="flex flex-wrap items-center gap-3">
-                <HButton
-                  variant="ghost"
-                  size="sm"
-                  type="button"
-                  :disabled="formValues.items.length < 2 || leaderboardLoading"
-                  @click="sortQueueByCapability"
-                >
-                  按模型能力排序
-                </HButton>
-                <HButton
-                  variant="ghost"
-                  size="sm"
-                  type="button"
-                  :disabled="leaderboardLoading"
-                  @click="loadLeaderboard(true)"
-                >
-                  {{ leaderboardLoading ? "刷新榜单中…" : "强制刷新榜单" }}
-                </HButton>
-                <HButton variant="ghost" size="sm" type="button" @click="addItem">添加条目</HButton>
+          <div v-if="isBound" class="rounded-lg border border-violet-100 bg-violet-50/60 p-3">
+            <div class="flex items-center justify-between gap-2">
+              <div class="space-y-1">
+                <p class="text-sm text-violet-800">
+                  本分组由供应商托管，每 24h 自动同步，模型列表只读。
+                </p>
+                <p class="text-xs text-violet-600">上次同步：{{ boundLastSyncText }}</p>
               </div>
-            </div>
-            <p v-if="!isBound" class="text-xs text-slate-500">{{ leaderboardStatusText }}</p>
-            <div v-if="isBound" class="rounded-lg border border-violet-100 bg-violet-50/60 p-3">
-              <div class="flex items-center justify-between gap-2">
-                <div class="space-y-1">
-                  <p class="text-sm text-violet-800">
-                    本分组由供应商托管，每 24h 自动同步，模型列表只读。
-                  </p>
-                  <p class="text-xs text-violet-600">
-                    上次同步：{{ boundLastSyncText }}
-                  </p>
-                </div>
-                <HButton v-if="isEditing" variant="outline" size="sm" type="button" :disabled="saving" @click="handleSyncNow">
-                  立即同步
-                </HButton>
-              </div>
-            </div>
-            <div
-              v-else
-              class="flex flex-wrap items-end gap-2 rounded-lg border border-cyan-100 bg-cyan-50/60 p-3"
-            >
-              <label class="text-sm">
-                <span class="mb-1 block text-slate-600">批量添加供应商全部模型</span>
-                <HSelect
-                  class="min-w-48"
-                  :options="providerSelectOptions"
-                  :model-value="bulkProviderId"
-                  @update:model-value="(v) => (bulkProviderId = Number(v))"
-                />
-              </label>
               <HButton
+                v-if="isEditing"
                 variant="outline"
                 size="sm"
                 type="button"
-                :disabled="!bulkProviderId || bulkAddingModels"
-                @click="bulkAddProviderModels"
+                :disabled="saving"
+                @click="handleSyncNow"
               >
-                {{ bulkAddingModels ? "拉取添加中…" : "拉取并全部添加" }}
+                立即同步
               </HButton>
-              <span class="pb-1 text-xs text-slate-500">按供应商 + 模型名去重，仅修改当前表单。</span>
             </div>
-            <p v-if="bulkMessage" class="text-sm text-emerald-700">{{ bulkMessage }}</p>
-            <p v-if="!isBound" class="text-xs text-slate-500">
-              可拖动左侧手柄调整故障转移优先级；上移/下移与「按模型能力排序」仅作用于当前表单，需点保存写入。外部分数为 OpenRouter 公开智能指标。
-            </p>
-            <div
-              v-for="(item, index) in formValues.items"
-              :key="item.uid"
-              class="flex flex-wrap items-center gap-2 rounded-lg border p-3 transition"
-              :class="
-                dragOverIndex === index
-                  ? 'border-cyan-400 bg-cyan-50'
-                  : dragFromIndex === index
-                    ? 'border-slate-300 bg-slate-50 opacity-80'
-                    : 'border-slate-200 bg-white'
-              "
-              @dragover="!isBound && onDragOver(index, $event)"
-              @drop="!isBound && onDrop(index, $event)"
+          </div>
+
+          <div v-if="!isBound" class="flex flex-wrap items-center gap-2">
+            <HButton
+              variant="ghost"
+              size="sm"
+              type="button"
+              :disabled="formValues.items.length < 2 || leaderboardLoading"
+              @click="sortQueueByCapability"
             >
-              <button
-                v-if="!isBound"
-                type="button"
-                class="cursor-grab select-none rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-500 active:cursor-grabbing"
-                title="拖动排序"
-                draggable="true"
-                @dragstart="onDragStart(index, $event)"
-                @dragend="onDragEnd"
-              >
-                ⋮⋮
-              </button>
-              <span class="w-8 text-xs text-slate-400">#{{ index + 1 }}</span>
-              <span
-                class="rounded-full px-2 py-0.5 text-[11px] tabular-nums"
-                :class="
-                  queueDisplayScores[index]
-                    ? 'bg-emerald-50 text-emerald-800'
-                    : 'bg-slate-100 text-slate-500'
-                "
-                :title="
-                  queueDisplayScores[index]
-                    ? `OpenRouter 分数 ${queueDisplayScores[index]?.score}（匹配层级：${queueDisplayScores[index]?.tier}）`
-                    : '未匹配到 OpenRouter 榜单数据'
-                "
-              >
-                <template v-if="queueDisplayScores[index]">
-                  OpenRouter · {{ queueDisplayScores[index]?.score }}
-                </template>
-                <template v-else>未匹配</template>
-              </span>
-              <HSelect
-                :disabled="isBound"
-                :options="providerSelectOptions"
-                :model-value="item.provider_id"
-                @update:model-value="(v) => updateItemAt(index, { provider_id: Number(v) })"
-              />
-              <div class="flex min-w-[200px] flex-1 flex-col gap-1">
-                <div class="flex flex-wrap items-center gap-2">
-                  <input
-                    :disabled="isBound"
-                    :value="item.upstream_model"
-                    :list="`upstream-models-${index}`"
-                    placeholder="上游模型名"
-                    class="min-w-[160px] flex-1 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50 disabled:text-slate-500"
-                    @input="
-                      updateItemAt(index, {
-                        upstream_model: ($event.target as HTMLInputElement).value,
-                      })
-                    "
-                  />
-                  <datalist :id="`upstream-models-${index}`">
-                    <option v-for="mid in modelOptions[index] || []" :key="mid" :value="mid" />
-                  </datalist>
-                  <HButton
-                    v-if="!isBound"
-                    variant="outline"
-                    size="sm"
-                    type="button"
-                    class="shrink-0"
-                    :disabled="!item.provider_id || fetchingModels[index]"
-                    @click="pullModels(index)"
-                  >
-                    {{ fetchingModels[index] ? "拉取中…" : "拉取模型" }}
-                  </HButton>
-                </div>
+              按模型能力排序
+            </HButton>
+            <HButton
+              variant="ghost"
+              size="sm"
+              type="button"
+              :disabled="leaderboardLoading"
+              @click="loadLeaderboard(true)"
+            >
+              {{ leaderboardLoading ? "刷新榜单中…" : "强制刷新榜单" }}
+            </HButton>
+            <span class="text-xs text-slate-500">{{ leaderboardStatusText }}</span>
+          </div>
+          <p v-if="formMessage" class="text-sm text-emerald-700">{{ formMessage }}</p>
+
+          <!-- 双栏：左可选模型 / 右已选队列 -->
+          <div class="grid min-h-0 grid-cols-1 gap-4 lg:grid-cols-2">
+            <!-- 左：按供应商手风琴选模 -->
+            <div class="flex min-h-0 flex-col rounded-lg border border-slate-200">
+              <div class="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+                <h3 class="text-sm font-medium">可选模型</h3>
+                <span class="text-xs text-slate-400">展开供应商以加载其模型</span>
+              </div>
+              <div class="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
                 <div
-                  v-if="modelOptions[index]?.length && !isBound"
-                  class="flex max-h-28 flex-wrap gap-1 overflow-y-auto"
+                  v-for="p in providers"
+                  :key="p.id"
+                  class="rounded-lg border border-slate-200"
                 >
                   <button
-                    v-for="mid in modelOptions[index]"
-                    :key="mid"
                     type="button"
-                    class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-700 hover:bg-cyan-100"
-                    :title="mid"
-                    @click="pickModel(index, mid)"
+                    class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
+                    @click="toggleProvider(p.id)"
                   >
-                    {{ mid }}
+                    <ChevronDown
+                      :size="14"
+                      class="shrink-0 text-slate-400 transition-transform"
+                      :class="{ '-rotate-90': !expandedProviders.has(p.id) }"
+                    />
+                    <span class="min-w-0 flex-1 truncate font-medium text-slate-700">{{ p.name }}</span>
+                    <span v-if="modelCache.getStatus(p.id) === 'ready'" class="shrink-0 text-xs text-slate-400">
+                      {{ modelCache.getModels(p.id).length }} 个模型
+                    </span>
+                  </button>
+
+                  <div v-if="expandedProviders.has(p.id)" class="border-t border-slate-100 px-3 py-2">
+                    <div v-if="modelCache.getStatus(p.id) === 'loading'" class="py-2 text-xs text-slate-500">
+                      正在拉取模型…
+                    </div>
+                    <div v-else-if="modelCache.getStatus(p.id) === 'error'" class="py-2">
+                      <p class="text-xs text-rose-600">{{ modelCache.getError(p.id) }}</p>
+                      <HButton
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        class="mt-1"
+                        @click="modelCache.refresh(p.id)"
+                      >
+                        重试
+                      </HButton>
+                    </div>
+                    <template v-else>
+                      <HInput
+                        v-model="leftFilter"
+                        placeholder="过滤该供应商已加载模型"
+                        class="mb-2"
+                      />
+                      <div v-if="modelCache.getModels(p.id).length === 0" class="py-2 text-xs text-slate-400">
+                        上游未返回模型
+                      </div>
+                      <div
+                        v-else
+                        class="flex max-h-56 flex-col gap-1 overflow-y-auto"
+                      >
+                        <button
+                          v-for="m in filteredProviderModels(p.id)"
+                          :key="m"
+                          type="button"
+                          class="rounded bg-slate-100 px-2 py-1 text-left font-mono text-xs text-slate-700 hover:bg-cyan-100 disabled:opacity-50"
+                          :disabled="isBound"
+                          :title="m"
+                          @click="addModelFromLeft(p.id, m)"
+                        >
+                          {{ m }}
+                        </button>
+                        <p v-if="filteredProviderModels(p.id).length === 0" class="py-1 text-xs text-slate-400">
+                          无匹配（已选或关键词过滤）
+                        </p>
+                      </div>
+                      <div class="mt-2 flex justify-end">
+                        <HButton
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          :disabled="isBound"
+                          @click="addAllFromProvider(p.id)"
+                        >
+                          全部加入
+                        </HButton>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+                <p v-if="providers.length === 0" class="py-3 text-center text-xs text-slate-400">
+                  暂无供应商，请先到「供应商」页添加
+                </p>
+              </div>
+            </div>
+
+            <!-- 右：已选故障转移队列 -->
+            <div class="flex min-h-0 flex-col rounded-lg border border-slate-200">
+              <div class="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+                <h3 class="text-sm font-medium">故障转移队列</h3>
+                <HButton
+                  v-if="!isBound"
+                  variant="ghost"
+                  size="sm"
+                  type="button"
+                  :disabled="formValues.items.length === 0"
+                  @click="clearQueue"
+                >
+                  清空
+                </HButton>
+              </div>
+              <div class="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
+                <div
+                  v-for="(item, index) in formValues.items"
+                  :key="item.uid"
+                  class="flex items-center gap-1.5 rounded-md border border-slate-200 px-2 py-1.5"
+                  :class="
+                    dragOverIndex === index
+                      ? 'border-cyan-400 bg-cyan-50'
+                      : dragFromIndex === index
+                        ? 'border-slate-300 bg-slate-50 opacity-80'
+                        : 'bg-white'
+                  "
+                  @dragover="onDragOver(index, $event)"
+                  @drop="onDrop(index, $event)"
+                >
+                  <button
+                    v-if="!isBound"
+                    type="button"
+                    class="cursor-grab select-none rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[10px] text-slate-500 active:cursor-grabbing"
+                    title="拖动排序"
+                    :draggable="!saving"
+                    @dragstart="onDragStart(index, $event)"
+                    @dragend="onDragEnd"
+                  >
+                    ⋮⋮
+                  </button>
+                  <span class="w-5 shrink-0 text-xs tabular-nums text-slate-400">{{ index + 1 }}.</span>
+                  <div class="min-w-0 flex-1">
+                    <span class="block truncate text-xs text-slate-600">
+                      {{ providerName(item.provider_id) }}
+                    </span>
+                    <span class="block truncate font-mono text-xs text-slate-500">{{ item.upstream_model }}</span>
+                  </div>
+                  <span
+                    class="shrink-0 rounded-full px-2 py-0.5 text-[11px] tabular-nums"
+                    :class="
+                      queueDisplayScores[index]
+                        ? 'bg-emerald-50 text-emerald-800'
+                        : 'bg-slate-100 text-slate-500'
+                    "
+                    :title="
+                      queueDisplayScores[index]
+                        ? `OpenRouter 分数 ${queueDisplayScores[index]?.score}（匹配层级：${queueDisplayScores[index]?.tier}）`
+                        : '未匹配到 OpenRouter 榜单数据'
+                    "
+                  >
+                    <template v-if="queueDisplayScores[index]">
+                      OpenRouter · {{ queueDisplayScores[index]?.score }}
+                    </template>
+                    <template v-else>未匹配</template>
+                  </span>
+                  <button
+                    v-if="!isBound"
+                    type="button"
+                    class="shrink-0 rounded px-1.5 py-0.5 text-xs text-rose-600 hover:bg-rose-50"
+                    title="删除成员"
+                    @click="removeQueueItem(index)"
+                  >
+                    ×
                   </button>
                 </div>
+                <p v-if="formValues.items.length === 0" class="py-3 text-center text-xs text-slate-400">
+                  {{ isBound ? "绑定分组队列由供应商托管" : "队列为空：从左侧选择模型加入" }}
+                </p>
               </div>
-              <template v-if="!isBound">
-                <HButton variant="ghost" size="sm" type="button" @click="moveItem(index, -1)">
-                  上移
-                </HButton>
-                <HButton variant="ghost" size="sm" type="button" @click="moveItem(index, 1)">
-                  下移
-                </HButton>
-                <HButton variant="danger-soft" size="sm" type="button" @click="removeItem(index)">
-                  删除
-                </HButton>
-              </template>
             </div>
           </div>
 
@@ -832,79 +846,21 @@ onMounted(async () => {
       <p v-if="message" class="mb-3 shrink-0 whitespace-pre-line text-sm text-emerald-700">{{ message }}</p>
       <p v-if="error && !dialogOpen" class="mb-3 shrink-0 text-sm text-rose-600">{{ error }}</p>
       <HEmpty v-if="groups.length === 0" class="app-empty-compact shrink-0" title="暂无分组" />
-      <div
-        v-if="groups.length > 0"
-        class="min-h-0 flex-1 overflow-y-auto pr-1"
-      >
-        <!-- 卡片网格：每个分组一张卡片，自上而下 含 标题/标签 → 数量概览 → 模型队列 → 操作区。
-             octopus 风格：卡片本体分层次表达（border + 浅 bg），无策略 tab。 -->
+      <div v-if="groups.length > 0" class="min-h-0 flex-1 overflow-y-auto pr-1">
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <article
+          <GroupCard
             v-for="g in groups"
             :key="g.id"
-            class="group-card flex flex-col rounded-xl border border-slate-200 bg-white p-4 transition
-                   hover:border-cyan-300 hover:bg-cyan-50/30"
-          >
-            <!-- 头部：分组名 + 思考强度 + 自动同步标签 -->
-            <div class="flex flex-wrap items-center gap-2">
-              <span class="break-all text-base font-semibold text-slate-800">{{ g.name }}</span>
-              <span
-                v-if="g.thinking_effort && g.thinking_effort !== 'off'"
-                class="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] text-violet-700"
-                title="思考强度档位"
-              >
-                思考 · {{ thinkingEffortLabels[g.thinking_effort] ?? g.thinking_effort }}
-              </span>
-              <HBadge v-if="g.source_provider_id" variant="default">自动同步</HBadge>
-            </div>
-
-            <!-- 概览条：模型数量 + 故障转移说明 -->
-            <p class="mt-1 text-xs text-slate-500">
-              {{ g.items.length }} 个模型 · 队列顺序即故障转移优先级
-            </p>
-
-            <!-- 模型队列：固定最高高度 + 滚动，超出截断 -->
-            <ol class="mt-3 max-h-44 space-y-1.5 overflow-y-auto pr-1 text-sm">
-              <li
-                v-for="(item, idx) in g.items"
-                :key="item.id"
-                class="flex items-start gap-2 rounded-md px-1.5 py-1 text-slate-700 hover:bg-slate-50"
-              >
-                <span class="w-5 shrink-0 text-xs tabular-nums text-slate-400">{{ idx + 1 }}.</span>
-                <div class="min-w-0 flex-1">
-                  <span class="block truncate text-slate-600">
-                    {{
-                      providerMap.get(item.provider_id)?.name || item.provider_name || item.provider_id
-                    }}
-                  </span>
-                  <span class="block truncate font-mono text-xs text-slate-500">{{ item.upstream_model }}</span>
-                </div>
-              </li>
-            </ol>
-
-            <!-- 操作区：卡片底部，吸附对齐 -->
-            <div class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-slate-100 pt-3">
-              <HButton
-                variant="outline"
-                size="sm"
-                type="button"
-                :disabled="exportingPiId === g.id"
-                @click="exportToPi(g.id)"
-              >
-                {{ exportingPiId === g.id ? "配置中…" : "配置到 Pi" }}
-              </HButton>
-              <HButton variant="ghost" size="sm" type="button" @click="startEdit(g)">编辑</HButton>
-              <HButton
-                variant="danger-soft"
-                size="sm"
-                type="button"
-                class="ml-auto"
-                @click="remove(g.id)"
-              >
-                删除
-              </HButton>
-            </div>
-          </article>
+            :group="g"
+            :provider-name="providerName"
+            :thinking-effort-labels="thinkingEffortLabels"
+            :saving="cardSavingIds.has(g.id)"
+            :exporting-pi="exportingPiId === g.id"
+            @edit="startEdit(g)"
+            @export-pi="exportToPi(g.id)"
+            @delete-group="removeGroup(g.id)"
+            @persist-items="persistGroupItems(g, $event)"
+          />
         </div>
       </div>
     </HCard>

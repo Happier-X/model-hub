@@ -1229,3 +1229,42 @@ Session summary was not supplied.
 ### Status
 
 [OK] **Completed**
+
+## Session 35: 分组编辑对齐 octopus 交互
+
+**Date**: 2026-08-05
+**Task**: groups-edit-octopus-ux
+**Branch**: `master`
+
+### Summary
+
+将分组页编辑 UX 对齐 octopus 方案 B：卡片内即时编辑（拖拽排序/删成员即时保存、删组卡片内二次确认）+ 双栏选模对话框（左供应商手风琴按需拉模型、右队列拖拽）。后端零改，仍走全量 `update_group`。
+
+### Decisions
+
+- D1=B（卡片即时操作 + 双栏对话框）；D4=L1（首次展开供应商才拉模型，会话内缓存）；D5=M1（删成员无确认）；D6=仅左侧「全部加入」。
+- 明确不做：mode/权重/Morphing 动画、`match_regex`、后端增量 items API、独立批量添加条。
+
+### Main Changes
+
+- 重写 `src/pages/GroupsPage.vue`：接入 GroupCard 卡片网格；双栏对话框（左手风琴 + 右队列）；移除 `window.confirm`、独立批量添加条、逐行供应商选择 UI。
+- 新增 `src/components/groups/GroupCard.vue`：拖拽/删成员乐观本地态 + persist；删组覆盖层确认；绑定态只读。
+- 新增 `src/composables/useProviderModelCache.ts`：按 provider_id 缓存模型、ensure/refresh、inflight 防并发；仅用户展开/刷新/全部加入触发拉取。
+- 规格更新：frontend `component-guidelines.md` 增补 §16 卡片即时编辑、§17 双栏选模 + 展开拉模合同。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| (see git log) | 分组编辑对齐 octopus 交互 |
+
+### Testing
+
+- [OK] pnpm typecheck 通过
+- [OK] pnpm lint 通过（全量）
+- [OK] pnpm test:unit 16/16 通过
+- [OK] trellis-check AC1–AC13 全绿
+
+### Status
+
+[OK] **Completed**

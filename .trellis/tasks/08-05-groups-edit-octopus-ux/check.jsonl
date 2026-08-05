@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "检查双栏/卡片改动是否违反 H*、form、editingId、绑定只读"}
+{"file": ".trellis/spec/frontend/model-queue-sort.md", "reason": "检查排序是否仍只改表单"}
+{"file": ".trellis/spec/backend/upstream-access.md", "reason": "检查无打开预拉、无 onMounted 拉模型"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "typecheck/lint/测试质量底线"}
+{"file": ".trellis/tasks/08-05-groups-edit-octopus-ux/prd.md", "reason": "对照 AC1–AC13 验收"}
+{"file": ".trellis/tasks/08-05-groups-edit-octopus-ux/design.md", "reason": "对照设计边界与失败回滚"}

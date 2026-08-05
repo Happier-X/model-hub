@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端规范索引与分层入口"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "H* 控件、vue-form 对话框、editingGroupId、上游仅点击拉取、绑定只读"}
+{"file": ".trellis/spec/frontend/model-queue-sort.md", "reason": "按能力排序仅改表单不自动保存"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "页面本地状态与列表真源约定"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "pages/components 拆分约定"}
+{"file": ".trellis/spec/backend/upstream-access.md", "reason": "禁止对话框打开预拉；展开/刷新才 fetch_provider_models"}
+{"file": ".trellis/tasks/08-05-groups-edit-octopus-ux/prd.md", "reason": "需求与 AC"}
+{"file": ".trellis/tasks/08-05-groups-edit-octopus-ux/design.md", "reason": "组件边界与数据流"}
+{"file": ".trellis/tasks/08-05-groups-edit-octopus-ux/implement.md", "reason": "执行清单与验证命令"}
