@@ -6,7 +6,7 @@
 
 | 状态类型 | 位置 | 示例 |
 |----------|------|------|
-| 页面业务数据 | 页面内 `ref` / `reactive` | 供应商、分组、日志列表 |
+| 页面业务数据 | 页面内 `ref` / `computed` | 供应商、分组、日志列表 |
 | 派生状态 | `computed` | 过滤结果、按钮可用状态、Base URL 文案 |
 | 可复用异步状态 | `src/composables/` | 代理状态轮询、通用加载流程 |
 | 跨层调用 | `src/api/tauri.ts` | CRUD、代理启停、路径与健康快照 |
@@ -20,8 +20,8 @@
 3. 上游 Key 明文不得写入 `localStorage`、会话存储或其它前端持久化。
 4. 共享状态确有多个远离组件需要时，优先使用组合式函数或 provide/inject；只有复杂度明确增长后才评估 Pinia。
 5. 应用不维护用户会话状态。
-6. **Tauri Resource 类实例**（如 `@tauri-apps/plugin-updater` 的 `Update`）必须用 `shallowRef` / `markRaw` 保存，**禁止**放入深层 `ref` / `reactive`。深层代理会破坏 JS 私有成员，调用 `downloadAndInstall` 等实例方法时抛出 `Cannot read private member...`。
-7. **`computed` / 回调内禁止与外层 `ref` / `reactive` 同名局部变量**。`const` 存在暂时性死区（TDZ），`const daily = daily.value` 会在求值时抛 `ReferenceError: Cannot access 'daily' before initialization`，构建产物常表现为 `const G=G.value`。正确写法：内部另起名（如 `const counts = daily.value`）。首页热力图曾因此整块不渲染。
+6. **Tauri Resource 类实例**（如 `@tauri-apps/plugin-updater` 的 `Update`）必须用 `shallowRef` / `markRaw` 保存，**禁止**放入深层 `ref`。深层代理会破坏 JS 私有成员，调用 `downloadAndInstall` 等实例方法时抛出 `Cannot read private member...`。
+7. **`computed` / 回调内禁止与外层 `ref` 同名局部变量**。`const` 存在暂时性死区（TDZ），`const daily = daily.value` 会在求值时抛 `ReferenceError: Cannot access 'daily' before initialization`，构建产物常表现为 `const G=G.value`。正确写法：内部另起名（如 `const counts = daily.value`）。首页热力图曾因此整块不渲染。
 
 ## 禁止模式
 

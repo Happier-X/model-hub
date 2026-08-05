@@ -1299,3 +1299,27 @@ Session summary was not supplied.
 ### Status
 
 [OK] 待提交归档
+
+---
+
+## 2026-08-05 前端状态约束：禁用 reactive 仅用 ref（08-05-frontend-no-reactive）
+
+### 背景
+
+- 用户要求固化代码规范：组件/页面状态一律用 `ref`，禁止 `reactive`。
+- 现状：代码库已无 `reactive(` 使用（rg 无命中），仅 spec 文档两处将其列为合法选项。
+
+### 改动（spec-only，无代码变更）
+
+- `state-management.md`：状态归属表示例 `ref / reactive` → `ref / computed`；规则 6「禁止放入深层 `ref` / `reactive`」→ 仅 `ref`（保留 shallowRef/markRaw 语义）；规则 7 TDZ 表述去 `reactive`。
+- `component-guidelines.md`：状态与生命周期改为「局部交互使用 `ref` / `computed`；**禁止使用 `reactive`，一律用 `ref`**（含 shallowRef）」。
+- 保留例外（AC3）：3.2 TanStack Form「禁止用 reactive 作提交字段真源」（方向一致）；`rawInstanceRef.test.ts` 描述字符串。
+
+### 验证
+
+- [OK] rg 确认无将 reactive 作为合法选项的残留表述
+- [OK] 无代码改动，typecheck/lint 不受影响（AC4 跳过）
+
+### Status
+
+[OK] 待提交归档

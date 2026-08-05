@@ -114,7 +114,7 @@
 
 ## 状态与生命周期
 
-- 局部交互使用 `ref` / `reactive` / `computed`；**对话框业务表单字段**用 TanStack Form（见 3.2），不与页面级 `reactive` 双源。
+- 局部交互使用 `ref` / `computed`；**禁止使用 `reactive`，一律用 `ref`**（含 `shallowRef`）；**对话框业务表单字段**用 TanStack Form（见 3.2），不与页面级 `ref` 双源。
 - 异步加载在 `onMounted` 中触发；定时器和事件订阅在 `onUnmounted` 中清理。
 - 提交期间禁用重复操作，并在失败时保留用户可修正的输入（Form values 与编辑 id）。
 - 编辑已有分组表单必须使用稳定的 `editingGroupId: number | null` 表达编辑目标；保存时先快照 id，id 非空只能调用更新，只有新建态才调用创建。添加条目、拉取模型、批量添加、排序等异步/局部操作不得清空编辑 id。
