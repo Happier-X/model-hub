@@ -1323,3 +1323,25 @@ Session summary was not supplied.
 ### Status
 
 [OK] 待提交归档
+
+---
+
+## 2026-08-05 发布 v0.1.0（08-05-release-v0-1-0）
+
+### 发布流程（复用 v0.0.9 已验证路径）
+
+1. 新建 `changelog/v0.1.0.md`：TDZ 热力图修复 / octopus 分组交互 / llm_benchmark 榜单。
+2. 5 处版本号 0.0.9 → 0.1.0（package.json、Cargo.toml、Cargo.lock、tauri.conf.json、tauri.release.conf.json）。
+3. 验证：`pnpm build` ✅；`cargo check` ✅（v0.1.0）。
+4. commit `chore(release): v0.1.0` → tag v0.1.0 → push origin → CI release-windows 触发。
+5. Release 资产齐全：Model.Hub_0.1.0_x64-setup.exe (+.sig) / .nsis.zip (+.sig) / latest.json / SHA256SUMS.txt / v0.1.0.md。
+
+### 关键发现
+
+- **tauri-action@v0 上游升级**：`uploadUpdaterJson` 输入已移除（仅 warning 忽略，构建仍成功）；已防御性改为 `includeUpdaterJson` 并提交（`8282e56`），防止未来版本把未知输入升级为 fatal。
+- `gh run watch` 输出中 action 的 input warning 易误判为失败——实际 run conclusion=success，需以 `gh run view` 的结论为准。
+- 签名走 GitHub Secrets（TAURI_SIGNING_PRIVATE_KEY / PASSWORD），本地无需密钥；`~/.tauri/muses.key` 与本发布无关（上次 v0.0.9 同样）。
+
+### Status
+
+[OK] 已发布并归档
