@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端总览与指南索引（升级后验证构建链路）"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量底线（typecheck/lint 通过标准）"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "TS 类型安全约定（TS6 升级后核对）"}
+{"file": ".trellis/spec/backend/upstream-access.md", "reason": "reqwest/上游访问合同（reqwest 0.13 适配时核对）"}

@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "质量底线"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "TS 类型安全"}
+{"file": ".trellis/spec/backend/upstream-access.md", "reason": "reqwest 适配不破坏上游合同"}
