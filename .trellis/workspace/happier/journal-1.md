@@ -1533,3 +1533,61 @@ Session summary was not supplied.
 ### Status
 
 [OK] **Completed**
+
+---
+
+## 2026-08-06 分组表单页样式改造：改用 happier-ui 组件（task: 08-06-group-form-happier-ui）✅
+
+### Status
+
+[OK] **Completed**（AC1-AC6 全绿）
+
+### 背景
+
+`GroupFormPage.vue` 存在较多手写 Tailwind 结构（容器、按钮、标签、空态），为了统一视觉与交互语义，将其改造为 happier-ui 组件。
+
+### 方案：8 处组件替换
+
+| 元素 | 现状 | 目标 happier-ui 组件 | 备注 |
+|------|------|----------------------|------|
+| **双栏容器** | `div.rounded-lg.border` | `HCard` | `variant="outlined" padding="none" class="flex-col min-h-0"`，保留了 flex 滚动；标题行移入 `#header` |
+| **手风琴条目** | `<button>`+ChevronDown | `HCell` | `clickable :show-chevron="false"`；箭头进 `#prefix` 以保留 `-rotate-90` 动效；绑定态加 `opacity-50 pointer-events-none` |
+| **分数标签** | `span.rounded-full` | `HTag` | `size="sm"`，依匹配情况切 `variant="success" / "default"` |
+| **删除按钮** | `<button>` `×` | `HButton` | `variant="ghost" size="sm"`，保留 hover 语义色 |
+| **空态 (3处)** | `p.text-slate-400` | `HEmpty` | 挂 `.app-empty-compact` 收缩高度（无供应商/上游无模型/队列空） |
+| **加载态 (2处)** | `div` 纯文字 | `HLoading` | `mode="local"`（正在加载分组/正在拉取模型） |
+| **错误块** | `div.border-rose-200` | `HCard` | `variant="outlined"` |
+
+*注：左侧模型清单（需紧凑 font-mono）、拖拽手柄（`⋮⋮` 需 draggable）保留手写不动。*
+
+### 决策与 Spec 演进
+
+- 解禁了 `HTag` 与 `HCell` 的使用（原 spec 记为「本轮不启用」）。
+- 在 `.trellis/spec/frontend/component-guidelines.md` 补登了适用场景：HTag 用作非 closable 标签；HCell 手风琴条目需关默认 chevron 用 slot，以兼得自定义箭头动画与 HCell 的 hover / 键盘可达性。
+
+### 验证
+
+- `pnpm typecheck` / `pnpm lint` / `pnpm test:unit` (26) / `pnpm build` 全绿。
+- 无任何依赖新增，仅组件替换。
+
+
+## Session 39: 分组表单页组件化改造
+
+**Date**: 2026-08-06
+**Task**: 分组表单页组件化改造
+**Branch**: `master`
+
+### Summary
+
+将 GroupFormPage 中的手写结构（双栏容器、左侧手风琴、右侧标签与删除按钮、空态与加载态等）用 happier-ui 组件替代（HCard / HCell / HTag / HEmpty / HLoading）。解放了原本未启用的 HTag 和 HCell 并在 spec 中登记了使用规范。所有替换不影响表单业务逻辑与可达性，已验证通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6474c77` | (see git log) |
+| `65bcae3` | (see git log) |
+
+### Status
+
+[OK] **Completed**
