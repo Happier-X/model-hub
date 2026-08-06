@@ -1367,3 +1367,59 @@ Session summary was not supplied.
 ### Status
 
 [OK] **Completed**
+
+---
+
+## 2026-08-06 依赖升级（task: 08-06-deps-upgrade）✅
+
+### Status
+
+[OK] **Completed**（AC1-AC5 全绿，AC6 编译级验证、GUI 冒烟待用户确认）
+
+### 决策
+
+- 范围：npm + cargo 全部 latest（用户 A）；TS 例外升 6.x（TS7 Corsa API 未稳定，vue-tsc/typescript-eslint 不兼容）
+- Rust 保留 `=x.y.z` 精确锁定（用户 A）
+- Tauri 主版本不升：tauri crate latest 即 2.11.5
+
+### 改动（3 commits）
+
+| commit | 内容 |
+|--------|------|
+| `3229d59` | 前端 npm latest：vue 3.5.41 / vue-router 5.2.0 / vite 8.2.0 / eslint 10.8.0 / typescript 6.0.3（pin）/ happier-ui 0.1.1 等 |
+| `db2553a` | 后端 crate latest：reqwest 0.13.4（`rustls-tls`→`rustls`）/ rusqlite 0.40.1 / tower-http 0.7.0 / tauri-plugin-single-instance 2.4.3 等 |
+| `9342f5b` | spec：happier-ui 0.1.1 已自带 `@layer theme, base, components, utilities;`（上游 #10 修复），消费侧顺序敏感解除 |
+
+### 验证
+
+- 前端：typecheck / lint / test:unit（18/18）/ build 全绿；`pnpm outdated` 仅剩 typescript（有意）
+- 后端：cargo check 绿；cargo test 136 通过（114+13+9）
+- 集成：`pnpm tauri build --no-bundle` 通过，release exe 生成；api/cli ↔ crate 2.11 对齐，updater/process 两侧精确一致
+- 源码零改动（仅 4 个依赖文件 + spec 1 行）
+
+### 遗留
+
+- AC6 GUI 手动冒烟未执行（无显示会话）；产物已生成 + 136 集成测试覆盖核心路径，风险低
+
+
+## Session 36: 所有依赖升级到最新版本（npm + cargo）
+
+**Date**: 2026-08-06
+**Task**: 所有依赖升级到最新版本（npm + cargo）
+**Branch**: `master`
+
+### Summary
+
+前端 npm 全部升到 latest（TS 有意 pin 6.x，TS7 生态未就绪）+ 后端 Rust crate 全部升到 latest（保留 =x.y.z 锁定），验证全绿：typecheck/lint/test:unit(18)/build、cargo check + cargo test(136)、tauri build --no-bundle 通过、版本对齐确认；源码零改动
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3229d59` | (see git log) |
+| `db2553a` | (see git log) |
+| `9342f5b` | (see git log) |
+
+### Status
+
+[OK] **Completed**
