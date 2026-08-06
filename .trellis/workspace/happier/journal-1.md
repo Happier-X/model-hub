@@ -1470,3 +1470,66 @@ Session summary was not supplied.
 ### Status
 
 [OK] **Completed**
+
+---
+
+## 2026-08-06 更新日志渲染为 Markdown（task: 08-06-update-log-markdown-render）✅
+
+### Status
+
+[OK] **Completed**（AC1-AC5 全绿）
+
+### 问题
+
+「检查更新」弹层用 `<pre>{{ pendingUpdate.body }}</pre>` 直出 markdown 原文，`#`/`-`/``` 标记符号可见。
+
+### 方案
+
+| 项 | 决策 |
+|----|------|
+| 渲染库 | `markdown-it` 15.0.0（自带类型，无需 @types） |
+| 安全 | `html: false` 转义原始 HTML 作为 `v-html` 前提，不引 sanitizer |
+| 链接 | 自定义 `link_open` 规则强制 `target=_blank rel=noopener noreferrer`（Tauri 默认 urlOpenPolicy=allow → 系统浏览器） |
+| 位置 | 抽到 `src/utils/markdown.ts`（项目 utils 惯例：纯函数 + 同名 *.test.ts），不留在页面组件 |
+| 样式 | 手写 `.markdown-body`（index.css 朴素 CSS 风格），不引 @tailwindcss/typography |
+
+### 改动（2 commits）
+
+| commit | 内容 |
+|--------|------|
+| `a9a0d01` | markdown-it 依赖 + utils/markdown.ts + 8 个单测 + SettingsPage v-html + index.css 排版样式 |
+| `c4f2ee3` | spec：directory-structure 登记 utils/ 目录（原 spec 树缺失）+ markdown 渲染约定（规则 6、7） |
+
+### 踩坑
+
+- **测试断言写过严**：最初断言 `!html.includes("javascript:")`，实测 markdown-it 根本不把 `[x](javascript:alert(1))` 解析为链接，整行按普通文本转义输出，`javascript:` 子串仍在文本里。正确的安全断言是「不产生 `<a href="javascript:...">` 节点」，已改。
+- **子代理连续两次空转**：`trellis-check` 派发两次都只回一句话就返回（第一次 check.jsonl 只有种子行，补齐后仍空转），改为主会话直接完成复核，未再重试该路径。
+
+### 验证
+
+- typecheck / lint / test:unit（26 = 18 旧 + 8 新）/ build 全绿
+- 渲染实测：真实 changelog 片段标题/列表/内联代码正常；`<img onerror>`/`<script>` 被转义；链接带 target/rel
+- 主 JS chunk 328.78 → 440.70 kB（markdown-it）；桌面应用本地加载，未做 lazy import
+- `.markdown-body` 与 happier-ui 无类名冲突，仅 SettingsPage 使用
+
+
+## Session 38: 更新日志渲染为 Markdown 格式
+
+**Date**: 2026-08-06
+**Task**: 更新日志渲染为 Markdown 格式
+**Branch**: `master`
+
+### Summary
+
+检查更新弹层的更新日志由 <pre> 直出 markdown 原文改为渲染后 HTML：新增 utils/markdown.ts 的 renderMarkdown（markdown-it，html:false 转义原始 HTML 防 XSS，链接强制 target=_blank rel=noopener）+ 8 个单测，SettingsPage 用 .markdown-body v-html 渲染，index.css 补排版样式；spec 登记 utils/ 目录与 markdown 渲染约定。验证 typecheck/lint/test:unit(26)/build 全绿
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a9a0d01` | (see git log) |
+| `c4f2ee3` | (see git log) |
+
+### Status
+
+[OK] **Completed**

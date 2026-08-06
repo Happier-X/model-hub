@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 37
+- **Total Sessions**: 38
 - **Last Active**: 2026-08-06
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1472 | Active |
+| `journal-1.md` | ~1535 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 38 | 2026-08-06 | 更新日志渲染为 Markdown 格式 | `a9a0d01`, `c4f2ee3` | `master` |
 | 37 | 2026-08-06 | 发布 v0.1.1 | `35db2e2` | `master` |
 | 36 | 2026-08-06 | 所有依赖升级到最新版本（npm + cargo） | `3229d59`, `db2553a`, `9342f5b` | `master` |
 | 35 | 2026-08-06 | 分组新建/编辑从 Modal 改为独立页面 | `2dcf716`, `41815ee` | `master` |
