@@ -10,7 +10,6 @@ import {
   getModelLeaderboard,
   listGroups,
   listProviders,
-  syncGroupNow,
   updateGroup,
   type Group,
   type ModelLeaderboardSnapshot,
@@ -36,14 +35,12 @@ type GroupFormValues = {
   name: string;
   thinking_effort: ThinkingEffort;
   items: QueueItemDraft[];
-  source_provider_id?: number | null;
 };
 
 const defaultFormValues: GroupFormValues = {
   name: "",
   thinking_effort: "off",
   items: [],
-  source_provider_id: null,
 };
 
 const thinkingEffortOptions: HSelectOption[] = [
@@ -75,20 +72,12 @@ const saving = ref(false);
 const loading = ref(isEditing.value);
 /** 编辑页加载失败（分组不存在或列表加载失败），展示错误 + 返回入口 */
 const loadFailed = ref(false);
-/** 当前编辑分组的 last_sync_at（同步后更新） */
-const loadedGroupLastSyncAt = ref<number | null>(null);
-
 /** 双栏：左侧供应商模型缓存（仅展开/刷新触发拉取，禁止预拉） */
 const modelCache = useProviderModelCache();
 const expandedProviders = ref<Set<number>>(new Set());
 const leftFilter = ref("");
 /** 表单内提示（排序/全部加入/同步反馈） */
 const formMessage = ref("");
-
-const bindProviderOptions = computed<HSelectOption[]>(() => [
-  { value: 0, label: "不绑定" },
-  ...providers.value.map((p) => ({ value: p.id, label: p.name })),
-]);
 
 const leaderboard = ref<ModelLeaderboardSnapshot | null>(null);
 const leaderboardLoading = ref(false);
@@ -100,7 +89,6 @@ const form = useForm({
     name: defaultFormValues.name,
     thinking_effort: defaultFormValues.thinking_effort,
     items: [] as QueueItemDraft[],
-    source_provider_id: defaultFormValues.source_provider_id,
   },
   onSubmit: async ({ value }) => {
     if (saving.value) return;
@@ -113,7 +101,6 @@ const form = useForm({
         name: value.name,
         thinking_effort: value.thinking_effort,
         items: value.items.filter((i) => i.provider_id > 0 && i.upstream_model.trim()),
-        source_provider_id: value.source_provider_id || null,
       };
       if (mode === "update" && targetId !== null) {
         await updateGroup({ id: targetId, ...payload });
@@ -132,15 +119,6 @@ const form = useForm({
 
 /** 订阅表单 values，供队列操作与模板读取 */
 const formValues = form.useSelector((s) => s.values);
-
-const isBound = computed(() => !!formValues.value.source_provider_id);
-
-/** 绑定态「上次同步」文案。 */
-const boundLastSyncText = computed(() => {
-  const ts = loadedGroupLastSyncAt.value;
-  if (ts == null || ts <= 0) return "尚未同步";
-  return formatUnix(ts);
-});
 
 const editingGroupName = computed(() => {
   if (!isEditing.value) return "";
@@ -245,7 +223,6 @@ async function loadEditingGroup(targetId: number) {
       return;
     }
     applyGroupToForm(g);
-    loadedGroupLastSyncAt.value = g.last_sync_at ?? null;
   } catch (e) {
     error.value = extractInvokeError(e);
     loadFailed.value = true;
@@ -259,7 +236,6 @@ function applyGroupToForm(g: Group) {
     name: g.name,
     thinking_effort: g.thinking_effort,
     items: g.items.map((i) => createQueueItem(i.provider_id, i.upstream_model)),
-    source_provider_id: g.source_provider_id || null,
   });
   expandedProviders.value = new Set();
   leftFilter.value = "";
@@ -268,14 +244,13 @@ function applyGroupToForm(g: Group) {
 }
 
 function resetFormToDefault() {
-  form.reset({ name: "", thinking_effort: "off", items: [], source_provider_id: null });
+  form.reset({ name: "", thinking_effort: "off", items: [] });
   expandedProviders.value = new Set();
   leftFilter.value = "";
   dragFromIndex.value = null;
   dragOverIndex.value = null;
   formMessage.value = "";
   error.value = "";
-  loadedGroupLastSyncAt.value = null;
 }
 
 onMounted(async () => {
@@ -307,7 +282,6 @@ function goBack() {
 // ---------------------------------------------------------------------------
 
 function toggleProvider(providerId: number) {
-  if (isBound.value) return;
   const next = new Set(expandedProviders.value);
   if (next.has(providerId)) {
     next.delete(providerId);
@@ -320,7 +294,6 @@ function toggleProvider(providerId: number) {
 }
 
 function addModelFromLeft(providerId: number, modelId: string) {
-  if (isBound.value) return;
   const m = modelId.trim();
   if (!m) return;
   if (selectedItemKeys.value.has(`${providerId}\u0000${m}`)) return;
@@ -328,7 +301,6 @@ function addModelFromLeft(providerId: number, modelId: string) {
 }
 
 async function addAllFromProvider(providerId: number) {
-  if (isBound.value) return;
   let models = modelCache.getModels(providerId);
   if (models.length === 0) {
     try {
@@ -374,7 +346,6 @@ const dragFromIndex = ref<number | null>(null);
 const dragOverIndex = ref<number | null>(null);
 
 function reorderQueue(from: number, to: number) {
-  if (isBound.value) return;
   const items = formValues.value.items;
   if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) return;
   const nextItems = items.slice();
@@ -384,20 +355,14 @@ function reorderQueue(from: number, to: number) {
 }
 
 function removeQueueItem(index: number) {
-  if (isBound.value) return;
   setItems(formValues.value.items.filter((_, i) => i !== index));
 }
 
 function clearQueue() {
-  if (isBound.value) return;
   setItems([]);
 }
 
 function onDragStart(index: number, event: DragEvent) {
-  if (isBound.value) {
-    event.preventDefault();
-    return;
-  }
   dragFromIndex.value = index;
   dragOverIndex.value = index;
   if (event.dataTransfer) {
@@ -407,7 +372,6 @@ function onDragStart(index: number, event: DragEvent) {
 }
 
 function onDragOver(index: number, event: DragEvent) {
-  if (isBound.value) return;
   event.preventDefault();
   if (event.dataTransfer) {
     event.dataTransfer.dropEffect = "move";
@@ -461,22 +425,6 @@ async function sortQueueByCapability() {
 
   applySortedItems(sorted, "已按 llm_benchmark 综合能力排序；未匹配项已沉底。点击“保存”后生效，仍可拖拽微调。");
 }
-
-async function handleSyncNow() {
-  if (saving.value || !editingGroupId.value) return;
-  saving.value = true;
-  error.value = "";
-  try {
-    const updatedGroup = await syncGroupNow(editingGroupId.value);
-    applyGroupToForm(updatedGroup);
-    loadedGroupLastSyncAt.value = updatedGroup.last_sync_at ?? null;
-    formMessage.value = "同步完成！模型列表已更新。";
-  } catch (e) {
-    error.value = extractInvokeError(e);
-  } finally {
-    saving.value = false;
-  }
-}
 </script>
 
 <template>
@@ -528,7 +476,7 @@ async function handleSyncNow() {
 
     <div v-else class="flex flex-col gap-4">
       <form class="flex flex-col gap-4" @submit.prevent="form.handleSubmit()">
-        <div class="grid gap-3 md:grid-cols-3">
+        <div class="grid gap-3 md:grid-cols-2">
           <form.Field name="name">
             <template #default="{ field }">
               <HInput
@@ -553,45 +501,9 @@ async function handleSyncNow() {
               </label>
             </template>
           </form.Field>
-          <form.Field name="source_provider_id">
-            <template #default="{ field }">
-              <label class="text-sm">
-                <span class="mb-1 block text-slate-600">绑定供应商自动同步</span>
-                <HSelect
-                  :options="bindProviderOptions"
-                  :model-value="field.state.value || 0"
-                  @update:model-value="(v) => field.handleChange(Number(v))"
-                />
-                <span class="mt-1 block text-xs text-slate-500">
-                  绑定后分组由选定供应商托管，后台每 24h 自动全量同步其模型列表。
-                </span>
-              </label>
-            </template>
-          </form.Field>
         </div>
 
-        <div v-if="isBound" class="rounded-lg border border-violet-100 bg-violet-50/60 p-3">
-          <div class="flex items-center justify-between gap-2">
-            <div class="space-y-1">
-              <p class="text-sm text-violet-800">
-                本分组由供应商托管，每 24h 自动同步，模型列表只读。
-              </p>
-              <p class="text-xs text-violet-600">上次同步：{{ boundLastSyncText }}</p>
-            </div>
-            <HButton
-              v-if="isEditing"
-              variant="outline"
-              size="sm"
-              type="button"
-              :disabled="saving"
-              @click="handleSyncNow"
-            >
-              {{ saving ? "同步中…" : "立即同步" }}
-            </HButton>
-          </div>
-        </div>
-
-        <div v-if="!isBound" class="flex flex-wrap items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <HButton
             variant="ghost"
             size="sm"
@@ -634,7 +546,6 @@ async function handleSyncNow() {
                   clickable
                   :show-chevron="false"
                   :title="p.name"
-                  :class="{ 'pointer-events-none opacity-50': isBound }"
                   @click="toggleProvider(p.id)"
                 >
                   <template #prefix>
@@ -645,8 +556,12 @@ async function handleSyncNow() {
                     />
                   </template>
                   <template #suffix>
+                    <!-- 模型已加载显示数量；未加载显示同步状态（数据来自 list_providers 返回的 last_sync_at） -->
                     <span v-if="modelCache.getStatus(p.id) === 'ready'" class="text-xs text-slate-400">
                       {{ modelCache.getModels(p.id).length }} 个模型
+                    </span>
+                    <span v-else class="text-xs text-slate-400">
+                      {{ p.last_sync_at ? `已同步 ${formatUnix(p.last_sync_at)}` : "未同步" }}
                     </span>
                   </template>
                 </HCell>
@@ -683,7 +598,6 @@ async function handleSyncNow() {
                         :key="m"
                         type="button"
                         class="rounded bg-slate-100 px-2 py-1 text-left font-mono text-xs text-slate-700 hover:bg-cyan-100 disabled:opacity-50"
-                        :disabled="isBound"
                         :title="m"
                         @click="addModelFromLeft(p.id, m)"
                       >
@@ -698,7 +612,6 @@ async function handleSyncNow() {
                         variant="outline"
                         size="sm"
                         type="button"
-                        :disabled="isBound"
                         @click="addAllFromProvider(p.id)"
                       >
                         全部加入
@@ -717,7 +630,6 @@ async function handleSyncNow() {
               <div class="flex items-center justify-between px-3 py-2">
                 <h3 class="text-sm font-medium">故障转移队列</h3>
                 <HButton
-                  v-if="!isBound"
                   variant="ghost"
                   size="sm"
                   type="button"
@@ -744,7 +656,6 @@ async function handleSyncNow() {
                 @drop="onDrop(index, $event)"
               >
                 <button
-                  v-if="!isBound"
                   type="button"
                   class="cursor-grab select-none rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[10px] text-slate-500 active:cursor-grabbing"
                   title="拖动排序"
@@ -776,7 +687,6 @@ async function handleSyncNow() {
                   <template v-else>未匹配</template>
                 </HTag>
                 <HButton
-                  v-if="!isBound"
                   variant="ghost"
                   size="sm"
                   type="button"
@@ -790,7 +700,7 @@ async function handleSyncNow() {
               <HEmpty
                 v-if="formValues.items.length === 0"
                 class="app-empty-compact"
-                :title="isBound ? '绑定分组队列由供应商托管' : '队列为空：从左侧选择模型加入'"
+                title="队列为空：从左侧选择模型加入"
               />
             </div>
           </HCard>

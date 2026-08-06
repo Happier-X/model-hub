@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
-import { HBadge, HButton } from "happier-ui";
+import { HButton } from "happier-ui";
 import type { Group, GroupItem, ThinkingEffort } from "../../api/tauri";
 
 const props = defineProps<{
@@ -17,8 +17,6 @@ const emit = defineEmits<{
   "delete-group": [];
   "persist-items": [items: GroupItem[]];
 }>();
-
-const isBound = () => props.group.source_provider_id != null && props.group.source_provider_id > 0;
 
 /** 卡片内拖拽/删除的乐观本地队列：松手即展示，保存失败由页面 refresh 回滚。 */
 const localItems = ref<GroupItem[]>(props.group.items);
@@ -50,7 +48,7 @@ function confirmDelete() {
 }
 
 function reorder(from: number, to: number) {
-  if (isBound() || props.saving) return;
+  if (props.saving) return;
   const items = localItems.value;
   if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) {
     return;
@@ -63,7 +61,7 @@ function reorder(from: number, to: number) {
 }
 
 function removeMember(index: number) {
-  if (isBound() || props.saving) return;
+  if (props.saving) return;
   localItems.value = localItems.value
     .filter((_, i) => i !== index)
     .map((item, i) => ({ ...item, sort_order: i }));
@@ -71,7 +69,7 @@ function removeMember(index: number) {
 }
 
 function onDragStart(index: number, event: DragEvent) {
-  if (isBound() || props.saving) {
+  if (props.saving) {
     event.preventDefault();
     return;
   }
@@ -84,7 +82,7 @@ function onDragStart(index: number, event: DragEvent) {
 }
 
 function onDragOver(index: number, event: DragEvent) {
-  if (isBound() || props.saving) return;
+  if (props.saving) return;
   event.preventDefault();
   if (event.dataTransfer) {
     event.dataTransfer.dropEffect = "move";
@@ -140,7 +138,6 @@ function onDragEnd() {
       >
         思考 · {{ thinkingEffortLabels[group.thinking_effort] ?? group.thinking_effort }}
       </span>
-      <HBadge v-if="group.source_provider_id" variant="default">自动同步</HBadge>
       <span v-if="saving" class="text-[11px] text-cyan-700">保存中…</span>
     </div>
 
@@ -165,7 +162,6 @@ function onDragEnd() {
         @drop="onDrop(idx, $event)"
       >
         <button
-          v-if="!isBound()"
           type="button"
           class="cursor-grab select-none rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[10px] text-slate-500 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-50"
           title="拖动排序"
@@ -184,7 +180,6 @@ function onDragEnd() {
           <span class="block truncate font-mono text-xs text-slate-500">{{ item.upstream_model }}</span>
         </div>
         <button
-          v-if="!isBound()"
           type="button"
           class="shrink-0 rounded px-1.5 py-0.5 text-xs text-rose-600 hover:bg-rose-50 disabled:opacity-50"
           title="删除成员"

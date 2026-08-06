@@ -72,7 +72,6 @@ function persistGroupItems(group: Group, nextItems: GroupItem[]) {
     id: group.id,
     name: group.name,
     thinking_effort: group.thinking_effort,
-    source_provider_id: group.source_provider_id ?? null,
     items: nextItems.map((i) => ({ provider_id: i.provider_id, upstream_model: i.upstream_model })),
   };
   void (async () => {

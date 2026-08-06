@@ -19,6 +19,8 @@ import {
   deleteProvider,
   extractInvokeError,
   listProviders,
+  setProviderAutoSync,
+  syncProviderNow,
   updateProvider,
   type Provider,
 } from "../api/tauri";
@@ -33,6 +35,8 @@ type ProviderFormValues = {
   base_url: string;
   api_key: string;
   enabled: boolean;
+  /** 自动同步开关：新建默认开，编辑保留原值（编辑表单不展示该字段） */
+  auto_sync: boolean;
 };
 
 const defaultFormValues: ProviderFormValues = {
@@ -40,6 +44,7 @@ const defaultFormValues: ProviderFormValues = {
   base_url: "https://api.openai.com/v1",
   api_key: "",
   enabled: true,
+  auto_sync: true,
 };
 
 const items = ref<Provider[]>([]);
@@ -52,6 +57,8 @@ const providerColumns: HTableColumn[] = [
   { key: "name", title: "名称" },
   { key: "base_url", title: "Base URL" },
   { key: "enabled", title: "启用" },
+  { key: "auto_sync", title: "自动同步" },
+  { key: "last_sync_at", title: "上次同步" },
   { key: "actions", title: "操作" },
 ];
 const error = ref("");
@@ -62,6 +69,10 @@ const saving = ref(false);
 const pasteText = ref("");
 // 行内启用开关进行中的 id 集合，用于 disabled 防重复点击
 const togglingIds = ref<Set<number>>(new Set());
+// 行内自动同步开关进行中的 id 集合，用于 disabled 防重复点击
+const autoSyncTogglingIds = ref<Set<number>>(new Set());
+// 「立即同步」进行中的 id 集合，按钮 loading/disabled 防重复点击
+const syncingIds = ref<Set<number>>(new Set());
 
 const form = useForm({
   defaultValues: { ...defaultFormValues },
@@ -78,6 +89,7 @@ const form = useForm({
           base_url: value.base_url,
           api_key: value.api_key,
           enabled: value.enabled,
+          auto_sync: value.auto_sync,
         });
       } else {
         await createProvider({ ...value });
@@ -154,6 +166,7 @@ function startEdit(p: Provider) {
     base_url: p.base_url,
     api_key: p.api_key,
     enabled: p.enabled,
+    auto_sync: p.auto_sync,
   });
 }
 
@@ -177,6 +190,57 @@ function goPage(next: number) {
   page.value = Math.min(Math.max(1, next), totalPages.value);
 }
 
+/** 上次同步时间展示：null/0 → 「未同步」；否则本地时间格式化。 */
+function formatSyncTime(unix: number | null | undefined): string {
+  if (!unix || unix <= 0) return "未同步";
+  try {
+    return new Date(unix * 1000).toLocaleString("zh-CN", { hour12: false });
+  } catch {
+    return String(unix);
+  }
+}
+
+// 行内自动同步开关：乐观更新本地 -> 调后端就地切换 -> 以返回值为准同步 -> 失败回滚并报错
+async function toggleProviderAutoSync(p: Provider, next: boolean) {
+  if (autoSyncTogglingIds.value.has(p.id)) return;
+  const previous = p.auto_sync;
+  // 乐观更新
+  const target = items.value.find((it) => it.id === p.id);
+  if (target) target.auto_sync = next;
+  autoSyncTogglingIds.value = new Set(autoSyncTogglingIds.value).add(p.id);
+  try {
+    const updated = await setProviderAutoSync(p.id, next);
+    // 以服务端返回为准同步
+    const sync = items.value.find((it) => it.id === p.id);
+    if (sync) Object.assign(sync, updated);
+  } catch (e) {
+    const failed = items.value.find((it) => it.id === p.id);
+    if (failed) failed.auto_sync = previous;
+    error.value = extractInvokeError(e);
+  } finally {
+    const nextSet = new Set(autoSyncTogglingIds.value);
+    nextSet.delete(p.id);
+    autoSyncTogglingIds.value = nextSet;
+  }
+}
+
+// 立即同步：按钮 loading/disabled，成功后刷新列表以更新 last_sync_at
+async function syncNow(p: Provider) {
+  if (syncingIds.value.has(p.id)) return;
+  syncingIds.value = new Set(syncingIds.value).add(p.id);
+  error.value = "";
+  try {
+    await syncProviderNow(p.id);
+    await refresh();
+  } catch (e) {
+    error.value = extractInvokeError(e);
+  } finally {
+    const nextSet = new Set(syncingIds.value);
+    nextSet.delete(p.id);
+    syncingIds.value = nextSet;
+  }
+}
+
 // 行内开关启停：乐观更新本地 -> 整行更新到后端 -> 成功用返回值同步 / 失败回滚并报错
 async function toggleProviderEnabled(p: Provider, next: boolean) {
   if (togglingIds.value.has(p.id)) return;
@@ -192,6 +256,7 @@ async function toggleProviderEnabled(p: Provider, next: boolean) {
       base_url: p.base_url,
       api_key: p.api_key,
       enabled: next,
+      auto_sync: p.auto_sync,
     });
     // 以服务端返回为准同步
     const sync = items.value.find((it) => it.id === p.id);
@@ -348,8 +413,30 @@ onMounted(refresh);
                   @update:model-value="toggleProviderEnabled(row as Provider, $event)"
                 />
               </template>
+              <template v-else-if="column.key === 'auto_sync'">
+                <HSwitch
+                  :model-value="(row as Provider).auto_sync"
+                  :disabled="autoSyncTogglingIds.has((row as Provider).id) || saving"
+                  :aria-label="`${(row as Provider).name} 自动同步`"
+                  @update:model-value="toggleProviderAutoSync(row as Provider, $event)"
+                />
+              </template>
+              <template v-else-if="column.key === 'last_sync_at'">
+                <span class="text-xs text-slate-500">
+                  {{ formatSyncTime((row as Provider).last_sync_at) }}
+                </span>
+              </template>
               <template v-else-if="column.key === 'actions'">
                 <span class="space-x-2">
+                  <HButton
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    :disabled="syncingIds.has((row as Provider).id)"
+                    @click="syncNow(row as Provider)"
+                  >
+                    {{ syncingIds.has((row as Provider).id) ? "同步中…" : "立即同步" }}
+                  </HButton>
                   <HButton variant="outline" size="sm" type="button" @click="startEdit(row as Provider)">
                     编辑
                   </HButton>

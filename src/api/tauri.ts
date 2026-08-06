@@ -30,6 +30,10 @@ export interface Provider {
   api_key: string;
   enabled: boolean;
   created_at: string;
+  /** 是否开启后台自动同步（每 24h 拉取模型并持久化到本地） */
+  auto_sync: boolean;
+  /** 最后一次成功同步的 unix 秒；null 表示尚未同步 */
+  last_sync_at: number | null;
 }
 
 export interface GroupItem {
@@ -175,6 +179,7 @@ export const createProvider = (payload: {
   base_url: string;
   api_key: string;
   enabled: boolean;
+  auto_sync: boolean;
 }) => invoke<Provider>("create_provider", { payload });
 export const updateProvider = (payload: {
   id: number;
@@ -182,8 +187,21 @@ export const updateProvider = (payload: {
   base_url: string;
   api_key: string;
   enabled: boolean;
+  auto_sync: boolean;
 }) => invoke<Provider>("update_provider", { payload });
 export const deleteProvider = (id: number) => invoke<void>("delete_provider", { id });
+
+/** 就地切换供应商自动同步开关 */
+export const setProviderAutoSync = (id: number, enabled: boolean) =>
+  invoke<Provider>("set_provider_auto_sync", { id, enabled });
+
+/** 立即同步单个供应商模型（拉取上游并持久化到本地） */
+export const syncProviderNow = (id: number) =>
+  invoke<Provider>("sync_provider_now", { providerId: id });
+
+/** 读取本地持久化的供应商模型列表（分组页左侧离线可用） */
+export const getProviderModels = (id: number) =>
+  invoke<string[]>("get_provider_models", { providerId: id });
 
 /** 从上游 OpenAI 兼容 /models 拉取模型 id；已保存供应商或表单草稿二选一 */
 export const fetchProviderModels = (payload: {
@@ -197,17 +215,14 @@ export const createGroup = (payload: {
   name: string;
   thinking_effort?: ThinkingEffort;
   items: { provider_id: number; upstream_model: string }[];
-  source_provider_id?: number | null;
 }) => invoke<Group>("create_group", { payload });
 export const updateGroup = (payload: {
   id: number;
   name: string;
   thinking_effort?: ThinkingEffort;
   items: { provider_id: number; upstream_model: string }[];
-  source_provider_id?: number | null;
 }) => invoke<Group>("update_group", { payload });
 export const deleteGroup = (id: number) => invoke<void>("delete_group", { id });
-export const syncGroupNow = (groupId: number) => invoke<Group>("sync_group_now", { groupId });
 
 export const listLogs = (query: LogQuery = {}) =>
   invoke<LogPage>("list_logs", {
