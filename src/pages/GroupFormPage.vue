@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ChevronDown } from "@lucide/vue";
 import { useForm } from "@tanstack/vue-form";
-import { HButton, HInput, HSelect, type HSelectOption } from "happier-ui";
+import { HButton, HCard, HCell, HEmpty, HInput, HLoading, HSelect, HTag, type HSelectOption } from "happier-ui";
 import {
   createGroup,
   extractInvokeError,
@@ -501,17 +501,18 @@ async function handleSyncNow() {
     </div>
 
     <!-- 编辑态加载中 -->
-    <div
+    <HLoading
       v-if="loading"
-      class="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500"
-    >
-      正在加载分组…
-    </div>
+      mode="local"
+      label="正在加载分组…"
+      class="py-6"
+    />
 
     <!-- 编辑态加载失败：分组不存在 / 加载失败 -->
-    <div
+    <HCard
       v-else-if="loadFailed"
-      class="rounded-lg border border-rose-200 bg-rose-50 p-4"
+      variant="outlined"
+      class="border-rose-200 bg-rose-50"
     >
       <p class="text-sm text-rose-700">{{ error }}</p>
       <HButton
@@ -523,7 +524,7 @@ async function handleSyncNow() {
       >
         返回列表
       </HButton>
-    </div>
+    </HCard>
 
     <div v-else class="flex flex-col gap-4">
       <form class="flex flex-col gap-4" @submit.prevent="form.handleSubmit()">
@@ -616,38 +617,43 @@ async function handleSyncNow() {
         <!-- 双栏：左可选模型 / 右已选队列 -->
         <div class="grid min-h-0 grid-cols-1 gap-4 lg:grid-cols-2">
           <!-- 左：按供应商手风琴选模 -->
-          <div class="flex min-h-0 max-h-[32rem] flex-col rounded-lg border border-slate-200">
-            <div class="flex items-center justify-between border-b border-slate-100 px-3 py-2">
-              <h3 class="text-sm font-medium">可选模型</h3>
-              <span class="text-xs text-slate-400">展开供应商以加载其模型</span>
-            </div>
+          <HCard variant="outlined" padding="none" class="flex min-h-0 max-h-[32rem] flex-col">
+            <template #header>
+              <div class="flex items-center justify-between px-3 py-2">
+                <h3 class="text-sm font-medium">可选模型</h3>
+                <span class="text-xs text-slate-400">展开供应商以加载其模型</span>
+              </div>
+            </template>
             <div class="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
               <div
                 v-for="p in providers"
                 :key="p.id"
                 class="rounded-lg border border-slate-200"
               >
-                <button
-                  type="button"
-                  class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
-                  :class="{ 'cursor-not-allowed opacity-50': isBound }"
-                  :disabled="isBound"
+                <HCell
+                  clickable
+                  :show-chevron="false"
+                  :title="p.name"
+                  :class="{ 'pointer-events-none opacity-50': isBound }"
                   @click="toggleProvider(p.id)"
                 >
-                  <ChevronDown
-                    :size="14"
-                    class="shrink-0 text-slate-400 transition-transform"
-                    :class="{ '-rotate-90': !expandedProviders.has(p.id) }"
-                  />
-                  <span class="min-w-0 flex-1 truncate font-medium text-slate-700">{{ p.name }}</span>
-                  <span v-if="modelCache.getStatus(p.id) === 'ready'" class="shrink-0 text-xs text-slate-400">
-                    {{ modelCache.getModels(p.id).length }} 个模型
-                  </span>
-                </button>
+                  <template #prefix>
+                    <ChevronDown
+                      :size="14"
+                      class="text-slate-400 transition-transform"
+                      :class="{ '-rotate-90': !expandedProviders.has(p.id) }"
+                    />
+                  </template>
+                  <template #suffix>
+                    <span v-if="modelCache.getStatus(p.id) === 'ready'" class="text-xs text-slate-400">
+                      {{ modelCache.getModels(p.id).length }} 个模型
+                    </span>
+                  </template>
+                </HCell>
 
                 <div v-if="expandedProviders.has(p.id)" class="border-t border-slate-100 px-3 py-2">
-                  <div v-if="modelCache.getStatus(p.id) === 'loading'" class="py-2 text-xs text-slate-500">
-                    正在拉取模型…
+                  <div v-if="modelCache.getStatus(p.id) === 'loading'" class="py-2">
+                    <HLoading mode="local" size="sm" label="正在拉取模型…" />
                   </div>
                   <div v-else-if="modelCache.getStatus(p.id) === 'error'" class="py-2">
                     <p class="text-xs text-rose-600">{{ modelCache.getError(p.id) }}</p>
@@ -667,9 +673,7 @@ async function handleSyncNow() {
                       placeholder="过滤该供应商已加载模型"
                       class="mb-2"
                     />
-                    <div v-if="modelCache.getModels(p.id).length === 0" class="py-2 text-xs text-slate-400">
-                      上游未返回模型
-                    </div>
+                    <HEmpty v-if="modelCache.getModels(p.id).length === 0" class="app-empty-compact" title="上游未返回模型" />
                     <div
                       v-else
                       class="flex max-h-56 flex-col gap-1 overflow-y-auto"
@@ -703,27 +707,27 @@ async function handleSyncNow() {
                   </template>
                 </div>
               </div>
-              <p v-if="providers.length === 0" class="py-3 text-center text-xs text-slate-400">
-                暂无供应商，请先到「供应商」页添加
-              </p>
+              <HEmpty v-if="providers.length === 0" class="app-empty-compact" title="暂无供应商，请先到「供应商」页添加" />
             </div>
-          </div>
+          </HCard>
 
           <!-- 右：已选故障转移队列 -->
-          <div class="flex min-h-0 max-h-[32rem] flex-col rounded-lg border border-slate-200">
-            <div class="flex items-center justify-between border-b border-slate-100 px-3 py-2">
-              <h3 class="text-sm font-medium">故障转移队列</h3>
-              <HButton
-                v-if="!isBound"
-                variant="ghost"
-                size="sm"
-                type="button"
-                :disabled="formValues.items.length === 0"
-                @click="clearQueue"
-              >
-                清空
-              </HButton>
-            </div>
+          <HCard variant="outlined" padding="none" class="flex min-h-0 max-h-[32rem] flex-col">
+            <template #header>
+              <div class="flex items-center justify-between px-3 py-2">
+                <h3 class="text-sm font-medium">故障转移队列</h3>
+                <HButton
+                  v-if="!isBound"
+                  variant="ghost"
+                  size="sm"
+                  type="button"
+                  :disabled="formValues.items.length === 0"
+                  @click="clearQueue"
+                >
+                  清空
+                </HButton>
+              </div>
+            </template>
             <div class="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
               <div
                 v-for="(item, index) in formValues.items"
@@ -757,13 +761,9 @@ async function handleSyncNow() {
                   </span>
                   <span class="block truncate font-mono text-xs text-slate-500">{{ item.upstream_model }}</span>
                 </div>
-                <span
-                  class="shrink-0 rounded-full px-2 py-0.5 text-[11px] tabular-nums"
-                  :class="
-                    queueDisplayScores[index]
-                      ? 'bg-emerald-50 text-emerald-800'
-                      : 'bg-slate-100 text-slate-500'
-                  "
+                <HTag
+                  size="sm"
+                  :variant="queueDisplayScores[index] ? 'success' : 'default'"
                   :title="
                     queueDisplayScores[index]
                       ? `llm_benchmark 分数 ${queueDisplayScores[index]?.score}（匹配层级：${queueDisplayScores[index]?.tier}）`
@@ -774,22 +774,26 @@ async function handleSyncNow() {
                     llm_benchmark · {{ queueDisplayScores[index]?.score }}
                   </template>
                   <template v-else>未匹配</template>
-                </span>
-                <button
+                </HTag>
+                <HButton
                   v-if="!isBound"
+                  variant="ghost"
+                  size="sm"
                   type="button"
-                  class="shrink-0 rounded px-1.5 py-0.5 text-xs text-rose-600 hover:bg-rose-50"
+                  class="shrink-0 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
                   title="删除成员"
                   @click="removeQueueItem(index)"
                 >
                   ×
-                </button>
+                </HButton>
               </div>
-              <p v-if="formValues.items.length === 0" class="py-3 text-center text-xs text-slate-400">
-                {{ isBound ? "绑定分组队列由供应商托管" : "队列为空：从左侧选择模型加入" }}
-              </p>
+              <HEmpty
+                v-if="formValues.items.length === 0"
+                class="app-empty-compact"
+                :title="isBound ? '绑定分组队列由供应商托管' : '队列为空：从左侧选择模型加入'"
+              />
             </div>
-          </div>
+          </HCard>
         </div>
 
         <div class="flex gap-2">
