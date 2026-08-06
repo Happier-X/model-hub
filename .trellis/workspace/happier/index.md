@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 34
-- **Last Active**: 2026-08-03
+- **Total Sessions**: 35
+- **Last Active**: 2026-08-06
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1231 | Active |
+| `journal-1.md` | ~1369 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 35 | 2026-08-06 | 分组新建/编辑从 Modal 改为独立页面 | `2dcf716`, `41815ee` | `master` |
 | 34 | 2026-08-03 | 修复首页热力图 TDZ 遮蔽 | `cc49501` | `master` |
 | 33 | 2026-08-03 | 发布 v0.0.9 | `3b89c7f` | `master` |
 | 32 | 2026-07-29 | 用组件库替换手写 UI 实现 | `2b40d24` | `master` |

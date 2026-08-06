@@ -1345,3 +1345,25 @@ Session summary was not supplied.
 ### Status
 
 [OK] 已发布并归档
+
+
+## Session 35: 分组新建/编辑从 Modal 改为独立页面
+
+**Date**: 2026-08-06
+**Task**: 分组新建/编辑从 Modal 改为独立页面
+**Branch**: `master`
+
+### Summary
+
+将分组新建/编辑从 AppDialog 宽弹窗迁移为独立路由页（/groups/new、/groups/:id/edit），新建 GroupFormPage.vue 承载双栏选模/队列/绑定同步/能力排序等重表单；GroupsPage 瘦身为纯列表并保留卡片即时编辑/删除/导出 Pi；AppShell 侧栏对 /groups/* 前缀高亮；非法 id 明确报错不落回新建态；左栏模型仍仅点击拉取。typecheck/lint/unit(18) 全绿，并同步更新 frontend spec。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2dcf716` | (see git log) |
+| `41815ee` | (see git log) |
+
+### Status
+
+[OK] **Completed**
