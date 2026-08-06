@@ -1423,3 +1423,50 @@ Session summary was not supplied.
 ### Status
 
 [OK] **Completed**
+
+---
+
+## 2026-08-06 发布 v0.1.1（task: 08-06-release-v0-2-0）✅
+
+### Status
+
+[OK] **Completed**（AC1-AC4 全绿，Release 已上线）
+
+### 决策
+
+- 版本号定为 **0.1.1**（patch，用户确认；最初建议 0.2.0，用户改选 0.1.1）
+- 走既有 release-windows CI（push v* tag 触发）
+
+### 步骤
+
+1. 版本号 0.1.0 → 0.1.1：package.json / Cargo.toml / Cargo.lock / tauri.conf.json / tauri.release.conf.json
+2. changelog/v0.1.1.md：分组独立页 / 日志页删筛选 / npm+cargo 依赖升级
+3. 本地冒烟：pnpm build + cargo check 绿
+4. commit `35db2e2 chore(release): v0.1.1` → tag v0.1.1 → push
+5. CI run 31073246270 成功（8-9 分钟，Node20 deprecation 非阻塞警告）
+6. Release 核验：NSIS exe+zip、latest.json、.sig×2、SHA256SUMS.txt、v0.1.1.md 齐全；latest.json 版本 0.1.1 与 tag 一致
+
+### 备注
+
+- CI annotation：actions/checkout@v4 等跑在 Node24（Node20 deprecated），非阻塞；后续可考虑升级 action 版本
+
+
+## Session 37: 发布 v0.1.1
+
+**Date**: 2026-08-06
+**Task**: 发布 v0.1.1
+**Branch**: `master`
+
+### Summary
+
+版本号 0.1.0→0.1.1（5 文件同步）+ changelog/v0.1.1.md（分组独立页/日志页删筛选/依赖升级），本地冒烟通过后 tag v0.1.1 推送触发 release-windows CI，构建成功，Release 资产齐全（NSIS exe+zip/latest.json/.sig×2/SHA256SUMS.txt），latest.json 版本与 tag 一致，应用内更新可升级
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `35db2e2` | (see git log) |
+
+### Status
+
+[OK] **Completed**
