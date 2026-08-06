@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "组件与布局约定（v-html/模块级代码放置）"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "质量底线（lint/typecheck）"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "目录结构（utils 抽取是否登记）"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "类型安全约定"}
