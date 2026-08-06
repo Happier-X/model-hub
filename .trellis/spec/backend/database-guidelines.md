@@ -20,7 +20,8 @@
 | 表 | 用途 |
 |----|------|
 | `schema_migrations` | version + applied_at |
-| `providers` | 上游供应商；`api_key` 本机可明文 |
+| `providers` | 上游供应商；`api_key` 本机可明文；`auto_sync` 自动同步开关（默认开）、`last_sync_at` 上次同步 unix（NULL=未同步） |
+| `provider_models` | 每个供应商同步到的上游模型列表（`provider_id` FK ON DELETE CASCADE，UNIQUE(provider_id, model_name)，`sort_order` 顺序）；供分组页离线读取 |
 | `groups` | 对外模型名（**无** `auto_failover`；故障转移始终按队列顺序） |
 | `group_items` | 有序队列；`sort_order` 越小越优先 |
 | `request_logs` | 请求/故障转移摘要；不存 messages/完整密钥；**默认保留最近 7 天内的最新 1000 条**（`LOG_RETENTION_DAYS` + `LOG_MAX_ROWS`），启动/写日志/列表时 best-effort 清理过期或超量 |
@@ -29,6 +30,10 @@
 
 - 客户端 `api_keys` 表。新库不创建；启动路径**不**读、**不**迁移、**不** DROP 旧库残留 `api_keys`。
 - `groups.auto_failover`。新库不创建；旧库迁移删除该列并保留分组数据。
+
+**已废弃（字段保留不删）**：
+
+- `groups.source_provider_id` / `groups.last_sync_at`：分组绑定同步机制整体移除，改由供应商维度自动同步（`providers.auto_sync` + `provider_models`）。字段仍存在于旧库/领域结构，但不再写入、不再参与同步；历史绑定数据静默失效（分组队列保持上次同步内容，可手动编辑）。
 
 ---
 
