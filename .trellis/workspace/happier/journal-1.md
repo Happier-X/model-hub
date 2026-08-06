@@ -1591,3 +1591,68 @@ Session summary was not supplied.
 ### Status
 
 [OK] **Completed**
+
+---
+
+## 2026-08-06 供应商级自动同步模型（task: 08-06-provider-auto-sync）✅
+
+### Status
+
+[OK] **Completed**（AC1-AC7 全绿，cargo 139 + 前端 26）
+
+### 需求
+
+把「自动同步模型」从分组维度迁移到供应商维度：每个供应商可开关自动同步，模型持久化本地，分组页左侧离线可用。
+
+### 决策（用户确认 1-7）
+
+| # | 决策 |
+|---|------|
+| 1 | 彻底移除分组绑定同步（source_provider_id/last_sync_at 字段保留不删不写） |
+| 2 | 开关在供应商页表格（HSwitch 就地切换）；分组页左侧只读展示同步状态 |
+| 3 | 24h 写死；供应商页显示「上次同步」 |
+| 4 | 分组页左侧优先读本地 provider_models，空则实时兜底 |
+| 5 | 新表 provider_models(provider_id, model_name, sort_order, UNIQUE) |
+| 6 | perform_due_bound_groups → perform_due_provider_syncs |
+| 7 | 历史 source_provider_id 数据不迁移不删除，静默失效 |
+
+### 改动（3 commits）
+
+| commit | 内容 |
+|--------|------|
+| `cbb9558` | 后端：providers 加列 + provider_models 表 + Provider 领域扩展 + 按供应商同步任务 + 3 新命令（sync_provider_now/get_provider_models/set_provider_auto_sync），移除 sync_group_now |
+| `2e971b3` | 前端：供应商页自动同步列/上次同步列/立即同步按钮；分组页移除 isBound 绑定逻辑恢复纯手动；useProviderModelCache 本地优先 |
+| `7fc70bb` | spec：database-guidelines 登记 provider_models/废弃字段；upstream-access 与 component-guidelines 同步新机制 |
+
+### 关键踩坑（trellis-check 发现）
+
+- **旧库 auto_failover 重建表丢业务列（P2）**：`drop_groups_auto_failover_if_present` 无条件重建 groups 为三列，而 ensure_group_columns 在其之前执行，重建把 thinking_effort/source_provider_id/last_sync_at 全丢掉，升级后 list_groups 直接报 no such column。修复：重建前幂等补齐业务列 + 重建 SQL 纳入全部列 + 扩展测试断言历史 source_provider_id 保留（AC7 关键路径）。
+- `sync_provider_now` 对 disabled 供应商静默 Ok（PRD 行为），观察项：可后续加提示。
+
+### 验证
+
+- cargo test 139 全绿（迁移幂等/级联/全量替换/同步字段）
+- typecheck / lint / test:unit(26) / build 全绿
+
+
+## Session 40: 供应商级自动同步模型
+
+**Date**: 2026-08-06
+**Task**: 供应商级自动同步模型
+**Branch**: `master`
+
+### Summary
+
+把自动同步模型从分组维度迁移到供应商维度：providers 加 auto_sync/last_sync_at，新表 provider_models 持久化模型，后台按供应商 24h 轮询同步；供应商页加自动同步开关/上次同步列/立即同步按钮；分组页移除绑定同步 UI 恢复纯手动队列、左侧读本地持久化模型离线可用。移除 sync_group_now，新增 sync_provider_now/get_provider_models/set_provider_auto_sync。修复旧库 auto_failover 重建丢业务列缺陷。cargo 139 + 前端 26 全绿。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cbb9558` | (see git log) |
+| `2e971b3` | (see git log) |
+| `7fc70bb` | (see git log) |
+
+### Status
+
+[OK] **Completed**
