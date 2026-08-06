@@ -4,8 +4,6 @@ import {
   HBadge,
   HButton,
   HCard,
-  HCheckbox,
-  HInput,
   HPagination,
   HSelect,
   HTable,
@@ -17,17 +15,8 @@ import {
   extractInvokeError,
   listLogs,
   purgeExpiredLogs,
-  type LogStatusClass,
   type RequestLog,
 } from "../api/tauri";
-
-const statusOptions: HSelectOption[] = [
-  { value: "all", label: "全部" },
-  { value: "2xx", label: "2xx 成功" },
-  { value: "4xx", label: "4xx 客户端" },
-  { value: "5xx", label: "5xx 上游/网关" },
-  { value: "error", label: "错误（≥400 或有 error）" },
-];
 
 const pageSizeOptions: HSelectOption[] = [
   { value: 20, label: "20" },
@@ -63,9 +52,6 @@ const retentionDays = ref(7);
 const maxRows = ref(10000);
 const page = ref(1);
 const pageSize = ref(50);
-const groupName = ref("");
-const statusClass = ref<LogStatusClass>("all");
-const failoverOnly = ref(false);
 const loading = ref(false);
 const error = ref("");
 const message = ref("");
@@ -88,9 +74,6 @@ async function refresh() {
     const result = await listLogs({
       page: page.value,
       page_size: pageSize.value,
-      group_name: groupName.value.trim() || undefined,
-      status_class: statusClass.value,
-      failover_only: failoverOnly.value,
     });
     items.value = result.items;
     total.value = result.total;
@@ -105,11 +88,6 @@ async function refresh() {
   } finally {
     loading.value = false;
   }
-}
-
-async function applyFilters() {
-  page.value = 1;
-  await refresh();
 }
 
 async function goPage(next: number) {
@@ -175,26 +153,9 @@ onUnmounted(() => {
 
 <template>
   <div class="h-full flex flex-col overflow-hidden">
-    <!-- 筛选卡片：顶部不滚 -->
+    <!-- 操作卡片：顶部不滚 -->
     <HCard variant="outlined" padding="md">
       <div class="flex flex-wrap items-end gap-3">
-        <div class="w-40" @keydown.enter="applyFilters">
-          <HInput
-            v-model="groupName"
-            type="search"
-            label="分组名"
-            placeholder="子串匹配"
-          />
-        </div>
-        <div class="w-44">
-          <HSelect
-            label="状态"
-            :options="statusOptions"
-            :model-value="statusClass"
-            @update:model-value="(v) => (statusClass = v as LogStatusClass)"
-          />
-        </div>
-        <HCheckbox v-model="failoverOnly" label="仅故障转移" />
         <div class="w-24">
           <HSelect
             label="每页"
@@ -208,9 +169,6 @@ onUnmounted(() => {
             "
           />
         </div>
-        <HButton variant="primary" type="button" :disabled="loading" @click="applyFilters">
-          筛选
-        </HButton>
         <HButton variant="outline" type="button" :disabled="loading" @click="refresh">
           刷新
         </HButton>
