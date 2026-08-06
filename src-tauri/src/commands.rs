@@ -3,7 +3,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
-use crate::domain::group::{CreateGroupPayload, Group, GroupItemInput, UpdateGroupPayload};
+use crate::domain::group::{CreateGroupPayload, Group, UpdateGroupPayload};
 use crate::domain::leaderboard::ModelLeaderboardSnapshot;
 use crate::domain::provider::{CreateProviderPayload, Provider, UpdateProviderPayload};
 use crate::domain::upstream_models::{fetch_upstream_model_ids, FetchProviderModelsPayload};
@@ -211,20 +211,12 @@ pub fn delete_group(proxy: State<'_, ProxyHandle>, id: i64) -> Result<(), Invoke
     stores(&proxy)?.delete_group(id).map_err(Into::into)
 }
 
-pub async fn perform_sync_bound_group(stores: &Stores, group_id: i64) -> Result<(), AppError> {
-    let groups = stores.list_groups()?;
-    let group = groups
-        .into_iter()
-        .find(|g| g.id == group_id)
-        .ok_or_else(|| AppError::Business("分组不存在".into()))?;
-
-    let provider_id = group
-        .source_provider_id
-        .ok_or_else(|| AppError::Business("分组未绑定供应商".into()))?;
-
+/// 同步单个供应商：拉取上游模型 → 全量替换本地持久化模型 → 记录同步时间。
+/// 供应商不存在或未启用时静默跳过（返回 Ok，不视为失败）。
+pub async fn perform_sync_provider(stores: &Stores, provider_id: i64) -> Result<(), AppError> {
     let provider = stores
         .get_provider(provider_id)?
-        .ok_or_else(|| AppError::Business("绑定的供应商不存在".into()))?;
+        .ok_or_else(|| AppError::Business("供应商不存在".into()))?;
 
     if !provider.enabled {
         return Ok(());
@@ -232,18 +224,10 @@ pub async fn perform_sync_bound_group(stores: &Stores, group_id: i64) -> Result<
 
     let ids = fetch_upstream_model_ids(&provider.base_url, &provider.api_key).await?;
 
-    let items: Vec<GroupItemInput> = ids
-        .into_iter()
-        .map(|upstream_model| GroupItemInput {
-            provider_id,
-            upstream_model,
-        })
-        .collect();
-
-    stores.replace_group_items(group.id, &items)?;
+    stores.replace_provider_models(provider_id, &ids)?;
 
     let now = chrono::Utc::now().timestamp();
-    stores.touch_group_synced_at(group.id, now)?;
+    stores.touch_provider_synced_at(provider_id, now)?;
 
     Ok(())
 }
@@ -251,11 +235,13 @@ pub async fn perform_sync_bound_group(stores: &Stores, group_id: i64) -> Result<
 pub const SYNC_STALE_AFTER_SECS: i64 = 24 * 3600;
 pub const SYNC_STAGGER: Duration = Duration::from_secs(5);
 
-pub async fn perform_due_bound_groups(stores: &Stores) {
-    let groups = match stores.list_groups() {
-        Ok(g) => g,
+/// 后台轮询：遍历开启自动同步的供应商，未同步过或超过 24h 到期则逐个同步（5s 错峰）。
+/// 单个供应商同步失败只记录 warning，不影响其他供应商。
+pub async fn perform_due_provider_syncs(stores: &Stores) {
+    let providers = match stores.list_providers() {
+        Ok(p) => p,
         Err(e) => {
-            tracing::warn!(error = %e, "后台同步：获取分组列表失败");
+            tracing::warn!(error = %e, "后台同步：获取供应商列表失败");
             return;
         }
     };
@@ -263,12 +249,12 @@ pub async fn perform_due_bound_groups(stores: &Stores) {
     let now = chrono::Utc::now().timestamp();
     let mut first = true;
 
-    for group in groups {
-        if group.source_provider_id.is_none() {
+    for provider in providers {
+        if !provider.enabled || !provider.auto_sync {
             continue;
         }
 
-        let due = match group.last_sync_at {
+        let due = match provider.last_sync_at {
             None => true,
             Some(t) => now - t >= SYNC_STALE_AFTER_SECS,
         };
@@ -282,32 +268,50 @@ pub async fn perform_due_bound_groups(stores: &Stores) {
         }
         first = false;
 
-        if let Err(e) = perform_sync_bound_group(stores, group.id).await {
+        if let Err(e) = perform_sync_provider(stores, provider.id).await {
             tracing::warn!(
                 error = %e,
-                group_id = group.id,
-                group_name = %group.name,
-                "后台同步分组失败"
+                provider_id = provider.id,
+                provider_name = %provider.name,
+                "后台同步供应商失败"
             );
         }
     }
 }
 
+/// 立即同步单个供应商（供应商页「立即同步」按钮）。成功后返回更新后的完整 Provider。
 #[tauri::command]
-pub async fn sync_group_now(
+pub async fn sync_provider_now(
     proxy: State<'_, ProxyHandle>,
-    group_id: i64,
-) -> Result<Group, InvokeError> {
+    provider_id: i64,
+) -> Result<Provider, InvokeError> {
     let s = stores(&proxy)?;
-    perform_sync_bound_group(&s, group_id).await?;
+    perform_sync_provider(&s, provider_id).await?;
+    s.get_provider(provider_id)?
+        .ok_or_else(|| InvokeError::from(AppError::Business("供应商不存在".into())))
+}
 
-    // 重新获取最新的分组状态
-    let groups = s.list_groups()?;
-    let group = groups
-        .into_iter()
-        .find(|g| g.id == group_id)
-        .ok_or_else(|| AppError::Business("同步后获取分组失败".into()))?;
-    Ok(group)
+/// 读本地持久化的供应商模型列表（分组页左侧离线可用）。
+#[tauri::command]
+pub fn get_provider_models(
+    proxy: State<'_, ProxyHandle>,
+    provider_id: i64,
+) -> Result<Vec<String>, InvokeError> {
+    stores(&proxy)?
+        .list_provider_models(provider_id)
+        .map_err(Into::into)
+}
+
+/// 就地切换供应商自动同步开关（供应商页「自动同步」列）。
+#[tauri::command]
+pub fn set_provider_auto_sync(
+    proxy: State<'_, ProxyHandle>,
+    id: i64,
+    enabled: bool,
+) -> Result<Provider, InvokeError> {
+    stores(&proxy)?
+        .set_provider_auto_sync(id, enabled)
+        .map_err(Into::into)
 }
 
 #[tauri::command]

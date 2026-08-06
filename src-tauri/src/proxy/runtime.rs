@@ -22,7 +22,7 @@ pub const PORT_SCAN_ATTEMPTS: u16 = 50;
 pub const PROXY_STOP_GRACE: Duration = Duration::from_secs(3);
 /// 代理启动后先静默这段时间才做首次同步检查，降低上游对启动瞬间的感知。
 pub const SYNC_STARTUP_DELAY: Duration = Duration::from_secs(5 * 60);
-/// 后台同步检查间隔：每小时检查一次过期的绑定分组。
+/// 后台同步检查间隔：每小时检查一次到期（24h）的自动同步供应商。
 pub const SYNC_CHECK_INTERVAL: Duration = Duration::from_secs(3600);
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -213,7 +213,7 @@ impl ProxyHandle {
             loop {
                 // 首个 tick 立即返回：静默期结束后立刻做一次过期检查。
                 interval.tick().await;
-                crate::commands::perform_due_bound_groups(&stores).await;
+                crate::commands::perform_due_provider_syncs(&stores).await;
             }
         };
 

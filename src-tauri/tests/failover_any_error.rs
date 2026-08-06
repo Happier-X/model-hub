@@ -43,6 +43,7 @@ fn add_two_candidates(env: &Env, first_url: &str, second_url: &str, group: &str)
             base_url: format!("{first_url}/v1"),
             api_key: "test-key-first".into(),
             enabled: true,
+            auto_sync: true,
         })
         .unwrap();
     let second = env
@@ -52,6 +53,7 @@ fn add_two_candidates(env: &Env, first_url: &str, second_url: &str, group: &str)
             base_url: format!("{second_url}/v1"),
             api_key: "test-key-second".into(),
             enabled: true,
+            auto_sync: true,
         })
         .unwrap();
     env.stores
@@ -442,6 +444,7 @@ async fn exhausted_2xx_error_envelopes_return_502() {
             base_url: format!("{}/v1", first.uri()),
             api_key: "k1".into(),
             enabled: true,
+            auto_sync: true,
         })
         .unwrap();
     let second_provider = env
@@ -451,6 +454,7 @@ async fn exhausted_2xx_error_envelopes_return_502() {
             base_url: format!("{}/v1", second.uri()),
             api_key: "k2".into(),
             enabled: true,
+            auto_sync: true,
         })
         .unwrap();
     env.stores

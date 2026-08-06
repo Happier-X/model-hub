@@ -370,6 +370,7 @@ mod tests {
                 base_url: "https://a.example/v1".into(),
                 api_key: "k".into(),
                 enabled: true,
+                auto_sync: true,
             })
             .unwrap();
         let p2 = s
@@ -378,6 +379,7 @@ mod tests {
                 base_url: "https://b.example/v1".into(),
                 api_key: "k".into(),
                 enabled: true,
+                auto_sync: true,
             })
             .unwrap();
         let g = s
@@ -414,6 +416,7 @@ mod tests {
                 base_url: "https://a.example/v1".into(),
                 api_key: "k".into(),
                 enabled: true,
+                auto_sync: true,
             })
             .unwrap();
         let p2 = s
@@ -422,6 +425,7 @@ mod tests {
                 base_url: "https://b.example/v1".into(),
                 api_key: "k".into(),
                 enabled: true,
+                auto_sync: true,
             })
             .unwrap();
         let g = s
@@ -492,6 +496,7 @@ mod tests {
                 base_url: "https://p.example/v1".into(),
                 api_key: "k".into(),
                 enabled: true,
+                auto_sync: true,
             })
             .unwrap();
         let g = s
@@ -518,6 +523,7 @@ mod tests {
                 base_url: "https://p.example/v1".into(),
                 api_key: "k".into(),
                 enabled: true,
+                auto_sync: true,
             })
             .unwrap();
         // 创建时带 high。

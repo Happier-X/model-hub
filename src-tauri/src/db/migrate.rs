@@ -116,6 +116,44 @@ fn ensure_group_columns(conn: &Connection) -> Result<(), AppError> {
     Ok(())
 }
 
+/// 供应商级自动同步：为 providers 表幂等追加 auto_sync / last_sync_at 列。
+fn ensure_provider_columns(conn: &Connection) -> Result<(), AppError> {
+    let columns = table_column_names(conn, "providers")?;
+
+    // 自动同步开关：默认开启（沿用原分组自动同步的默认行为）。
+    if !columns.contains("auto_sync") {
+        conn.execute(
+            "ALTER TABLE providers ADD COLUMN auto_sync INTEGER NOT NULL DEFAULT 1",
+            [],
+        )
+        .map_err(|e| AppError::Database(format!("添加 providers.auto_sync 字段失败: {e}")))?;
+    }
+
+    // 最后一次成功同步时间（unix 秒，可空；NULL = 从未同步）。跨重启累计 24h 倒计时用。
+    if !columns.contains("last_sync_at") {
+        conn.execute("ALTER TABLE providers ADD COLUMN last_sync_at INTEGER", [])
+            .map_err(|e| AppError::Database(format!("添加 providers.last_sync_at 字段失败: {e}")))?;
+    }
+    Ok(())
+}
+
+/// 供应商模型持久化表：同步时全量替换某供应商行；删除供应商时级联清理。
+fn ensure_provider_models_table(conn: &Connection) -> Result<(), AppError> {
+    conn.execute_batch(
+        r#"
+CREATE TABLE IF NOT EXISTS provider_models (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  provider_id INTEGER NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+  model_name TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(provider_id, model_name)
+);
+"#,
+    )
+    .map_err(|e| AppError::Database(format!("创建 provider_models 表失败: {e}")))?;
+    Ok(())
+}
+
 /// 旧库若含 `groups.auto_failover`，以重建表方式删除该列并保留 id/name/created_at 与 group_items。
 fn drop_groups_auto_failover_if_present(conn: &Connection) -> Result<(), AppError> {
     let columns = table_column_names(conn, "groups")?;
@@ -123,10 +161,9 @@ fn drop_groups_auto_failover_if_present(conn: &Connection) -> Result<(), AppErro
         return Ok(());
     }
 
-    // 删除列前确保 created_at 存在，便于 SELECT 拷贝。
-    if !columns.contains("created_at") {
-        ensure_group_columns(conn)?;
-    }
+    // 删除列前补齐当前 schema 业务列（created_at/thinking_effort/source_provider_id/last_sync_at），
+    // 保证重建后的表仍可被领域查询读取；幂等，已有列跳过。
+    ensure_group_columns(conn)?;
 
     let fk_was_on: bool = conn
         .query_row("PRAGMA foreign_keys", [], |row| row.get::<_, i64>(0))
@@ -146,10 +183,13 @@ fn drop_groups_auto_failover_if_present(conn: &Connection) -> Result<(), AppErro
 CREATE TABLE groups__new (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL UNIQUE,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  thinking_effort TEXT NOT NULL DEFAULT 'off',
+  source_provider_id INTEGER,
+  last_sync_at INTEGER
 );
-INSERT INTO groups__new (id, name, created_at)
-  SELECT id, name, created_at FROM groups;
+INSERT INTO groups__new (id, name, created_at, thinking_effort, source_provider_id, last_sync_at)
+  SELECT id, name, created_at, thinking_effort, source_provider_id, last_sync_at FROM groups;
 DROP TABLE groups;
 ALTER TABLE groups__new RENAME TO groups;
 "#,
@@ -348,6 +388,8 @@ pub fn migrate(conn: &Connection) -> Result<(), AppError> {
     drop_groups_auto_failover_if_present(conn)?;
     ensure_group_items_columns(conn)?;
     ensure_request_logs_columns(conn)?;
+    ensure_provider_columns(conn)?;
+    ensure_provider_models_table(conn)?;
     apply_version(conn, 1)?;
     Ok(())
 }
@@ -362,7 +404,7 @@ mod tests {
         conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
         migrate(&conn).unwrap();
         migrate(&conn).unwrap();
-        for table in ["providers", "groups", "group_items", "request_logs"] {
+        for table in ["providers", "groups", "group_items", "request_logs", "provider_models"] {
             let n: i64 = conn
                 .query_row(
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
@@ -708,7 +750,8 @@ mod tests {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE,
                 auto_failover INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                source_provider_id INTEGER
             );
             CREATE TABLE group_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -717,8 +760,8 @@ mod tests {
                 upstream_model TEXT NOT NULL,
                 sort_order INTEGER NOT NULL DEFAULT 0
             );
-            INSERT INTO groups (name, auto_failover, created_at)
-            VALUES ('disabled', 0, '2024-01-01T00:00:00Z');
+            INSERT INTO groups (name, auto_failover, created_at, source_provider_id)
+            VALUES ('disabled', 0, '2024-01-01T00:00:00Z', 7);
             INSERT INTO group_items (group_id, provider_id, upstream_model, sort_order)
             VALUES (1, 9, 'legacy-model', 3);",
         )
@@ -757,7 +800,21 @@ mod tests {
             )
             .unwrap();
         assert_eq!(orphan_items, 0);
-        // 重建后 group_items 仍应引用 groups，并保留 ON DELETE CASCADE。
+        // 重建后当前 schema 业务列必须齐全，领域查询可用（AC7：旧库升级不丢数据）。
+        let cols = table_column_names(&conn, "groups").unwrap();
+        for name in ["thinking_effort", "source_provider_id", "last_sync_at"] {
+            assert!(cols.contains(name), "重建后缺少 {name}");
+        }
+        let row: (String, String, Option<i64>, Option<i64>) = conn
+            .query_row(
+                "SELECT name, thinking_effort, source_provider_id, last_sync_at
+                 FROM groups WHERE id = 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(row, ("disabled".into(), "off".into(), Some(7), None));
+        // 重建后外键仍指向 groups，并保留 ON DELETE CASCADE。
         let mut targets = Vec::new();
         let mut stmt = conn
             .prepare("PRAGMA foreign_key_list(group_items)")
@@ -772,5 +829,121 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM group_items", [], |row| row.get(0))
             .unwrap();
         assert_eq!(remaining_items, 0, "重建后 ON DELETE CASCADE 必须继续生效");
+    }
+
+    #[test]
+    fn migrate_adds_provider_columns_and_provider_models_table_without_losing_data() {
+        let conn = Connection::open_in_memory().unwrap();
+        // 旧库：providers 无 auto_sync / last_sync_at；groups 已含绑定字段（历史数据保留）。
+        conn.execute_batch(
+            "CREATE TABLE providers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                base_url TEXT NOT NULL,
+                api_key TEXT NOT NULL DEFAULT '',
+                enabled INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE groups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                thinking_effort TEXT NOT NULL DEFAULT 'off',
+                source_provider_id INTEGER,
+                last_sync_at INTEGER
+            );
+            INSERT INTO providers (name, base_url, api_key, enabled, created_at)
+            VALUES ('legacy', 'https://api.example.com/v1', 'k', 1, '2024-01-01T00:00:00Z');
+            INSERT INTO groups (name, created_at, thinking_effort, source_provider_id, last_sync_at)
+            VALUES ('legacy-group', '2024-01-01T00:00:00Z', 'low', 1, 1700000000);",
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let cols = table_column_names(&conn, "providers").unwrap();
+        assert!(cols.contains("auto_sync"), "providers.auto_sync 缺失");
+        assert!(cols.contains("last_sync_at"), "providers.last_sync_at 缺失");
+
+        let row: (String, i64, Option<i64>) = conn
+            .query_row(
+                "SELECT name, auto_sync, last_sync_at FROM providers WHERE id = 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(row.0, "legacy");
+        assert_eq!(row.1, 1, "旧库无 auto_sync，追加后默认开启");
+        assert_eq!(row.2, None, "旧库无 last_sync_at，追加后默认 NULL");
+
+        let table_exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='provider_models'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_exists, 1, "provider_models 表应创建");
+
+        // 历史绑定数据静默保留（字段不删不迁移）。
+        let bound: (String, Option<i64>) = conn
+            .query_row(
+                "SELECT name, source_provider_id FROM groups WHERE id = 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(bound.0, "legacy-group");
+        assert_eq!(bound.1, Some(1));
+
+        // 写入同步数据后再次迁移应幂等。
+        conn.execute(
+            "UPDATE providers SET last_sync_at = ?1 WHERE id = 1",
+            [1_700_000_000i64],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO provider_models (provider_id, model_name, sort_order) VALUES (1, 'gpt-4o', 0)",
+            [],
+        )
+        .unwrap();
+        migrate(&conn).unwrap();
+        let ts: Option<i64> = conn
+            .query_row("SELECT last_sync_at FROM providers WHERE id = 1", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(ts, Some(1_700_000_000));
+        let n: i64 = conn
+            .query_row("SELECT COUNT(*) FROM provider_models", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 1);
+    }
+
+    #[test]
+    fn migrate_provider_models_cascades_on_provider_delete() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        migrate(&conn).unwrap();
+
+        conn.execute(
+            "INSERT INTO providers (name, base_url, api_key, enabled, created_at, auto_sync)
+             VALUES ('p', 'https://x', '', 1, '2024-01-01T00:00:00Z', 1)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO provider_models (provider_id, model_name, sort_order) VALUES (1, 'm1', 0)",
+            [],
+        )
+        .unwrap();
+        conn.execute("INSERT INTO provider_models (provider_id, model_name, sort_order) VALUES (1, 'm2', 1)", [])
+            .unwrap();
+
+        conn.execute("DELETE FROM providers WHERE id = 1", []).unwrap();
+        let n: i64 = conn
+            .query_row("SELECT COUNT(*) FROM provider_models", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 0, "删除供应商后 provider_models 应级联删除");
     }
 }

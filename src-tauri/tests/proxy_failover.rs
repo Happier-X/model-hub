@@ -142,6 +142,7 @@ async fn failover_from_5xx_to_success() {
             base_url: format!("{}/v1", bad.uri()),
             api_key: "k".into(),
             enabled: true,
+            auto_sync: true,
         })
         .unwrap();
     let p_good = env
@@ -151,6 +152,7 @@ async fn failover_from_5xx_to_success() {
             base_url: format!("{}/v1", good.uri()),
             api_key: "k".into(),
             enabled: true,
+            auto_sync: true,
         })
         .unwrap();
     env.stores
@@ -250,6 +252,7 @@ async fn stream_idle_timeout_single_failure_log() {
             base_url: format!("{base}/v1"),
             api_key: "k".into(),
             enabled: true,
+            auto_sync: true,
         })
         .unwrap();
     env.stores
@@ -329,6 +332,7 @@ async fn stream_sse_heartbeat_keeps_alive_before_hard_timeout() {
             base_url: format!("{base}/v1"),
             api_key: "k".into(),
             enabled: true,
+            auto_sync: true,
         })
         .unwrap();
     env.stores
@@ -414,6 +418,7 @@ async fn stream_success_single_ok_log() {
             base_url: format!("{}/v1", upstream.uri()),
             api_key: "k".into(),
             enabled: true,
+            auto_sync: true,
         })
         .unwrap();
     env.stores
@@ -485,6 +490,7 @@ async fn non_stream_success_writes_log_and_stats() {
             base_url: format!("{}/v1", upstream.uri()),
             api_key: "k".into(),
             enabled: true,
+            auto_sync: true,
         })
         .unwrap();
     env.stores
@@ -551,6 +557,7 @@ async fn stream_abort_on_drop_writes_log() {
             base_url: format!("{base}/v1"),
             api_key: "k".into(),
             enabled: true,
+            auto_sync: true,
         })
         .unwrap();
     env.stores
