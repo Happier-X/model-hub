@@ -13,7 +13,8 @@ src/
 ├── pages/
 │   ├── HomePage.vue      # 代理运行状态、Base URL、统计、接入指引
 │   ├── ProvidersPage.vue
-│   ├── GroupsPage.vue
+│   ├── GroupsPage.vue    # 分组列表 + 卡片即时操作（编辑入口跳转表单页）
+│   ├── GroupFormPage.vue # 分组新建/编辑独立页（/groups/new、/groups/:id/edit）
 │   ├── LogsPage.vue
 │   └── SettingsPage.vue  # 端口、数据目录、应用更新、自动检查偏好
 └── router/
