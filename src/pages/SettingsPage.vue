@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef } from "vue";
 import { HButton, HCard, HCheckbox, HInput, HProgress } from "happier-ui";
+import { renderMarkdown } from "../utils/markdown";
 import {
   checkForUpdate,
   downloadAndInstallUpdate,
@@ -37,6 +38,8 @@ const currentVersion = ref("");
  * 深层 ref 会把实例变成 Proxy，调用 downloadAndInstall 时触发 private member 错误。
  */
 const pendingUpdate = shallowRef<Update | null>(null);
+/** 把更新日志 markdown 渲染为安全 HTML（renderMarkdown 已关闭原始 HTML，防 XSS）。 */
+const releaseNotesHtml = computed(() => renderMarkdown(pendingUpdate.value?.body));
 const downloadLoaded = ref(0);
 const downloadTotal = ref<number | null>(null);
 const checkUpdateOnStartup = ref(false);
@@ -343,10 +346,12 @@ onUnmounted(() => {
             （当前 {{ pendingUpdate.currentVersion }}）
           </span>
         </p>
-        <pre
-          v-if="pendingUpdate.body"
-          class="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-white/80 p-2 text-xs text-slate-700"
-        >{{ pendingUpdate.body }}</pre>
+        <!-- eslint-disable-next-line vue/no-v-html -- markdown-it html:false 已转义原始 HTML -->
+        <div
+          v-if="releaseNotesHtml"
+          class="markdown-body mt-2 max-h-40 overflow-auto rounded bg-white/80 p-2 text-xs text-slate-700"
+          v-html="releaseNotesHtml"
+        ></div>
         <p class="mt-2 text-xs text-slate-600">
           确认后将下载安装包、完成安装并自动重启应用。数据目录中的配置与数据库不会被删除。
         </p>
