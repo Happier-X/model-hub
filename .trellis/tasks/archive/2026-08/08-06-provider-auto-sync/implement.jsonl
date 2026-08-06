@@ -1,0 +1,9 @@
+{"file": "src-tauri/src/db/migrate.rs"}
+{"file": "src-tauri/src/domain/provider.rs"}
+{"file": "src-tauri/src/commands.rs"}
+{"file": "src-tauri/src/proxy/runtime.rs"}
+{"file": "src-tauri/src/lib.rs"}
+{"file": "src/api/tauri.ts"}
+{"file": "src/pages/ProvidersPage.vue"}
+{"file": "src/pages/GroupFormPage.vue"}
+{"file": "src/composables/useProviderModelCache.ts"}
