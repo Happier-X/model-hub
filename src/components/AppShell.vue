@@ -11,6 +11,13 @@ const router = useRouter();
 const title = computed(() => (route.meta.title as string) || "Model Hub");
 const availableVersion = ref("");
 
+/** 分组子路径（新建/编辑）仍高亮「分组」侧栏项。 */
+const activeNavKey = computed(() => {
+  const path = route.path;
+  if (path === "/groups" || path.startsWith("/groups/")) return "/groups";
+  return path;
+});
+
 const navItems: HSidebarItem[] = [
   { key: "/", label: "首页" },
   { key: "/providers", label: "供应商" },
@@ -45,7 +52,7 @@ onMounted(checkUpdateOnAppStartup);
     <div class="flex min-h-0 flex-1 overflow-hidden">
       <HSidebar
         :items="navItems"
-        :model-value="route.path"
+        :model-value="activeNavKey"
         :show-collapse-toggle="false"
         aria-label="主导航"
         @update:model-value="(key: string) => router.push(key)"
