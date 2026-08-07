@@ -428,7 +428,7 @@ async function sortQueueByCapability() {
 </script>
 
 <template>
-  <div class="flex flex-col gap-4">
+  <div class="flex h-full min-h-0 flex-col gap-4 overflow-hidden">
     <!-- 顶部：说明 + 返回列表 -->
     <div class="flex flex-wrap items-center justify-between gap-2">
       <p class="text-sm text-slate-500">
@@ -474,8 +474,8 @@ async function sortQueueByCapability() {
       </HButton>
     </HCard>
 
-    <div v-else class="flex flex-col gap-4">
-      <form class="flex flex-col gap-4" @submit.prevent="form.handleSubmit()">
+    <div v-else class="flex min-h-0 flex-1 flex-col gap-4">
+      <form class="flex min-h-0 flex-1 flex-col gap-4" @submit.prevent="form.handleSubmit()">
         <div class="grid gap-3 md:grid-cols-2">
           <form.Field name="name">
             <template #default="{ field }">
@@ -526,8 +526,8 @@ async function sortQueueByCapability() {
         </div>
         <p v-if="formMessage" class="text-sm text-emerald-700">{{ formMessage }}</p>
 
-        <!-- 双栏：左可选模型 / 右已选队列 -->
-        <div class="grid min-h-0 grid-cols-1 gap-4 lg:grid-cols-2">
+        <!-- 双栏：左可选模型 / 右已选队列（flex 而非 grid：grid item 上 flex-1 不生效，会回退到内容高度导致整页滚动） -->
+        <div class="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
           <!-- 左：按供应商手风琴选模 -->
           <HCard variant="outlined" padding="none" class="flex min-h-0 flex-1 flex-col">
             <template #header>
