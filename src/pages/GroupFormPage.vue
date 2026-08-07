@@ -508,15 +508,6 @@ async function sortQueueByCapability() {
             variant="ghost"
             size="sm"
             type="button"
-            :disabled="formValues.items.length < 2 || leaderboardLoading"
-            @click="sortQueueByCapability"
-          >
-            按模型能力排序
-          </HButton>
-          <HButton
-            variant="ghost"
-            size="sm"
-            type="button"
             :disabled="leaderboardLoading"
             @click="loadLeaderboard(true)"
           >
@@ -629,15 +620,26 @@ async function sortQueueByCapability() {
             <template #header>
               <div class="flex items-center justify-between px-3 py-2">
                 <h3 class="text-sm font-medium">故障转移队列</h3>
-                <HButton
-                  variant="ghost"
-                  size="sm"
-                  type="button"
-                  :disabled="formValues.items.length === 0"
-                  @click="clearQueue"
-                >
-                  清空
-                </HButton>
+                <span class="flex items-center gap-1">
+                  <HButton
+                    variant="ghost"
+                    size="sm"
+                    type="button"
+                    :disabled="formValues.items.length < 2 || leaderboardLoading"
+                    @click="sortQueueByCapability"
+                  >
+                    按模型能力排序
+                  </HButton>
+                  <HButton
+                    variant="ghost"
+                    size="sm"
+                    type="button"
+                    :disabled="formValues.items.length === 0"
+                    @click="clearQueue"
+                  >
+                    清空
+                  </HButton>
+                </span>
               </div>
             </template>
             <div class="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
