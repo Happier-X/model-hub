@@ -3,9 +3,10 @@
 //! 数据源为 [llm2014/llm_benchmark](https://github.com/llm2014/llm_benchmark) 仓库
 //! GitHub Pages 托管的原始文件（无任何 API Key）：
 //! 1. `docs/data/datasets.json` 列出各榜单 CSV 路径与月份；
-//! 2. 取 `category == "logic"` 的最新月榜 CSV（展示名 + 极限分数）。
+//! 2. 取 `category == "code_v3"`（Agentic 榜）的最新月榜 CSV。
 //!
-//! 解析白名单：模型名（展示名）与「极限分数」列，其余列一律丢弃。
+//! code_v3 CSV 为等级制（Pass/A+ 等）无数值分：解析白名单仅取模型展示名，
+//! 排序分 = CSV 行序倒排（与网站 Agentic 标签页展示顺序一致）。
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -25,8 +26,8 @@ pub const LLM_BENCHMARK_DATASETS_URL: &str = concat!(
     "https://raw.githubusercontent.com/llm2014/llm_benchmark/main/docs/data/datasets.json"
 );
 
-/// 使用的榜单分类（logic = 综合榜）。
-pub const LLM_BENCHMARK_CATEGORY: &str = "logic";
+/// 使用的榜单分类（code_v3 = Agentic 榜，网站展示名「Agentic」）。
+pub const LLM_BENCHMARK_CATEGORY: &str = "code_v3";
 
 /// 整次请求超时（连接 + 响应体）。
 pub const LEADERBOARD_REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
@@ -46,11 +47,12 @@ pub struct LeaderboardModel {
     pub canonical_slug: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    /// llm_benchmark logic 榜「极限分数」（0-100）。
+    /// logic 榜「极限分数」（0-100）；code_v3 解析时为 None（保留字段，见 parse_llm_benchmark_csv）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub intelligence_score: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coding_score: Option<f64>,
+    /// code_v3（Agentic）榜行序倒排分：首行分最高，降序即榜单行序。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agentic_score: Option<f64>,
 }
@@ -178,9 +180,58 @@ pub fn parse_llm_benchmark_csv(body: &str) -> Result<Vec<LeaderboardModel>, AppE
     Ok(out)
 }
 
-/// 从 datasets.json 定位 `category == logic` 且 reportDate 最新的 csv 相对路径。
+/// 解析 llm_benchmark code_v3（Agentic）月榜 CSV。
+///
+/// 表头英文（`Model` 列）；等级列（Pass/A+/B 等）无数值分，不解析不消费。
+/// 排序分 = **CSV 行序倒排**（首行分最高），与网站「Agentic」标签页展示顺序一致。
+pub fn parse_code_v3_csv(body: &str) -> Result<Vec<LeaderboardModel>, AppError> {
+    let mut lines = body.lines().map(str::trim).filter(|l| !l.is_empty());
+
+    let header = lines
+        .next()
+        .ok_or_else(|| AppError::Business("无法解析 llm_benchmark 榜单：CSV 为空".into()))?;
+    let header_fields = parse_csv_line(header);
+
+    let model_col = header_fields
+        .iter()
+        .position(|h| h.trim() == "Model")
+        .ok_or_else(|| AppError::Business("无法解析 llm_benchmark 榜单：缺少「Model」列".into()))?;
+
+    // 先收集全部有效行（空 Model 行跳过），再按行序倒排回填分数。
+    let mut models = Vec::new();
+    for line in lines {
+        let fields = parse_csv_line(line);
+        let Some(model) = fields.get(model_col).map(|s| s.trim()).filter(|s| !s.is_empty())
+        else {
+            continue;
+        };
+        models.push(model.to_string());
+    }
+
+    if models.is_empty() {
+        return Err(AppError::Business(
+            "llm_benchmark 返回空榜单（无可解析的「Model」行）。请稍后强制刷新。".into(),
+        ));
+    }
+
+    let total = models.len() as f64;
+    Ok(models
+        .into_iter()
+        .enumerate()
+        .map(|(index, model)| LeaderboardModel {
+            id: model.clone(),
+            canonical_slug: None,
+            name: Some(model),
+            intelligence_score: None,
+            coding_score: None,
+            agentic_score: Some(total - index as f64),
+        })
+        .collect())
+}
+
+/// 从 datasets.json 定位指定 `category` 且 reportDate 最新的 csv 相对路径。
 /// reportDate 形如 `2026-08`，字符串字典序即时间序。
-pub fn locate_latest_logic_csv(datasets_json: &str) -> Result<String, AppError> {
+pub fn locate_latest_csv(datasets_json: &str, category: &str) -> Result<String, AppError> {
     let value: Value = serde_json::from_str(datasets_json).map_err(|_| {
         AppError::Business("无法解析 llm_benchmark datasets.json：响应不是有效 JSON".into())
     })?;
@@ -192,10 +243,10 @@ pub fn locate_latest_logic_csv(datasets_json: &str) -> Result<String, AppError> 
 
     let mut best: Option<(String, String)> = None; // (reportDate, csv)
     for item in datasets {
-        let Some(category) = item.get("category").and_then(|v| v.as_str()) else {
+        let Some(item_category) = item.get("category").and_then(|v| v.as_str()) else {
             continue;
         };
-        if category != LLM_BENCHMARK_CATEGORY {
+        if item_category != category {
             continue;
         }
         let Some(report_date) = item.get("reportDate").and_then(|v| v.as_str()) else {
@@ -225,8 +276,7 @@ pub fn locate_latest_logic_csv(datasets_json: &str) -> Result<String, AppError> 
 
     best.map(|(_, csv)| csv).ok_or_else(|| {
         AppError::Business(format!(
-            "无法解析 llm_benchmark datasets.json：未找到 {} 分类的月榜",
-            LLM_BENCHMARK_CATEGORY
+            "无法解析 llm_benchmark datasets.json：未找到 {category} 分类的月榜"
         ))
     })
 }
@@ -372,7 +422,7 @@ async fn get_text(url: &str, client: &reqwest::Client) -> Result<String, AppErro
 }
 
 /// 从 llm_benchmark 拉取并白名单解析（无 Key）：
-/// 1. datasets.json 定位最新 logic 月榜 CSV；2. 拉取并解析 CSV。
+/// 1. datasets.json 定位最新 code_v3（Agentic）月榜 CSV；2. 拉取并解析 CSV。
 pub async fn fetch_llm_benchmark_models() -> Result<Vec<LeaderboardModel>, AppError> {
     let client = reqwest::Client::builder()
         .timeout(LEADERBOARD_REQUEST_TIMEOUT)
@@ -381,10 +431,10 @@ pub async fn fetch_llm_benchmark_models() -> Result<Vec<LeaderboardModel>, AppEr
         .map_err(|e| AppError::Business(format!("无法创建 HTTP 客户端：{e}")))?;
 
     let datasets_json = get_text(LLM_BENCHMARK_DATASETS_URL, &client).await?;
-    let csv_rel_path = locate_latest_logic_csv(&datasets_json)?;
+    let csv_rel_path = locate_latest_csv(&datasets_json, LLM_BENCHMARK_CATEGORY)?;
     let csv_url = format!("{LLM_BENCHMARK_BASE}{csv_rel_path}");
     let csv_body = get_text(&csv_url, &client).await?;
-    parse_llm_benchmark_csv(&csv_body)
+    parse_code_v3_csv(&csv_body)
 }
 
 /// 获取榜单快照：优先 24h 缓存；`force_refresh` 时尝试网络；失败时 stale 回退。
@@ -486,9 +536,18 @@ mod tests {
         {"category": "code", "reportDate": "2026-07", "tableIndex": 0, "title": "月榜", "csv": "data/code/2026-07.csv"},
         {"category": "logic", "reportDate": "2026-06", "tableIndex": 0, "title": "月榜", "csv": "data/logic/2026-06.csv"},
         {"category": "logic", "reportDate": "2026-08", "tableIndex": 0, "title": "月榜", "csv": "data/logic/2026-08.csv"},
-        {"category": "logic", "reportDate": "2026-08", "tableIndex": 1, "title": "副榜", "csv": "data/logic/2026-08-extra.csv"}
+        {"category": "logic", "reportDate": "2026-08", "tableIndex": 1, "title": "副榜", "csv": "data/logic/2026-08-extra.csv"},
+        {"category": "code_v3", "reportDate": "2026-07", "tableIndex": 0, "title": "月榜", "csv": "data/code_v3/2026-07.csv"},
+        {"category": "code_v3", "reportDate": "2026-08", "tableIndex": 0, "title": "月榜", "csv": "data/code_v3/2026-08.csv"},
+        {"category": "code_v3", "reportDate": "2026-08", "tableIndex": 1, "title": "副榜", "csv": "data/code_v3/2026-08-extra.csv"}
       ]
     }"#;
+
+    const SAMPLE_CODE_V3_CSV: &str = "\"Model\",\"MacOS App(C)\",\"Web(E)\",\"Think\"\n\
+\"Claude Fable 5 (high)\",\"Pass\",\"Pass\",\"1\"\n\
+\"Claude Opus 5 (max)\",\"Pass\",\"Pending\",\"1\"\n\
+\"GPT-5.6 Sol (max)\",\"Pass\",\"2/A+\",\"1\"\n\
+\"\",\"Skip\",\"Skip\",\"0\"\n";
 
     #[test]
     fn parse_csv_whitelist_columns() {
@@ -532,20 +591,59 @@ mod tests {
 
     #[test]
     fn locate_latest_logic_picks_newest_monthly() {
-        let csv = locate_latest_logic_csv(SAMPLE_DATASETS).unwrap();
+        let csv = locate_latest_csv(SAMPLE_DATASETS, "logic").unwrap();
         assert_eq!(csv, "data/logic/2026-08.csv");
     }
 
     #[test]
     fn locate_latest_logic_rejects_missing_category() {
-        let err = locate_latest_logic_csv(r#"{"datasets":[{"category":"code","reportDate":"2026-08","csv":"x.csv"}]}"#).unwrap_err();
+        let err = locate_latest_csv(r#"{"datasets":[{"category":"code","reportDate":"2026-08","csv":"x.csv"}]}"#, "logic").unwrap_err();
         assert!(err.to_string().contains("未找到"));
     }
 
     #[test]
     fn locate_latest_logic_rejects_non_json() {
-        let err = locate_latest_logic_csv("not json").unwrap_err();
+        let err = locate_latest_csv("not json", "logic").unwrap_err();
         assert!(err.to_string().contains("无法解析"));
+    }
+
+    #[test]
+    fn locate_latest_csv_picks_code_v3_newest_monthly() {
+        // code_v3（Agentic）分类：取最新 reportDate 且优先「月榜」title。
+        let csv = locate_latest_csv(SAMPLE_DATASETS, "code_v3").unwrap();
+        assert_eq!(csv, "data/code_v3/2026-08.csv");
+    }
+
+    #[test]
+    fn parse_code_v3_whitelist_rows() {
+        let models = parse_code_v3_csv(SAMPLE_CODE_V3_CSV).unwrap();
+        assert_eq!(models.len(), 3);
+
+        // 行序倒排分：首行最高，末行最低。
+        assert_eq!(models[0].id, "Claude Fable 5 (high)");
+        assert_eq!(models[0].name.as_deref(), Some("Claude Fable 5 (high)"));
+        assert_eq!(models[0].agentic_score, Some(3.0));
+        assert!(models[0].intelligence_score.is_none());
+        assert!(models[0].coding_score.is_none());
+        assert!(models[0].canonical_slug.is_none());
+
+        assert_eq!(models[1].id, "Claude Opus 5 (max)");
+        assert_eq!(models[1].agentic_score, Some(2.0));
+
+        assert_eq!(models[2].id, "GPT-5.6 Sol (max)");
+        assert_eq!(models[2].agentic_score, Some(1.0));
+    }
+
+    #[test]
+    fn parse_code_v3_rejects_missing_model_column() {
+        let err = parse_code_v3_csv("\"MacOS App(C)\",\"Web(E)\"\n\"Pass\",\"Pass\"").unwrap_err();
+        assert!(err.to_string().contains("Model"));
+    }
+
+    #[test]
+    fn parse_code_v3_rejects_empty_models() {
+        let err = parse_code_v3_csv("\"Model\",\"Web(E)\"\n\"\",\"Pass\"").unwrap_err();
+        assert!(err.to_string().contains("空榜单"));
     }
 
     #[test]
