@@ -1656,3 +1656,93 @@ Session summary was not supplied.
 ### Status
 
 [OK] **Completed**
+
+---
+
+## 2026-08-07 修复分组表单页双栏滚动回归（task: 08-07-fix-group-form-scroll）✅
+
+### Status
+
+[OK] **Completed**（AC1-AC3）
+
+### 问题
+
+用户反馈：编辑分组时「可选模型」和「故障转移队列」都无法滚动。
+
+### 根因
+
+上一任务把双栏外层容器从手写 div 换成 `HCard` 后，漏补 HCard 内部布局的 scoped 样式：
+
+- HCard 渲染结构 `.h-card`（flex column）> `.h-card__header` + `.h-card__body`（默认 slot 容器）
+- `styles.css` 中 `.h-card__body` 仅是带 padding 的普通 div，**非 flex 容器**
+- 双栏内部 `<div class="min-h-0 flex-1 overflow-y-auto">` 的 `flex-1` 失效 → 内容自然撑高、被 `max-h-[32rem]` 截断，无滚动条
+- ProvidersPage 底部本就有 `:deep(.h-card)`/`:deep(.h-card__body)` 补链样式，GroupFormPage 改造时漏加
+
+### 修复（commit `26f301a`）
+
+GroupFormPage 增加 scoped style，与 ProvidersPage 一致：
+
+```css
+:deep(.h-card) { display: flex; flex-direction: column; }
+:deep(.h-card__body) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+```
+
+纯样式改动，无结构/逻辑变更。typecheck/lint/test:unit(26)/build 全绿。
+
+### 教训
+
+**HCard 当布局容器使用时，`.h-card__body` 的 flex 链必须显式补齐**（`:deep` scoped 样式），否则内部 flex 子项的 `flex-1`/滚动失效。此约定值得进 spec：component-guidelines 双栏卡片章节补一句「HCard 作布局容器时需 :deep(.h-card__body) 接 flex 列链」。
+
+---
+
+## 2026-08-07 分组表单页双栏撑满页高、整页不滚动（task: 08-07-group-form-full-height）✅
+
+### Status
+
+[OK] **Completed**（AC1-AC3）
+
+### 需求
+
+编辑/新建分组页不整体滚动，双栏（可选模型 / 故障转移队列）撑满剩余页高，各自内部滚动。
+
+### 改动（commit `8b7ca23`）
+
+- 页面根：`flex flex-col gap-4` → `flex h-full min-h-0 flex-col gap-4 overflow-hidden`
+- 表单外层 + form：加 `flex-1 min-h-0`（高度链传递）
+- 双栏 grid：加 `flex-1`
+- 左右 HCard：`max-h-[32rem]` → `flex-1`（窗口变高双栏随之变高）
+
+双栏内部滚动区沿用上轮 `.h-card__body` flex 链，无新增样式。typecheck/lint/build 全绿。
+
+### 要点
+
+RouterView 无包裹层，页面根 `h-full` 直接对齐 AppShell `overflow-auto p-6` 容器内容高度，整页不再滚动；内容超出时仅双栏内部滚。
+
+---
+
+## 2026-08-07 修复分组表单页整页滚动（task: 08-07-fix-group-form-grid-scroll）✅
+
+### Status
+
+[OK] **Completed**（AC1-AC3）
+
+### 问题
+
+上轮改 `max-h-[32rem]`→`flex-1` 后整页仍有滚动条。
+
+### 根因（两个叠加）
+
+1. **grid item 上 flex-1 不生效**：双栏容器 `grid grid-cols-1 lg:grid-cols-2`，HCard 是 grid item，flex 属性无效 → 卡片高度回退内容高，撑高整页。
+2. **上轮编辑部分失败未察觉**：4 处编辑中报错后整体未写入，实际只改了 2 处 HCard（commit 只 +2/-2），根容器 `h-full overflow-hidden` 与 form `flex-1 min-h-0` 链根本没进去 → 根容器无高度约束，整页自然滚动。
+
+### 修复（commit `22fc225`）
+
+- 双栏容器 grid → `flex min-h-0 flex-1 flex-col gap-4 lg:flex-row`（flex item 的 flex-1 生效；响应式语义等价）
+- 补上根容器 `flex h-full min-h-0 flex-col gap-4 overflow-hidden` + form 高度链
+
+完整链：根 h-full → v-else div flex-1 → form flex-1 → 双栏 flex flex-1 → 左右 HCard flex-1 → .h-card__body flex 链 → 内部滚动区。
+
+### 教训
+
+- **edit 工具一次多 edits 若有失败项会整体失败**：commit 前须核对目标行实际内容（git show 确认 diff 行数/内容），不能只信「replace 成功」。
+- **grid 布局中 flex-1 无效**：双栏等高拉伸必须用 flex row（或 grid 的 align stretch + 行高约束），grid item 上写 flex-1 是无效代码。此点值得进 spec。

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import {
   delimiter,
@@ -20,6 +20,10 @@ interface PiToolResult {
 }
 interface PiExtensionContext {
   hasUI?: boolean;
+  model?: {
+    provider?: string;
+    id?: string;
+  };
   sessionManager?: {
     getSessionId?: () => string;
     getSessionFile?: () => string | undefined;
@@ -293,7 +297,7 @@ function summaryText(text: string) {
   return `${text.trim().replace(/[。.!?…]+$/u, "")}...`;
 }
 function splitModelThinking(model?: string, fallbackThinking?: string) {
-  const m = model?.match(/^(.*):(off|minimal|low|medium|high|xhigh)$/i);
+  const m = model?.match(/^(.*):(off|minimal|low|medium|high|xhigh|max)$/i);
   return {
     model: m ? m[1] : model,
     thinking: (m?.[2] ?? fallbackThinking)?.toLowerCase(),
@@ -428,10 +432,13 @@ function exists(p: string) {
 function shellQuote(v: string) {
   return `'${v.replace(/'/g, `'\\''`)}'`;
 }
-function callStr(cb: (() => string | undefined) | undefined): string | null {
+function callStr(
+  cb: (() => string | undefined) | undefined,
+  receiver?: unknown,
+): string | null {
   if (!cb) return null;
   try {
-    return str(cb());
+    return str(cb.call(receiver));
   } catch {
     return null;
   }
@@ -654,16 +661,17 @@ function resolveRunCfg(
   input: SubagentInput,
   agentCfg: AgentConfig,
   inheritedThinking?: string,
+  inheritedModel?: string,
 ): PiRunConfig {
-  const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
+  const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
   const normalize = (v: unknown): string | undefined => {
     const s = typeof v === "string" && v.trim() ? v.trim().toLowerCase() : "";
     return THINKING_LEVELS.includes(s) ? s : undefined;
   };
-  const suffixRe = /:(off|minimal|low|medium|high|xhigh)$/i;
+  const suffixRe = /:(off|minimal|low|medium|high|xhigh|max)$/i;
   const inputModel = str(input.model);
   const agentModel = agentCfg.model;
-  const rawModel = inputModel ?? agentModel;
+  const rawModel = inputModel ?? agentModel ?? str(inheritedModel);
   const inputSuffixThinking = normalize(inputModel?.match(suffixRe)?.[1]);
   const agentSuffixThinking = normalize(agentModel?.match(suffixRe)?.[1]);
   const baseModel = rawModel?.replace(suffixRe, "");
@@ -676,6 +684,12 @@ function resolveRunCfg(
   if (baseModel && thinking && thinking !== "off")
     return { model: `${baseModel}:${thinking}`, thinking, tools: agentCfg.tools };
   return { model: baseModel || rawModel, thinking, tools: agentCfg.tools };
+}
+
+function contextModelRef(ctx?: PiExtensionContext): string | undefined {
+  const provider = str(ctx?.model?.provider);
+  const modelId = str(ctx?.model?.id);
+  return provider && modelId ? `${provider}/${modelId}` : undefined;
 }
 
 function buildPiArgs(cfg: PiRunConfig): string[] {
@@ -758,11 +772,10 @@ function truncateUtf8(buf: Buffer, cap: number): Buffer {
     if ((lead & 0xe0) === 0xc0) seqLen = 2;
     else if ((lead & 0xf0) === 0xe0) seqLen = 3;
     else if ((lead & 0xf8) === 0xf0) seqLen = 4;
-    // Cut before the lead byte when its full sequence didn't fit;
-    // otherwise the trailing sequence is complete — keep it whole.
-    if (i - 1 + seqLen > cap) return buf.subarray(0, i - 1);
+    // Drop the lead byte too if its full sequence didn't fit.
+    if (i - 1 + seqLen > cap) i--;
   }
-  return buf.subarray(0, cap);
+  return buf.subarray(0, i);
 }
 
 function stripInlineComment(value: string): string {
@@ -1017,17 +1030,18 @@ function parseAgentFM(c: string): AgentConfig {
 }
 
 function contextKey(input?: unknown, ctx?: PiExtensionContext): string | null {
-  const ov = str(process.env.TRELLIS_CONTEXT_ID);
-  if (ov) return ov.replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 160) || hash(ov);
   const sessionId =
-    callStr(ctx?.sessionManager?.getSessionId) ??
+    callStr(ctx?.sessionManager?.getSessionId, ctx?.sessionManager) ??
     str(process.env.PI_SESSION_ID) ??
     str(process.env.PI_SESSIONID) ??
     lookupStr(input, ["session_id", "sessionId", "sessionID"]);
-  if (sessionId)
-    return `pi_${sessionId.replace(/[^A-Za-z0-9._-]+/g, "_") || hash(sessionId)}`;
+  if (sessionId) {
+    const normalized = sessionId.replace(/[^A-Za-z0-9._-]+/g, "_");
+    if (!normalized) return `pi_${hash(sessionId)}`;
+    return `pi_${normalized}${normalized === sessionId ? "" : `_${hash(sessionId)}`}`;
+  }
   const transcriptPath =
-    callStr(ctx?.sessionManager?.getSessionFile) ??
+    callStr(ctx?.sessionManager?.getSessionFile, ctx?.sessionManager) ??
     lookupStr(input, ["transcript_path", "transcriptPath", "transcript"]);
   if (transcriptPath) return `pi_transcript_${hash(transcriptPath)}`;
   return null;
@@ -1053,94 +1067,12 @@ function readTaskDir(root: string, key: string | null): string | null {
     return null;
   }
 }
-function sessionHasTask(root: string, key: string): boolean {
-  try {
-    const ctx = JSON.parse(
-      readText(join(root, ".trellis", ".runtime", "sessions", `${key}.json`)),
-    ) as JsonObject;
-    return !!str(ctx.current_task);
-  } catch {
-    return false;
-  }
-}
-function adoptKey(root: string, key: string): string {
-  if (sessionHasTask(root, key)) return key;
-  try {
-    const dir = join(root, ".trellis", ".runtime", "sessions");
-    const keys = readdirSync(dir)
-      .filter(
-        (f) => f.endsWith(".json") && sessionHasTask(root, f.slice(0, -5)),
-      )
-      .map((f) => f.slice(0, -5));
-    const proc = keys.filter((k) => k.startsWith("pi_process_"));
-    const cands = proc.length ? proc : keys;
-    return cands.length === 1 ? cands[0]! : key;
-  } catch {
-    return key;
-  }
-}
 
 // ── Workflow State Breadcrumb ─────────────────────────────────────────
-const WORKFLOW_ID_RE = /^[A-Za-z0-9_-]+$/;
-const DEFAULT_WORKFLOW_RE =
-  /^default_workflow:\s*(['"]?)([A-Za-z0-9_-]+)\1\s*(?:#.*)?$/m;
-
-function workflowVariant(root: string, workflowId: string): string {
-  if (!WORKFLOW_ID_RE.test(workflowId)) return "";
-  const path = join(root, ".trellis", "workflows", `${workflowId}.md`);
-  return exists(path) ? path : "";
-}
-
-function developerWorkflowId(root: string): string {
-  for (const line of readText(join(root, ".trellis", ".developer")).split(
-    /\r?\n/,
-  )) {
-    if (line.startsWith("workflow="))
-      return line.slice("workflow=".length).trim();
-  }
-  return "";
-}
-
-function configDefaultWorkflowId(root: string): string {
-  return (
-    readText(join(root, ".trellis", "config.yaml")).match(
-      DEFAULT_WORKFLOW_RE,
-    )?.[2] ?? ""
-  );
-}
-
-/** Mirrors common/workflow_selection.py without spawning another Python
- * process on every Pi turn. Invalid or missing selections fall through. */
-function resolveWorkflowMd(root: string, key: string | null): string {
-  const taskDir = readTaskDir(root, key);
-  let workflowId = "";
-  if (taskDir) {
-    try {
-      const task = JSON.parse(
-        readText(join(taskDir, "task.json")),
-      ) as JsonObject;
-      workflowId = typeof task.workflow === "string" ? task.workflow : "";
-    } catch {}
-  }
-  if (workflowId) {
-    const pinned = workflowVariant(root, workflowId);
-    if (pinned) return pinned;
-    console.error(
-      `Warning: active task selects workflow ${JSON.stringify(workflowId)} but .trellis/workflows/ has no matching file; using default workflow resolution`,
-    );
-  }
-
-  const personal = workflowVariant(root, developerWorkflowId(root));
-  if (personal) return personal;
-  const team = workflowVariant(root, configDefaultWorkflowId(root));
-  if (team) return team;
-  return join(root, ".trellis", "workflow.md");
-}
-
 const WF_RE =
   /\[workflow-state:([A-Za-z0-9_-]+)\]\s*\n([\s\S]*?)\n\s*\[\/workflow-state:\1\]/g;
 function workflowBreadcrumb(root: string, key: string | null): string {
-  const wf = readText(resolveWorkflowMd(root, key));
+  const wf = readText(join(root, ".trellis", "workflow.md"));
   if (!wf) return "";
   const templates: Record<string, string> = {};
   for (const m of wf.matchAll(WF_RE)) {
@@ -1559,11 +1491,17 @@ async function runSubagent(
   signal?: AbortSignal,
   onUpdate?: (r: PiToolResult) => void,
   inheritedThinking?: string,
+  inheritedModel?: string,
 ): Promise<{ output: string; details: ProgressDetails; failed: boolean }> {
   const agentName = normalizeAgent(input.agent);
   const agentRaw = readText(join(root, ".pi", "agents", `${agentName}.md`));
   const agentCfg = parseAgentFM(agentRaw);
-  const runCfg = resolveRunCfg(input, agentCfg, inheritedThinking);
+  const runCfg = resolveRunCfg(
+    input,
+    agentCfg,
+    inheritedThinking,
+    inheritedModel,
+  );
   const mode = input.mode ?? "single";
   const startedAt = Date.now();
   const details: ProgressDetails = {
@@ -1709,7 +1647,7 @@ export default function trellisExtension(pi: {
   let curKey: string | null = null;
 
   const getKey = (input?: unknown, ctx?: PiExtensionContext) => {
-    const k = adoptKey(root, contextKey(input, ctx) ?? curKey ?? procKey);
+    const k = contextKey(input, ctx) ?? curKey ?? procKey;
     curKey = k;
     return k;
   };
@@ -1808,7 +1746,7 @@ export default function trellisExtension(pi: {
           type: "string",
           description:
             "Optional Pi thinking level override for the child sub-agent process.",
-          enum: ["off", "minimal", "low", "medium", "high", "xhigh"],
+          enum: ["off", "minimal", "low", "medium", "high", "xhigh", "max"],
         },
       },
     },
@@ -1868,6 +1806,7 @@ export default function trellisExtension(pi: {
       };
       const key = getKey(cleanInput, ctx);
       const inheritedThinking = pi.getThinkingLevel?.();
+      const inheritedModel = contextModelRef(ctx);
       const result = await runSubagent(
         root,
         cleanInput,
@@ -1875,6 +1814,7 @@ export default function trellisExtension(pi: {
         signal,
         onUpdate,
         inheritedThinking,
+        inheritedModel,
       );
       return {
         content: [{ type: "text", text: result.output }],
