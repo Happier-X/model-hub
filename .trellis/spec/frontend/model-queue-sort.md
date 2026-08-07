@@ -76,7 +76,7 @@ export function sortQueueByLeaderboard<T>(
 
 **UI / 表单**
 
-- 排序 **只改当前表单** `form.items`，**不得**自动 `save`。
+- 排序**编辑态**成功后自动 `updateGroup` 落库并留在页面（提示「已保存，可继续拖拽微调」）；**新建态**（无分组 id）只改表单，提示保存后生效，不自动创建分组。
 - 展示：命中时显示 `llm_benchmark · {分数}`，未命中时灰底显示 `未匹配`。
 - 榜单状态含更新时间、条数、缓存或陈旧；刷新失败时附中文错误提示。
 - 用户仍可拖拽微调顺序。
@@ -131,5 +131,5 @@ if (!a.match && b.match) return 1
 
 ## 与组件规范关系
 
-- 延续 `component-guidelines.md`：能力排序不自动保存、可拖拽微调。
+- 排序编辑态自动保存（`autoSaveAfterSort`：updateGroup + 留在页面），新建态仅改表单；仍可拖拽微调。
 - 外部模式直接作为唯一指标，精简交互理解成本。

@@ -1871,3 +1871,26 @@ code_v3 切换后用户排序「全未匹配」。根因：磁盘缓存仍是旧
 ### 验证
 
 typecheck/lint/unit(26)/build 全绿。spec 无需改（backend 24h 自动同步机制表述与 UI 位置无关）。
+
+---
+
+## 2026-08-07 排序后自动保存（task: 08-07-auto-save-after-sort）✅
+
+### Status
+
+[OK] **Completed**（AC1-AC5）
+
+### 需求
+
+用户：「按模型能力排序」后重开页面顺序恢复原样（排序只改内存）。确认方案 2：排序后自动保存（不做「打开自动加载榜单」——用户可能还会手动微调）。
+
+### 改动
+
+- `buildGroupPayload(value)`：onSubmit 与 autoSaveAfterSort 共用（防漂移）
+- `autoSaveAfterSort()`：编辑态 updateGroup 落库 → formMessage「已保存，可继续拖拽微调」；不跳转；失败 error
+- `sortQueueByCapability` 尾部按 isEditing 分支：编辑态自动保存 / 新建态提示「保存后生效」
+- spec model-queue-sort.md：UI/表单小节改为「编辑态自动保存，新建态仅改表单」
+
+### 验证
+
+typecheck/lint/unit(26)/build 全绿。

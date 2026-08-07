@@ -100,11 +100,7 @@ const form = useForm({
     const mode = getGroupSaveMode(targetId);
     saving.value = true;
     try {
-      const payload = {
-        name: value.name,
-        thinking_effort: value.thinking_effort,
-        items: value.items.filter((i) => i.provider_id > 0 && i.upstream_model.trim()),
-      };
+      const payload = buildGroupPayload(value);
       if (mode === "update" && targetId !== null) {
         await updateGroup({ id: targetId, ...payload });
       } else {
@@ -119,6 +115,15 @@ const form = useForm({
     }
   },
 });
+
+/** 表单值 → 后端分组 payload（onSubmit 与排序自动保存共用，避免漂移）。 */
+function buildGroupPayload(value: { name: string; thinking_effort: ThinkingEffort; items: QueueItemDraft[] }) {
+  return {
+    name: value.name,
+    thinking_effort: value.thinking_effort,
+    items: value.items.filter((i) => i.provider_id > 0 && i.upstream_model.trim()),
+  };
+}
 
 /** 订阅表单 values，供队列操作与模板读取 */
 const formValues = form.useSelector((s) => s.values);
@@ -434,7 +439,32 @@ async function sortQueueByCapability() {
     return;
   }
 
-  applySortedItems(sorted, "已按 llm_benchmark 综合能力排序；未匹配项已沉底。点击“保存”后生效，仍可拖拽微调。");
+  applySortedItems(sorted, "");
+  if (isEditing.value) {
+    // 编辑态：自动落库并留在页面供继续拖拽微调
+    await autoSaveAfterSort();
+  } else {
+    // 新建态：无分组 id，不自动创建；提示保存后生效
+    formMessage.value = "已按 llm_benchmark 综合能力排序；未匹配项已沉底。点击“保存”后生效，仍可拖拽微调。";
+  }
+}
+
+/** 排序成功后自动保存（仅编辑态调用）：updateGroup 落库，不跳转。 */
+async function autoSaveAfterSort(): Promise<boolean> {
+  if (saving.value) return false;
+  const targetId = editingGroupId.value;
+  if (targetId === null) return false;
+  saving.value = true;
+  try {
+    await updateGroup({ id: targetId, ...buildGroupPayload(formValues.value) });
+    formMessage.value = "已按 llm_benchmark 排序并保存，可继续拖拽微调。";
+    return true;
+  } catch (e) {
+    error.value = extractInvokeError(e);
+    return false;
+  } finally {
+    saving.value = false;
+  }
 }
 </script>
 
