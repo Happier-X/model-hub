@@ -719,3 +719,19 @@ async function sortQueueByCapability() {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* 让 HCard (.h-card) 内部 .h-card__body slot 容器参与 flex 列布局并撑满高度，
+   否则双栏内部 overflow-y-auto 滚动区的 flex-1 失效，内容被 max-h 截断无法滚动。 */
+:deep(.h-card) {
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.h-card__body) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+</style>
