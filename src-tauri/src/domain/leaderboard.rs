@@ -74,8 +74,16 @@ pub struct ModelLeaderboardSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct LeaderboardCacheFile {
     source: String,
+    /// 缓存所属榜单分类；旧文件无此字段时缺省 "logic"（迁移兼容，与当前分类不等则自动失效）。
+    #[serde(default = "default_cache_category")]
+    category: String,
     fetched_at_unix: i64,
     models: Vec<LeaderboardModel>,
+}
+
+/// 旧缓存文件缺省分类（首次切换前的榜单）。
+fn default_cache_category() -> String {
+    "logic".into()
 }
 
 fn now_unix() -> i64 {
@@ -301,6 +309,14 @@ fn read_cache(config_dir: &Path) -> Result<Option<LeaderboardCacheFile>, AppErro
             e
         ))
     })?;
+    if cache.category != LLM_BENCHMARK_CATEGORY {
+        tracing::warn!(
+            cache_category = %cache.category,
+            expected = LLM_BENCHMARK_CATEGORY,
+            "榜单缓存分类与当前配置不符，忽略缓存并重新拉取"
+        );
+        return Ok(None);
+    }
     if cache.models.is_empty() {
         return Ok(None);
     }
@@ -320,6 +336,7 @@ fn write_cache(
     let tmp = config_dir.join(format!("{LEADERBOARD_CACHE_FILE}.tmp"));
     let file = LeaderboardCacheFile {
         source: "llm_benchmark".into(),
+        category: LLM_BENCHMARK_CATEGORY.into(),
         fetched_at_unix,
         models: models.to_vec(),
     };
@@ -657,9 +674,43 @@ mod tests {
         assert_eq!(loaded.fetched_at_unix, now);
         assert_eq!(loaded.models.len(), 3);
         assert_eq!(loaded.source, "llm_benchmark");
+        assert_eq!(loaded.category, "code_v3");
 
         assert!(is_cache_fresh(now, now + 3600));
         assert!(!is_cache_fresh(now, now + LEADERBOARD_CACHE_TTL_SECS + 1));
+    }
+
+    #[test]
+    fn read_cache_mismatch_category_returns_none() {
+        // 旧 logic 榜缓存（模拟用户实际旧缓存）：分类与当前 code_v3 不符 → 视为无缓存。
+        let dir = TempDir::new().unwrap();
+        let path = cache_path(dir.path());
+        fs::create_dir_all(dir.path()).unwrap();
+        fs::write(
+            &path,
+            r#"{"source":"llm_benchmark","category":"logic","fetched_at_unix":1700000000,"models":[{"id":"GPT-5.5 (xhigh)"}]}"#,
+        )
+        .unwrap();
+        assert!(read_cache(dir.path()).unwrap().is_none());
+    }
+
+    #[test]
+    fn read_cache_missing_category_defaults_logic_and_ignored() {
+        // 无 category 字段的旧格式 JSON：serde default 注入 "logic"，与当前分类不符 → 失效。
+        let dir = TempDir::new().unwrap();
+        let path = cache_path(dir.path());
+        fs::create_dir_all(dir.path()).unwrap();
+        fs::write(
+            &path,
+            r#"{"source":"llm_benchmark","fetched_at_unix":1700000000,"models":[{"id":"GPT-5.5 (xhigh)"}]}"#,
+        )
+        .unwrap();
+        let cache: LeaderboardCacheFile = serde_json::from_str(
+            &fs::read_to_string(&path).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(cache.category, "logic");
+        assert!(read_cache(dir.path()).unwrap().is_none());
     }
 
     #[test]

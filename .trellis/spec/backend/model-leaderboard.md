@@ -87,6 +87,16 @@ pub fn locate_latest_csv(datasets_json: &str, category: &str) -> Result<String, 
 | `cache_hit` | bool | 本次未发起网络、直接用有效缓存 |
 | `models` | `LeaderboardModel[]` | 白名单解析结果 |
 
+**磁盘缓存 `LeaderboardCacheFile`（含 `category` 标识）**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `category` | string | 缓存所属榜单分类（如 `"code_v3"`）；旧文件缺省 `"logic"`（serde default，迁移兼容） |
+| `fetched_at_unix` | i64 | 同响应 |
+| `models` | `LeaderboardModel[]` | 同响应 |
+
+分类不匹配语义：读取缓存时 `category != 当前 LLM_BENCHMARK_CATEGORY` → **视为无缓存**（warn + 强制联网重拉），不回退旧分类数据；切换榜单分类后旧缓存自动失效，无需手动删文件。
+
 ### 4. Validation & Error Matrix
 
 | 条件 | 行为 |
