@@ -1746,3 +1746,106 @@ RouterView 无包裹层，页面根 `h-full` 直接对齐 AppShell `overflow-aut
 
 - **edit 工具一次多 edits 若有失败项会整体失败**：commit 前须核对目标行实际内容（git show 确认 diff 行数/内容），不能只信「replace 成功」。
 - **grid 布局中 flex-1 无效**：双栏等高拉伸必须用 flex row（或 grid 的 align stretch + 行高约束），grid item 上写 flex-1 是无效代码。此点值得进 spec。
+
+---
+
+## 2026-08-07 排序按钮移入故障转移队列卡片（task: 08-07-group-form-sort-in-queue）✅
+
+### Status
+
+[OK] **Completed**（AC1-AC3）
+
+### 需求
+
+「按模型能力排序」从页面顶部工具行移入右栏「故障转移队列」卡片 header。
+
+### 改动（commit `d1bb377`）
+
+- 右栏 HCard #header 右侧：「按模型能力排序」+「清空」并排（span 包裹）
+- 顶部工具行移除排序按钮，保留「强制刷新榜单」+ 状态文本（榜单是排序数据源辅助）
+- disabled 条件沿用 `items.length < 2 || leaderboardLoading`
+
+### 踩坑
+
+edit 时 newText 多写一个 `</div>` 闭合导致模板结构坏（build 报错），修正后四项全绿。**改模板闭合标签后必须 build 验证**。
+
+---
+
+## 2026-08-07 移除强制刷新榜单按钮与状态文本（task: 08-07-group-form-sort-in-queue 延续）✅
+
+### Status
+
+[OK] **Completed**
+
+### 需求
+
+「按模型能力排序」移入队列卡片后，顶部「强制刷新榜单」按钮与「尚未加载外部榜单（排序时将自动拉取）」状态文本多余——排序时 `ensureLeaderboardForExternalSort` 已自动拉取。
+
+### 改动
+
+- 删除顶部工具行（loadLeaderboard(true) 按钮 + leaderboardStatusText span）
+- 删除 `leaderboardStatusText` computed；`formatUnix`/`loadLeaderboard`（ensure 内部用 false 拉取）保留
+- 排序失败文案「请检查网络后强制刷新榜单」→「请检查网络后重试」
+
+typecheck/lint/build 全绿。
+
+---
+
+## 2026-08-07 队列排序改用 llm_benchmark Agentic 榜（task: 08-07-rank-agentic-code-v3）✅
+
+### Status
+
+[OK] **Completed**（AC1-AC5）
+
+### 需求
+
+分组「按模型能力排序」榜单依据从 logic（推理）榜切换为 code_v3（Agentic）榜，与网站「Agentic」标签页一致（用户指定 `#category=code_v3`）。
+
+### 关键发现
+
+- llm_benchmark 分类：logic（「推理」）/ code_v3（「Agentic」）/ code（废弃）/ vision。**code_v3 即用户所指 Agentic 榜**。
+- code_v3 CSV 是**等级制**（Pass/Pending/Skip/Failed/排名/等级如 `2/A+`），**无数值分**；网站无「中位分数」列不排序，展示即 CSV 行序 = 作者能力序。
+- 旧实现（8-05 前）OpenRouter artificial_analysis 有 `agentic_index`，与本次无关；本次不改数据源只切分类。
+
+### 决策（用户确认）
+
+- **决策 1（用户确认）**：排名依据 = code_v3 CSV 行序倒排分（首行最高），与网站展示顺序一致；不做「等级→分数」映射求和。
+- 决策 2 未答复（覆盖模型变少 ~18 vs ~49），按 Notes 记录为预期行为。
+
+### 改动（3 commits）
+
+- `feat(backend)`：`LLM_BENCHMARK_CATEGORY` logic→code_v3；`locate_latest_logic_csv` 泛化 `locate_latest_csv(datasets_json, category)`；新增 `parse_code_v3_csv`（英文表头定位 Model、行序倒排 `agentic_score`、intelligence=None）；logic 版保留回退。
+- `feat(frontend)`：`ExternalLeaderboardEntry` 加 `agentic_score`，`buildExternalScoreIndex` 改消费；tauri.ts 注释同步；测试字段切换。
+- `docs(spec)`：model-leaderboard / model-queue-sort / upstream-access 三文件更新。
+
+### 验证
+
+- cargo test --lib 121 全绿（含 3 新测试）；typecheck/lint/unit(26)/build 全绿
+- 真实 code_v3 2026-08 CSV 验证：16 模型行序倒排正确，Claude Fable 5 居首（AC3）
+- 偶发：`drop_stops_live_proxy` 并行端口竞争失败一次（单跑通过，环境既有问题非本次引入）
+
+---
+
+## 2026-08-07 榜单缓存分类不匹配修复（task: 08-07-fix-leaderboard-cache-category）✅
+
+### Status
+
+[OK] **Completed**（AC1-AC4）
+
+### 需求
+
+code_v3 切换后用户排序「全未匹配」。根因：磁盘缓存仍是旧 logic 格式（43 模型、agentic_score 全 None），缓存无分类标识，TTL 内被当有效缓存 → 前端索引空。
+
+### 修复
+
+- `LeaderboardCacheFile` 加 `category` 字段，serde default="logic"（兼容旧文件）
+- `write_cache` 写当前分类；`read_cache` 分类不匹配 → warn + Ok(None) 强制重拉
+- 测试 3 项（旧格式缺省+失效、分类匹配读回、roundtrip 断言）→ 123 全绿
+
+### 插曲
+
+用户跑 `pnpm tauri dev`，我改 leaderboard.rs 后 dev 自动重编译重启，缓存已被自动重写为 code_v3 格式（16 模型、含 category 字段、fetched_at 09:28:49）——修复方向被真实环境验证。
+
+### 遗留观察
+
+- 即使刷新，code_v3 仅 16 模型，队列中真实模型大量不命中（上任务已确认接受）。
