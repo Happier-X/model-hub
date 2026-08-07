@@ -1849,3 +1849,25 @@ code_v3 切换后用户排序「全未匹配」。根因：磁盘缓存仍是旧
 ### 遗留观察
 
 - 即使刷新，code_v3 仅 16 模型，队列中真实模型大量不命中（上任务已确认接受）。
+
+---
+
+## 2026-08-07 自动同步开关迁移到分组表单页「可选模型」（task: 08-07-move-auto-sync-to-group-form）✅
+
+### Status
+
+[OK] **Completed**（AC1-AC4）
+
+### 需求
+
+用户：自动同步开关加到分组表单页「可选模型」供应商行上，供应商页的自动同步不要了。方案 A 确认。
+
+### 改动
+
+- GroupFormPage：HCell suffix 区加 HSwitch（@click.stop 防触发展开）；新增 autoSyncTogglingIds + toggleProviderAutoSync（乐观更新 → setProviderAutoSync → 返回值同步 → 失败回滚到 error 展示位 728 行）
+- ProvidersPage：移除 auto_sync 表格列、行内开关模板、toggleProviderAutoSync、autoSyncTogglingIds、setProviderAutoSync 导入；defaultFormValues.auto_sync: true 与提交透传保留（新建默认开）
+- 后端零改动；「立即同步」按钮保留
+
+### 验证
+
+typecheck/lint/unit(26)/build 全绿。spec 无需改（backend 24h 自动同步机制表述与 UI 位置无关）。

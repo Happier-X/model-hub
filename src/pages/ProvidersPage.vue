@@ -19,7 +19,6 @@ import {
   deleteProvider,
   extractInvokeError,
   listProviders,
-  setProviderAutoSync,
   syncProviderNow,
   updateProvider,
   type Provider,
@@ -57,7 +56,6 @@ const providerColumns: HTableColumn[] = [
   { key: "name", title: "名称" },
   { key: "base_url", title: "Base URL" },
   { key: "enabled", title: "启用" },
-  { key: "auto_sync", title: "自动同步" },
   { key: "last_sync_at", title: "上次同步" },
   { key: "actions", title: "操作" },
 ];
@@ -69,8 +67,6 @@ const saving = ref(false);
 const pasteText = ref("");
 // 行内启用开关进行中的 id 集合，用于 disabled 防重复点击
 const togglingIds = ref<Set<number>>(new Set());
-// 行内自动同步开关进行中的 id 集合，用于 disabled 防重复点击
-const autoSyncTogglingIds = ref<Set<number>>(new Set());
 // 「立即同步」进行中的 id 集合，按钮 loading/disabled 防重复点击
 const syncingIds = ref<Set<number>>(new Set());
 
@@ -197,30 +193,6 @@ function formatSyncTime(unix: number | null | undefined): string {
     return new Date(unix * 1000).toLocaleString("zh-CN", { hour12: false });
   } catch {
     return String(unix);
-  }
-}
-
-// 行内自动同步开关：乐观更新本地 -> 调后端就地切换 -> 以返回值为准同步 -> 失败回滚并报错
-async function toggleProviderAutoSync(p: Provider, next: boolean) {
-  if (autoSyncTogglingIds.value.has(p.id)) return;
-  const previous = p.auto_sync;
-  // 乐观更新
-  const target = items.value.find((it) => it.id === p.id);
-  if (target) target.auto_sync = next;
-  autoSyncTogglingIds.value = new Set(autoSyncTogglingIds.value).add(p.id);
-  try {
-    const updated = await setProviderAutoSync(p.id, next);
-    // 以服务端返回为准同步
-    const sync = items.value.find((it) => it.id === p.id);
-    if (sync) Object.assign(sync, updated);
-  } catch (e) {
-    const failed = items.value.find((it) => it.id === p.id);
-    if (failed) failed.auto_sync = previous;
-    error.value = extractInvokeError(e);
-  } finally {
-    const nextSet = new Set(autoSyncTogglingIds.value);
-    nextSet.delete(p.id);
-    autoSyncTogglingIds.value = nextSet;
   }
 }
 
@@ -411,14 +383,6 @@ onMounted(refresh);
                   :disabled="togglingIds.has((row as Provider).id) || saving"
                   :aria-label="`${(row as Provider).name} 启用`"
                   @update:model-value="toggleProviderEnabled(row as Provider, $event)"
-                />
-              </template>
-              <template v-else-if="column.key === 'auto_sync'">
-                <HSwitch
-                  :model-value="(row as Provider).auto_sync"
-                  :disabled="autoSyncTogglingIds.has((row as Provider).id) || saving"
-                  :aria-label="`${(row as Provider).name} 自动同步`"
-                  @update:model-value="toggleProviderAutoSync(row as Provider, $event)"
                 />
               </template>
               <template v-else-if="column.key === 'last_sync_at'">

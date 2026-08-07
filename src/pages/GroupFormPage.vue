@@ -3,13 +3,14 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ChevronDown } from "@lucide/vue";
 import { useForm } from "@tanstack/vue-form";
-import { HButton, HCard, HCell, HEmpty, HInput, HLoading, HSelect, HTag, type HSelectOption } from "happier-ui";
+import { HButton, HCard, HCell, HEmpty, HInput, HLoading, HSelect, HSwitch, HTag, type HSelectOption } from "happier-ui";
 import {
   createGroup,
   extractInvokeError,
   getModelLeaderboard,
   listGroups,
   listProviders,
+  setProviderAutoSync,
   updateGroup,
   type Group,
   type ModelLeaderboardSnapshot,
@@ -76,6 +77,8 @@ const loadFailed = ref(false);
 const modelCache = useProviderModelCache();
 const expandedProviders = ref<Set<number>>(new Set());
 const leftFilter = ref("");
+/** 行内自动同步开关进行中的 id 集合（disabled 防重复点击） */
+const autoSyncTogglingIds = ref<Set<number>>(new Set());
 /** 表单内提示（排序/全部加入/同步反馈） */
 const formMessage = ref("");
 
@@ -275,6 +278,30 @@ function toggleProvider(providerId: number) {
     void modelCache.ensure(providerId).catch(() => {});
   }
   expandedProviders.value = next;
+}
+
+// 行内自动同步开关：乐观更新本地 -> 调后端就地切换 -> 以返回值为准同步 -> 失败回滚并报错
+async function toggleProviderAutoSync(p: Provider, next: boolean) {
+  if (autoSyncTogglingIds.value.has(p.id)) return;
+  const previous = p.auto_sync;
+  // 乐观更新
+  const target = providers.value.find((it) => it.id === p.id);
+  if (target) target.auto_sync = next;
+  autoSyncTogglingIds.value = new Set(autoSyncTogglingIds.value).add(p.id);
+  try {
+    const updated = await setProviderAutoSync(p.id, next);
+    // 以服务端返回为准同步
+    const sync = providers.value.find((it) => it.id === p.id);
+    if (sync) Object.assign(sync, updated);
+  } catch (e) {
+    const failed = providers.value.find((it) => it.id === p.id);
+    if (failed) failed.auto_sync = previous;
+    error.value = extractInvokeError(e);
+  } finally {
+    const nextSet = new Set(autoSyncTogglingIds.value);
+    nextSet.delete(p.id);
+    autoSyncTogglingIds.value = nextSet;
+  }
 }
 
 function addModelFromLeft(providerId: number, modelId: string) {
@@ -519,13 +546,23 @@ async function sortQueueByCapability() {
                     />
                   </template>
                   <template #suffix>
-                    <!-- 模型已加载显示数量；未加载显示同步状态（数据来自 list_providers 返回的 last_sync_at） -->
-                    <span v-if="modelCache.getStatus(p.id) === 'ready'" class="text-xs text-slate-400">
-                      {{ modelCache.getModels(p.id).length }} 个模型
-                    </span>
-                    <span v-else class="text-xs text-slate-400">
-                      {{ p.last_sync_at ? `已同步 ${formatUnix(p.last_sync_at)}` : "未同步" }}
-                    </span>
+                    <!-- 自动同步开关：点击不展开手风琴（stop），仅切换 auto_sync -->
+                    <div class="flex items-center gap-2" @click.stop>
+                      <HSwitch
+                        :model-value="p.auto_sync"
+                        :disabled="autoSyncTogglingIds.has(p.id)"
+                        :aria-label="`${p.name} 自动同步`"
+                        title="自动同步"
+                        @update:model-value="toggleProviderAutoSync(p, $event)"
+                      />
+                      <!-- 模型已加载显示数量；未加载显示同步状态（数据来自 list_providers 返回的 last_sync_at） -->
+                      <span v-if="modelCache.getStatus(p.id) === 'ready'" class="text-xs text-slate-400">
+                        {{ modelCache.getModels(p.id).length }} 个模型
+                      </span>
+                      <span v-else class="text-xs text-slate-400">
+                        {{ p.last_sync_at ? `已同步 ${formatUnix(p.last_sync_at)}` : "未同步" }}
+                      </span>
+                    </div>
                   </template>
                 </HCell>
 
