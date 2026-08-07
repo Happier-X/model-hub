@@ -1,6 +1,6 @@
 # 外部模型榜单（llm_benchmark）
 
-> 公共榜单拉取（datasets.json 定位 + logic 月榜 CSV）、白名单解析、文件缓存与 IPC 契约。
+> 公共榜单拉取（datasets.json 定位 + code_v3 Agentic 月榜 CSV）、行序解析、文件缓存与 IPC 契约。
 
 ---
 
@@ -9,7 +9,7 @@
 ### 1. Scope / Trigger
 
 - Trigger：分组队列按「外部综合能力」排序时，管理面需获取公开模型分数；跨层 IPC + 外网 + 文件缓存，必须写清可执行合同。
-- 数据源：[llm2014/llm_benchmark](https://github.com/llm2014/llm_benchmark)（GitHub Pages raw），logic 综合榜「极限分数」。
+- 数据源：[llm2014/llm_benchmark](https://github.com/llm2014/llm_benchmark)（GitHub Pages raw），code_v3（Agentic）榜行序（与网站「Agentic」标签页展示顺序一致）。
 
 ### 2. Signatures
 
@@ -37,7 +37,7 @@ pub async fn get_model_leaderboard(
 
 ```rust
 pub fn parse_llm_benchmark_csv(body: &str) -> Result<Vec<LeaderboardModel>, AppError>
-pub fn locate_latest_logic_csv(datasets_json: &str) -> Result<String, AppError>
+pub fn locate_latest_csv(datasets_json: &str, category: &str) -> Result<String, AppError>
 ```
 
 ### 3. Contracts
@@ -47,7 +47,7 @@ pub fn locate_latest_logic_csv(datasets_json: &str) -> Result<String, AppError>
 | 项 | 值 |
 |----|-----|
 | datasets URL | `https://raw.githubusercontent.com/llm2014/llm_benchmark/main/docs/data/datasets.json`（`LLM_BENCHMARK_DATASETS_URL`） |
-| CSV URL | `LLM_BENCHMARK_BASE` + datasets 中 `category=="logic"` 最新 `reportDate` 的 `csv` 相对路径（如 `data/logic/2026-08.csv`） |
+| CSV URL | `LLM_BENCHMARK_BASE` + datasets 中 `category=="code_v3"` 最新 `reportDate` 的 `csv` 相对路径（如 `data/code_v3/2026-08.csv`） |
 | 鉴权 | **不**携带任何 API Key / 供应商 Key |
 | 请求头 | `Accept: application/json,text/csv,text/plain` |
 | 超时 | 整次 15s；连接 10s |
@@ -63,16 +63,17 @@ pub fn locate_latest_logic_csv(datasets_json: &str) -> Result<String, AppError>
 
 **白名单字段（仅这些进入缓存与 IPC）**
 
-- CSV 表头按列名定位「模型」与「极限分数」（不依赖固定列序）。
+- CSV 表头按列名定位 `Model`（英文表头；不依赖固定列序）。
+- code_v3 为**等级制**（Pass/Pending/Skip/Failed/排名/等级），**无数值分**；排序分 = **CSV 行序倒排**（首行分最高），与网站 Agentic 标签页展示顺序一致。
 - 每行仅输出：
 
 | CSV 列 | 输出字段 |
 |--------|----------|
-| `模型` | `id`（展示名，如 `GPT-5.5 (xhigh)`；必填，空则跳过） |
-| `模型` | `name?`（同展示名） |
-| `极限分数` | `intelligence_score?`（0-100；非有限数字则跳过该行） |
+| `Model` | `id`（展示名，如 `Claude Fable 5 (high)`；必填，空则跳过） |
+| `Model` | `name?`（同展示名） |
+| （行序） | `agentic_score?`（倒排分：首行 = 行数 N，末行 = 1） |
 
-- `canonical_slug` / `coding_score` / `agentic_score` 恒为 `None`。
+- `intelligence_score`（logic 版解析用）/ `coding_score` / `canonical_slug` 恒为 `None`。
 - 手写 CSV 解析（无 csv crate）：支持引号包裹字段、引号内逗号、`""` 转义。
 - 禁止把其它 CSV 列（耗时/价格/Token 等）透传或落盘。
 
@@ -92,22 +93,22 @@ pub fn locate_latest_logic_csv(datasets_json: &str) -> Result<String, AppError>
 |------|------|
 | 缓存存在且未过期且 `force_refresh=false` | 返回缓存，`cache_hit=true` |
 | 网络成功 | 写缓存，`stale=false`、`cache_hit=false` |
-| 网络失败 / 超时 / datasets 非 JSON / 无 logic 月榜 / CSV 缺列 / 空榜，**有**旧缓存 | 返回旧缓存，`stale=true` |
+| 网络失败 / 超时 / datasets 非 JSON / 无 code_v3 月榜 / CSV 缺列 / 空榜，**有**旧缓存 | 返回旧缓存，`stale=true` |
 | 同上且 **无** 缓存 | `Err`，可行动中文 message（检查网络/稍后重试） |
 | datasets 顶层必须是 `{"datasets": [...]}` 对象 | 非数组顶层报「无法解析」 |
-| 行缺「模型」或「极限分数」 | 跳过该行，不整单失败 |
+| 行缺 `Model` | 跳过该行，不整单失败 |
 | 分数非数字 / 非有限 | 跳过该行 |
 
 ### 5. Good/Base/Bad Cases
 
 - **Good**：24h 内二次打开 → `cache_hit=true`，无网络。
-- **Base**：无缓存首次拉取 → datasets 定位最新 logic 月榜 → 拉 CSV → 落盘并返回 models。
+- **Base**：无缓存首次拉取 → datasets 定位最新 code_v3 月榜 → 拉 CSV → 落盘并返回 models。
 - **Bad**：断网且无缓存 → 业务错误；断网有缓存 → `stale=true` 仍可用。
 
 ### 6. Tests Required
 
-- 白名单解析：只输出「模型/极限分数」，跳过坏分数行，空榜报错。
-- datasets 定位：多 category 取 logic 最新 `reportDate`；缺 logic 报错。
+- 白名单解析：只输出 `Model` 行序倒排分，跳过空 Model 行，空榜报错。
+- datasets 定位：多 category 取 code_v3 最新 `reportDate`；缺 code_v3 报错。
 - 新鲜缓存命中：`force_refresh=false` 不调 fetch。
 - 强制刷新：即使缓存新鲜也调 fetch。
 - 网络失败 + 有缓存 → `stale=true`。
@@ -129,9 +130,9 @@ let csv = get("https://raw.githubusercontent.com/llm2014/llm_benchmark/main/docs
 #### Correct
 
 ```rust
-// 固定 datasets URL、无 Key；动态定位最新 logic 月榜 CSV
+// 固定 datasets URL、无 Key；动态定位最新 code_v3 月榜 CSV
 let datasets = get_text(LLM_BENCHMARK_DATASETS_URL, &client).await?;
-let csv_rel = locate_latest_logic_csv(&datasets)?;
+let csv_rel = locate_latest_csv(&datasets, LLM_BENCHMARK_CATEGORY)?;
 let models = parse_llm_benchmark_csv(&get_text(&format!("{LLM_BENCHMARK_BASE}{csv_rel}"), &client).await?)?;
 // 失败有缓存 → stale 快照；无缓存才 Err
 ```

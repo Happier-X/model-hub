@@ -1,6 +1,6 @@
 # 分组队列模型排序
 
-> llm_benchmark 榜单排序与分层模糊匹配契约。
+> llm_benchmark code_v3（Agentic）榜行序排序与分层模糊匹配契约。
 
 ---
 
@@ -8,7 +8,7 @@
 
 ### 1. Scope / Trigger
 
-- Trigger：GroupsPage 对故障转移队列按模型能力重排；完全依赖 IPC 透传的 llm_benchmark 榜单（logic 综合榜），不设本地硬编码打分。
+- Trigger：GroupsPage 对故障转移队列按模型能力重排；完全依赖 IPC 透传的 llm_benchmark 榜单（code_v3 Agentic 榜），不设本地硬编码打分。
 
 ### 2. Signatures
 
@@ -19,6 +19,8 @@ export interface LeaderboardModel {
   canonical_slug?: string | null
   name?: string | null
   intelligence_score?: number | null
+  coding_score?: number | null
+  agentic_score?: number | null
 }
 
 export interface ModelLeaderboardSnapshot {
@@ -35,7 +37,7 @@ export interface ModelLeaderboardSnapshot {
 export type MatchTier = "exact" | "normalized" | "prefix";
 
 export interface MatchedExternalScore {
-  score: number; // intelligence_score
+  score: number; // agentic_score（code_v3 行序倒排分）
   leaderboardId: string;
   sourceLabel: string;
   tier: MatchTier;
@@ -52,7 +54,7 @@ export function sortQueueByLeaderboard<T>(
 
 **排序方式**
 
-- 仅单一指标：按 llm_benchmark logic 榜「极限分数」降序排序。
+- 仅单一指标：按 llm_benchmark code_v3（Agentic）榜行序倒排分降序排序（首行分最高，与网站 Agentic 标签页展示顺序一致）。
 - **未命中沉底**：匹配不到榜单的模型，整体排在所有命中模型之后。
 - **稳定排序**：同分项、或都是未匹配项时，彼此保持原下标相对顺序。
 
@@ -68,9 +70,9 @@ export function sortQueueByLeaderboard<T>(
 
 **展示名净化（llm_benchmark 特有）**
 
-- 榜单条目是展示名（如 `GPT-5.5 (xhigh)`、`DeepSeek V4 Flash 0731 (max)`），无 API id。
+- 榜单条目是展示名（如 `Claude Fable 5 (high)`、`DeepSeek V4 Flash 0731 (max)`），无 API id。
 - 归一化时先剥离 `(...)` 档位/后缀内容，再剥离纯 4 位数字段（MMDD/YYMM 日期），两侧对称（API 名与展示名走同一归一化）。
-- 例：`GPT-5.5 (xhigh)` → `gpt-5-5`；`DeepSeek V4 Flash 0731 (max)` → `deepseek-v4-flash`。
+- 例：`Claude Fable 5 (high)` → `claude-fable-5`；`DeepSeek V4 Flash 0731 (max)` → `deepseek-v4-flash`。
 
 **UI / 表单**
 
@@ -89,7 +91,7 @@ export function sortQueueByLeaderboard<T>(
 
 ### 5. Good/Base/Bad Cases
 
-- **Good (Exact)**：API `openai/gpt-5.5` → 归一化 `gpt-5-5` 命中展示名 `GPT-5.5 (xhigh)`。
+- **Good (Exact)**：API `claude-fable-5` → 归一化 `claude-fable-5` 命中展示名 `Claude Fable 5 (high)`。
 - **Good (Prefix)**：`gpt-4o-custom` → 剥离 `custom`（非判别 token）后前缀命中 `gpt-4o`。
 - **Base (Miss)**：`company-internal-model` 不在榜单 → 未匹配沉底。
 - **Bad (Guardrail)**：`gpt-4o-mini` → 剩余部分含 `mini`（判别 token）→ 不得命中榜单的 `gpt-4o`。
