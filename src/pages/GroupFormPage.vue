@@ -153,22 +153,6 @@ const externalIndex = computed<LeaderboardIndex | null>(() => {
   return buildExternalScoreIndex(leaderboard.value.models);
 });
 
-const leaderboardStatusText = computed(() => {
-  if (leaderboardLoading.value) return "榜单加载中…";
-  if (!leaderboard.value) {
-    return leaderboardError.value || "尚未加载外部榜单（排序时将自动拉取）";
-  }
-  const t = formatUnix(leaderboard.value.fetched_at_unix);
-  const parts = [
-    `llm_benchmark ${leaderboard.value.models.length} 条`,
-    `更新于 ${t}`,
-  ];
-  if (leaderboard.value.cache_hit) parts.push("缓存命中");
-  if (leaderboard.value.stale) parts.push("陈旧缓存");
-  if (leaderboardError.value) parts.push(`刷新失败：${leaderboardError.value}`);
-  return parts.join(" · ");
-});
-
 /** 每条队列的展示分（按 index 缓存，避免模板内多次调用）。 */
 const queueDisplayScores = computed(() =>
   formValues.value.items.map((item) => matchModelToLeaderboard(item.upstream_model, externalIndex.value)),
@@ -410,7 +394,7 @@ async function sortQueueByCapability() {
 
   const ok = await ensureLeaderboardForExternalSort();
   if (!ok) {
-    formMessage.value = "外部榜单不可用，已保持当前顺序。请检查网络后强制刷新榜单。";
+    formMessage.value = "外部榜单不可用，已保持当前顺序。请检查网络后重试。";
     return;
   }
 
@@ -503,18 +487,6 @@ async function sortQueueByCapability() {
           </form.Field>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2">
-          <HButton
-            variant="ghost"
-            size="sm"
-            type="button"
-            :disabled="leaderboardLoading"
-            @click="loadLeaderboard(true)"
-          >
-            {{ leaderboardLoading ? "刷新榜单中…" : "强制刷新榜单" }}
-          </HButton>
-          <span class="text-xs text-slate-500">{{ leaderboardStatusText }}</span>
-        </div>
         <p v-if="formMessage" class="text-sm text-emerald-700">{{ formMessage }}</p>
 
         <!-- 双栏：左可选模型 / 右已选队列（flex 而非 grid：grid item 上 flex-1 不生效，会回退到内容高度导致整页滚动） -->
