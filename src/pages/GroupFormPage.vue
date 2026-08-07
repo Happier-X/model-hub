@@ -529,7 +529,7 @@ async function sortQueueByCapability() {
         <!-- 双栏：左可选模型 / 右已选队列 -->
         <div class="grid min-h-0 grid-cols-1 gap-4 lg:grid-cols-2">
           <!-- 左：按供应商手风琴选模 -->
-          <HCard variant="outlined" padding="none" class="flex min-h-0 max-h-[32rem] flex-col">
+          <HCard variant="outlined" padding="none" class="flex min-h-0 flex-1 flex-col">
             <template #header>
               <div class="flex items-center justify-between px-3 py-2">
                 <h3 class="text-sm font-medium">可选模型</h3>
@@ -625,7 +625,7 @@ async function sortQueueByCapability() {
           </HCard>
 
           <!-- 右：已选故障转移队列 -->
-          <HCard variant="outlined" padding="none" class="flex min-h-0 max-h-[32rem] flex-col">
+          <HCard variant="outlined" padding="none" class="flex min-h-0 flex-1 flex-col">
             <template #header>
               <div class="flex items-center justify-between px-3 py-2">
                 <h3 class="text-sm font-medium">故障转移队列</h3>
