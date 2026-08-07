@@ -254,13 +254,15 @@ export interface ExportToPiResult {
 export const exportGroupToPiAgent = (groupId: number) =>
   invoke<ExportToPiResult>("export_group_to_pi_agent", { groupId });
 
-/** llm_benchmark 公共榜单模型（白名单字段）。 */
+/** llm_benchmark 公共榜单模型（白名单字段；code_v3 Agentic 榜，agentic_score 为行序倒排排序分）。 */
 export interface LeaderboardModel {
   id: string;
   canonical_slug?: string | null;
   name?: string | null;
+  /** 恒 None（code_v3 榜无数值分；排序用 agentic_score）。 */
   intelligence_score?: number | null;
   coding_score?: number | null;
+  /** code_v3（Agentic）榜行序倒排分：首行分最高，降序即榜单行序。 */
   agentic_score?: number | null;
 }
 

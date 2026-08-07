@@ -1,8 +1,8 @@
 /**
- * 分组「故障转移队列」能力排序：完全以 llm_benchmark 榜单（logic 综合榜极限分数）为准。
+ * 分组「故障转移队列」能力排序：完全以 llm_benchmark 榜单（code_v3 Agentic 榜行序）为准。
  *
  * 设计要点：
- * - 不再维护本地启发式打分作为排序依据；排名只剩 llm_benchmark `极限分数`。
+ * - 不再维护本地启发式打分作为排序依据；排名只剩 llm_benchmark `行序倒排分`。
  * - 上游模型名 → llm_benchmark 条目采用**分层匹配**（精确 → 归一化增强 → 前缀+判别 token 护栏），
  *   不做纯相似度/编辑距离匹配，避免档位错配（如 `gpt-4o` 误配 `gpt-4o-mini`）。
  * - 榜单侧是展示名（如 `GPT-5.5 (xhigh)`），归一化时先做**展示名净化**
@@ -12,22 +12,22 @@
  * 详见 spec `.trellis/spec/frontend/model-queue-sort.md`。
  */
 
-/** 外部榜单一条模型记录（与 IPC 白名单字段对齐，仅取 intelligence 作排序）。 */
+/** 外部榜单一条模型记录（与 IPC 白名单字段对齐，仅取 agentic 作排序）。 */
 export interface ExternalLeaderboardEntry {
   /** 榜单展示名（如 `GPT-5.5 (xhigh)`）；llm_benchmark 无 API id。 */
   id: string;
   canonical_slug?: string | null;
   name?: string | null;
-  /** llm_benchmark logic 榜「极限分数」。 */
-  intelligence_score?: number | null;
-  // coding_score / agentic_score 仍可存在于 IPC，但本模块不消费。
+  /** llm_benchmark code_v3（Agentic）榜行序倒排分：首行分最高，降序即榜单行序。 */
+  agentic_score?: number | null;
+  // intelligence_score / coding_score 仍可存在于 IPC，但本模块不消费。
 }
 
 /** 命中层级，仅用于展示/调试与多候选择优的可解释性。 */
 export type MatchTier = "exact" | "normalized" | "prefix";
 
 export interface MatchedExternalScore {
-  /** 用于展示与排序的分数（llm_benchmark 极限分数）。 */
+  /** 用于展示与排序的分数（llm_benchmark code_v3 行序倒排分）。 */
   score: number;
   /** 榜单条目展示名。 */
   leaderboardId: string;
@@ -222,8 +222,8 @@ function prefixMatch(
 /* ------------------------------------------------------------------ */
 
 /**
- * 构建 llm_benchmark 榜单查找表：归一化 key → 最佳条目（同 key 取更高极限分数）。
- * 仅索引有极限分数的条目。
+ * 构建 llm_benchmark 榜单查找表：归一化 key → 最佳条目（同 key 取更高分）。
+ * 仅索引有 agentic 分（code_v3 行序倒排分）的条目。
  */
 export function buildExternalScoreIndex(
   models: readonly ExternalLeaderboardEntry[],
@@ -244,7 +244,7 @@ export function buildExternalScoreIndex(
   };
 
   for (const entry of models) {
-    const raw = entry.intelligence_score;
+    const raw = entry.agentic_score;
     if (raw == null || !Number.isFinite(raw)) continue;
     const score = raw;
 
@@ -267,7 +267,7 @@ export function buildExternalScoreIndex(
 /**
  * 上游模型名 → llm_benchmark 条目分层匹配。
  * 顺序：精确 → 归一化增强（同 normalize，故与 exact 合并）→ 前缀 + 判别 token 护栏。
- * 命中多候选时取极限分数最高者。
+ * 命中多候选时取行序倒排分最高者。
  */
 export function matchModelToLeaderboard(
   modelId: string,
@@ -300,7 +300,7 @@ export function matchModelToLeaderboard(
 /* ------------------------------------------------------------------ */
 
 /**
- * 稳定排序：命中项按 intelligence_score 降序在前；未匹配项统一沉底且保持彼此原序。
+ * 稳定排序：命中项按 agentic_score（行序倒排分）降序在前；未匹配项统一沉底且保持彼此原序。
  * 同分命中项保持输入原序。
  */
 export function sortQueueByLeaderboard<T>(

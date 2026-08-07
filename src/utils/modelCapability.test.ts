@@ -35,10 +35,10 @@ test("展示名净化（M1）：剥括号档位与纯 4 位日期段", () => {
 
 test("llm_benchmark 展示名 ↔ API 名跨侧命中", () => {
   const entries: ExternalLeaderboardEntry[] = [
-    { id: "GPT-5.5 (xhigh)", name: "GPT-5.5 (xhigh)", intelligence_score: 83.8 },
-    { id: "Kimi-K3 (max)", name: "Kimi-K3 (max)", intelligence_score: 82.91 },
-    { id: "DeepSeek V4 Flash 0731 (max)", name: "DeepSeek V4 Flash 0731 (max)", intelligence_score: 68.12 },
-    { id: "Gemma 4 31B", name: "Gemma 4 31B", intelligence_score: 27.91 },
+    { id: "GPT-5.5 (xhigh)", name: "GPT-5.5 (xhigh)", agentic_score: 83.8 },
+    { id: "Kimi-K3 (max)", name: "Kimi-K3 (max)", agentic_score: 82.91 },
+    { id: "DeepSeek V4 Flash 0731 (max)", name: "DeepSeek V4 Flash 0731 (max)", agentic_score: 68.12 },
+    { id: "Gemma 4 31B", name: "Gemma 4 31B", agentic_score: 27.91 },
   ];
   const index = buildExternalScoreIndex(entries);
 
@@ -59,9 +59,9 @@ test("llm_benchmark 展示名 ↔ API 名跨侧命中", () => {
 
 test("分层匹配：精确/归一化命中与多候选择优", () => {
   const entries: ExternalLeaderboardEntry[] = [
-    { id: "openai/gpt-4o", intelligence_score: 85 },
-    { id: "openai/gpt-5", intelligence_score: 95 },
-    { id: "anthropic/claude-3-5-sonnet", intelligence_score: 88 },
+    { id: "openai/gpt-4o", agentic_score: 85 },
+    { id: "openai/gpt-5", agentic_score: 95 },
+    { id: "anthropic/claude-3-5-sonnet", agentic_score: 88 },
   ];
   const index = buildExternalScoreIndex(entries);
 
@@ -93,14 +93,14 @@ test("分层匹配：精确/归一化命中与多候选择优", () => {
 
 test("受控近似（前缀 + 护栏反例）：宁未匹配不错配", () => {
   const entries: ExternalLeaderboardEntry[] = [
-    { id: "openai/gpt-4o", intelligence_score: 85 },
-    { id: "openai/gpt-4o-mini", intelligence_score: 40 },
-    { id: "anthropic/claude-3-5-sonnet", intelligence_score: 88 },
-    { id: "anthropic/claude-3-5-haiku", intelligence_score: 50 },
-    { id: "meta-llama/llama-3-8b", intelligence_score: 60 },
-    { id: "meta-llama/llama-3-70b", intelligence_score: 80 },
-    { id: "openai/gpt-4", intelligence_score: 75 },
-    { id: "openai/gpt-40", intelligence_score: 99 },
+    { id: "openai/gpt-4o", agentic_score: 85 },
+    { id: "openai/gpt-4o-mini", agentic_score: 40 },
+    { id: "anthropic/claude-3-5-sonnet", agentic_score: 88 },
+    { id: "anthropic/claude-3-5-haiku", agentic_score: 50 },
+    { id: "meta-llama/llama-3-8b", agentic_score: 60 },
+    { id: "meta-llama/llama-3-70b", agentic_score: 80 },
+    { id: "openai/gpt-4", agentic_score: 75 },
+    { id: "openai/gpt-40", agentic_score: 99 },
   ];
   const index = buildExternalScoreIndex(entries);
 
@@ -116,7 +116,7 @@ test("受控近似（前缀 + 护栏反例）：宁未匹配不错配", () => {
 
   // 但如果榜单没有 mini，上游是 mini，不得命中 4o：
   const entriesNoMini: ExternalLeaderboardEntry[] = [
-    { id: "openai/gpt-4o", intelligence_score: 85 },
+    { id: "openai/gpt-4o", agentic_score: 85 },
   ];
   const indexNoMini = buildExternalScoreIndex(entriesNoMini);
   assert.equal(matchModelToLeaderboard("gpt-4o-mini", indexNoMini), null);
@@ -138,9 +138,9 @@ test("受控近似（前缀 + 护栏反例）：宁未匹配不错配", () => {
 
 test("sortQueueByLeaderboard：命中降序，未匹配沉底，同分/未匹配稳定", () => {
   const entries: ExternalLeaderboardEntry[] = [
-    { id: "openai/gpt-4o", intelligence_score: 85 },
-    { id: "openai/gpt-4o-mini", intelligence_score: 40 },
-    { id: "deepseek/deepseek-r1", intelligence_score: 95 },
+    { id: "openai/gpt-4o", agentic_score: 85 },
+    { id: "openai/gpt-4o-mini", agentic_score: 40 },
+    { id: "deepseek/deepseek-r1", agentic_score: 95 },
   ];
   const index = buildExternalScoreIndex(entries);
 
