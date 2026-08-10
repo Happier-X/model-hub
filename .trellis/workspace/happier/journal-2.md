@@ -299,3 +299,34 @@ model_pricing 单价表 + OpenRouter 自动同步（后台 24h 到期检查 + �
 ### Next Steps
 
 - 用户 dev 重启（Rust 改动）后查看折线图
+
+
+## Session 50: shadcn ScrollArea 全局包裹主内容区
+
+**Date**: 2026-08-10
+**Task**: shadcn ScrollArea 全局包裹主内容区
+**Branch**: `master`
+
+### Summary
+
+新增 ui/scroll-area（ScrollArea+ScrollBar，reka-ui 标准实现），AppShell 主内容区 overflow-auto 改为 ScrollArea 包裹（type=hover 滚动条自动隐藏/悬停显示），配合全局 CSS 滚动条美化兜底其他原生滚动区域
+
+### Main Changes
+
+- 新增 ScrollArea.vue/ScrollBar.vue/index.ts；AppShell 主区包 ScrollArea
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] typecheck/lint/build 全绿；headless 确认 reka scroll-area viewport 渲染
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 无
