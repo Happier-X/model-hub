@@ -235,3 +235,34 @@ model_pricing 单价表 + OpenRouter 自动同步（后台 24h 到期检查 + �
 ### Next Steps
 
 - 无
+
+
+## Session 48: 热力图下方加「今日使用情况」汇总行
+
+**Date**: 2026-08-10
+**Task**: 热力图下方加「今日使用情况」汇总行
+**Branch**: `master`
+
+### Summary
+
+对齐 octopus StatsChart 顶部汇总行：热力图卡片底部加今日汇总（请求次数/消耗时间/总 Token/总费用，标签+AnimatedNumber+单位+竖分隔线），数据源 overview.today 随 5s 轮询刷新
+
+### Main Changes
+
+- HomePage：todayStats computed（formatOctopus 格式化 4 项）+ 模板加汇总行区块
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] typecheck/build 全绿；headless 确认今日使用情况区块渲染（4 标签+数值）
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 无

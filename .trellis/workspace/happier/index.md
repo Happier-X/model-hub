@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 47
+- **Total Sessions**: 48
 - **Last Active**: 2026-08-10
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~237 | Active |
+| `journal-2.md` | ~268 | Active |
 | `journal-1.md` | ~1992 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 48 | 2026-08-10 | 热力图下方加「今日使用情况」汇总行 | - | `master` |
 | 47 | 2026-08-10 | 首页精简：移除本地代理/接入步骤/调用示例三卡片 | - | `master` |
 | 46 | 2026-08-10 | 热力图卡片精简 + 全项目统计统一成功口径 | - | `master` |
 | 45 | 2026-08-10 | 统计卡片数值单位对齐 octopus（value/unit 分离） | - | `master` |
