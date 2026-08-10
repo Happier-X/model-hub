@@ -555,14 +555,19 @@ impl Stores {
         })
     }
 
-    /// 按本地自然日聚合过去 `days` 天（含今日）的请求总量。
-    /// 仅返回 `count > 0` 的日期，按 `day_start_unix` 升序。
+    /// 按本地自然日聚合过去 `days` 天（含今日）的**成功请求**（2xx 且 error 为空）总量。
+    /// 仅返回 `count > 0` 的日期，按 `day_start_unix` 升序。全项目统计统一按成功口径。
     pub fn request_daily_counts(&self, days: u32) -> Result<RequestDailyCounts, AppError> {
         let days = days.clamp(1, DAILY_COUNTS_MAX_DAYS);
         let (start_unix, end_unix) = daily_window_bounds(days);
         self.with_conn(|conn| {
             let mut stmt = conn
-                .prepare("SELECT time FROM request_logs WHERE time >= ?1 AND time < ?2")
+                .prepare(
+                    "SELECT time FROM request_logs
+                     WHERE time >= ?1 AND time < ?2
+                       AND status_code BETWEEN 200 AND 299
+                       AND (error IS NULL OR length(error) = 0)",
+                )
                 .map_err(|e| AppError::Database(e.to_string()))?;
             let mut buckets: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
             let rows = stmt
@@ -1084,14 +1089,14 @@ mod tests {
         seed(&stores, "g", 200, "", "a", "b");
         let result = stores.request_daily_counts(365).unwrap();
         let total: i64 = result.days.iter().map(|d| d.count).sum();
-        assert_eq!(total, 3, "总量应等于插入条数（含成功/失败/故障转移）");
+        assert_eq!(total, 2, "只计成功请求（2xx 且 error 空）；失败/故障转移不计");
         let today_bucket = local_day_start_unix(chrono::Local::now().timestamp());
         let bucket = result
             .days
             .iter()
             .find(|d| d.day_start_unix == today_bucket)
             .expect("今天应有一个桶");
-        assert_eq!(bucket.count, 3);
+        assert_eq!(bucket.count, 2);
         assert!(result.start_unix < result.end_unix);
     }
 
@@ -1281,5 +1286,21 @@ mod tests {
         assert_eq!(overview.total.input_cost, 0.0);
         assert_eq!(overview.total.output_cost, 0.0);
         assert_eq!(overview.total.requests, 1);
+    }
+
+    #[test]
+    fn daily_counts_only_include_success_requests() {
+        let (_dir, stores) = setup();
+        let now = chrono::Utc::now().timestamp();
+        // 成功请求 2 条（同日不同次）
+        insert_at(&stores, now - 3600, 200, "", "", "");
+        insert_at(&stores, now - 1800, 200, "", "", "");
+        // 失败请求（4xx / 5xx / 有 error）不应计入
+        insert_at(&stores, now - 900, 500, "", "", "");
+        insert_at(&stores, now - 450, 200, "bad", "", "");
+
+        let result = stores.request_daily_counts(1).unwrap();
+        assert_eq!(result.days.len(), 1);
+        assert_eq!(result.days[0].count, 2);
     }
 }

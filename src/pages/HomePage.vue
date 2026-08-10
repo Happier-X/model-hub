@@ -160,13 +160,7 @@ const exampleCurl = () => {
     <StatsCards :overview="overview" :error="overviewError" />
 
     <Card class="border border-slate-200 bg-white">
-      <CardHeader class="py-3">
-        <h2 class="text-base font-semibold">每日请求量（近一年）</h2>
-      </CardHeader>
       <CardContent class="flex flex-col gap-3">
-      <p class="mb-3 text-xs text-slate-500">
-        按本地自然日聚合的请求总条数。
-      </p>
       <Heatmap :values="heatmapData" />
       <p v-if="dailyError" class="mt-3 text-sm text-rose-600">{{ dailyError }}</p>
     </CardContent>
