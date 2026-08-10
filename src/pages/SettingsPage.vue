@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef } from "vue";
-import { HButton, HCard, HCheckbox, HInput, HProgress } from "happier-ui";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { renderMarkdown } from "../utils/markdown";
 import {
   checkForUpdate,
@@ -248,10 +252,11 @@ onUnmounted(() => {
 
 <template>
   <div class="space-y-6">
-    <HCard variant="outlined" padding="md">
-      <template #header>
+    <Card class="border border-slate-200 bg-white">
+      <CardHeader class="py-3">
         <h2 class="text-base font-semibold">代理配置</h2>
-      </template>
+      </CardHeader>
+      <CardContent class="flex flex-col gap-3">
       <div class="grid gap-3 text-sm md:grid-cols-2">
         <div>
           <div class="text-slate-500">当前监听</div>
@@ -267,18 +272,20 @@ onUnmounted(() => {
 
       <div class="mt-5 flex flex-wrap items-end gap-3">
         <div class="w-28">
-          <HInput
-            :model-value="String(portInput)"
-            type="number"
-            label="端口"
-            inputmode="numeric"
-            @update:model-value="portInput = Number($event) || 0"
-          />
+          <label class="block text-sm">
+            <span class="mb-1 block text-slate-600">端口</span>
+            <Input
+              :model-value="String(portInput)"
+              type="number"
+              inputmode="numeric"
+              @update:model-value="portInput = Number($event) || 0"
+            />
+          </label>
         </div>
-        <HButton variant="primary" type="button" :disabled="loading" @click="savePort">
+        <Button variant="default" type="button" :disabled="loading" @click="savePort">
           保存端口
-        </HButton>
-        <HButton variant="outline" type="button" @click="refresh">刷新</HButton>
+        </Button>
+        <Button variant="outline" type="button" @click="refresh">刷新</Button>
       </div>
 
       <p v-if="message" class="mt-3 whitespace-pre-line text-sm text-emerald-700">{{ message }}</p>
@@ -295,44 +302,52 @@ onUnmounted(() => {
         若首选端口被占用，会自动向后寻找可用端口并写入配置，不会结束占用进程。改口后若用
         Pi，请到「分组」页重新「配置到 Pi」。
       </p>
-    </HCard>
+    </CardContent>
+    </Card>
 
-    <HCard variant="outlined" padding="md">
-      <template #header>
+    <Card class="border border-slate-200 bg-white">
+      <CardHeader class="py-3">
         <h2 class="text-base font-semibold">桌面悬浮条</h2>
-      </template>
+      </CardHeader>
+      <CardContent class="flex flex-col gap-3">
       <div class="mb-3">
-        <HCheckbox
-          :model-value="overlayEnabled"
-          label="显示最近成功模型悬浮条"
-          :disabled="prefsLoading"
-          @update:model-value="toggleOverlay"
-        />
+        <label class="flex items-center gap-2 text-sm">
+          <Checkbox
+            :model-value="overlayEnabled"
+            :disabled="prefsLoading"
+            @update:model-value="toggleOverlay"
+          />
+          <span>显示最近成功模型悬浮条</span>
+        </label>
       </div>
       <p class="text-sm text-slate-500">
         开启后会在主显示器任务栏上方显示无边框状态条；关闭主窗口时代理仍继续运行，托盘「退出」才会停止代理。
       </p>
-    </HCard>
+    </CardContent>
+    </Card>
 
-    <HCard variant="outlined" padding="md">
-      <template #header>
+    <Card class="border border-slate-200 bg-white">
+      <CardHeader class="py-3">
         <h2 class="text-base font-semibold">应用更新</h2>
-      </template>
+      </CardHeader>
+      <CardContent class="flex flex-col gap-3">
       <p class="mb-3 text-sm text-slate-500">
         检查 GitHub Release 上的更新清单；发现新版本后须确认才会下载安装并重启。默认不在启动时自动检查。
       </p>
       <div class="mb-3">
-        <HCheckbox
-          :model-value="checkUpdateOnStartup"
-          label="应用启动时自动检查更新（仍需确认后才安装）"
-          :disabled="prefsLoading"
-          @update:model-value="toggleStartupCheck"
-        />
+        <label class="flex items-center gap-2 text-sm">
+          <Checkbox
+            :model-value="checkUpdateOnStartup"
+            :disabled="prefsLoading"
+            @update:model-value="toggleStartupCheck"
+          />
+          <span>应用启动时自动检查更新（仍需确认后才安装）</span>
+        </label>
       </div>
       <div class="flex flex-wrap items-center gap-3">
-        <HButton variant="primary" type="button" :disabled="updateBusy" @click="checkUpdate()">
+        <Button variant="default" type="button" :disabled="updateBusy" @click="checkUpdate()">
           {{ updatePhase === "checking" ? "检查中…" : "检查更新" }}
-        </HButton>
+        </Button>
         <span v-if="currentVersion" class="text-xs text-slate-500">当前版本 {{ currentVersion }}</span>
       </div>
 
@@ -356,16 +371,16 @@ onUnmounted(() => {
           确认后将下载安装包、完成安装并自动重启应用。数据目录中的配置与数据库不会被删除。
         </p>
         <div class="mt-3 flex flex-wrap gap-2">
-          <HButton
-            variant="primary"
+          <Button
+            variant="default"
             size="sm"
             type="button"
             :disabled="updateBusy"
             @click="confirmInstall"
           >
             {{ updatePhase === "error" ? "重试下载安装" : "下载并安装" }}
-          </HButton>
-          <HButton
+          </Button>
+          <Button
             variant="outline"
             size="sm"
             type="button"
@@ -373,18 +388,18 @@ onUnmounted(() => {
             @click="cancelPendingUpdate"
           >
             稍后
-          </HButton>
+          </Button>
         </div>
       </div>
 
-      <!-- 下载进行中：HProgress 进度条 + 辅助文本 -->
+      <!-- 下载进行中：Progress 进度条 + 辅助文本 -->
       <div v-if="updatePhase === 'downloading'" class="mt-3 space-y-1">
-        <HProgress
+        :<Progress
           :value="downloadLoaded"
           :max="downloadTotal ?? 0"
           :indeterminate="!downloadTotal"
           size="md"
-          variant="primary"
+          variant="default"
           rounded
         />
         <p class="text-sm text-emerald-700">{{ updateMessage }}</p>
@@ -398,6 +413,7 @@ onUnmounted(() => {
         {{ updateMessage }}
       </p>
       <p v-if="updateError" class="mt-3 text-sm text-rose-600">{{ updateError }}</p>
-    </HCard>
+    </CardContent>
+    </Card>
   </div>
 </template>

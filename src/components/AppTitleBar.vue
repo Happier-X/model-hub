@@ -3,7 +3,7 @@ import { onMounted, onUnmounted, ref } from "vue";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Copy, Minus, Square, X } from "@lucide/vue";
-import { HButton } from "happier-ui";
+import { Button } from "@/components/ui/button";
 
 const win = getCurrentWindow();
 const isMaximized = ref(false);
@@ -68,37 +68,34 @@ onUnmounted(() => {
       Model Hub
     </div>
     <div class="flex items-center gap-1">
-      <HButton
+      <Button
         variant="ghost"
-        size="sm"
-        isIconOnly
+        size="icon"
         title="最小化"
         aria-label="最小化"
         @click="minimize"
       >
         <Minus :size="16" aria-hidden="true" />
-      </HButton>
-      <HButton
+      </Button>
+      <Button
         variant="ghost"
-        size="sm"
-        isIconOnly
+        size="icon"
         :title="isMaximized ? '还原' : '最大化'"
         :aria-label="isMaximized ? '还原' : '最大化'"
         @click="toggleMaximize"
       >
         <Copy v-if="isMaximized" :size="14" aria-hidden="true" />
         <Square v-else :size="14" aria-hidden="true" />
-      </HButton>
-      <HButton
+      </Button>
+      <Button
         variant="ghost"
-        size="sm"
-        isIconOnly
+        size="icon"
         title="关闭"
         aria-label="关闭"
         @click="close"
       >
         <X :size="16" aria-hidden="true" />
-      </HButton>
+      </Button>
     </div>
   </div>
 </template>

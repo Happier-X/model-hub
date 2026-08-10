@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { HBadge, HButton, HCard, HHeatmap } from "happier-ui";
-import type { HHeatmapData } from "happier-ui";
+import { CalendarHeatmap, type Value as HeatmapValue } from "vue3-calendar-heatmap";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   extractInvokeError,
   getLastSuccessRequest,
@@ -28,10 +30,10 @@ const daily = ref<RequestDailyCounts | null>(null);
 const dailyError = ref("");
 const dailyLoading = ref(false);
 
-const heatmapData = computed<HHeatmapData>(() => {
+const heatmapData = computed<HeatmapValue[]>(() => {
   const counts = daily.value;
   if (!counts) return [];
-  // 后端只返回有记录的日（count>0）；补全 365 天全网格，让 HHeatmap 不依赖数据的实际时间范围。
+  // 后端只返回有记录的日（count>0）；补全 365 天全网格，让热力图不依赖数据的实际时间范围。
   const dayMs = 86_400_000;
   // end_unix 是“今日次日 00:00”的 unix 秒；向前取 365 天（含今日）。
   const endMs = counts.end_unix * 1000;
@@ -39,11 +41,16 @@ const heatmapData = computed<HHeatmapData>(() => {
   // 后端 days 由 day_start_unix 升序，借成 Map 供 O(1) 查。
   const byDay = new Map<number, number>();
   for (const d of counts.days) byDay.set(d.day_start_unix, d.count);
-  const out: HHeatmapData = [];
+  const out: HeatmapValue[] = [];
   for (let t = startMs; t < endMs; t += dayMs) {
     // counts 的 day_start_unix 是 unix 秒，除以 1000 换回去。
     const dayStartUnix = Math.round(t / 1000);
-    out.push({ timestamp: t, value: byDay.get(dayStartUnix) ?? 0 });
+    // vue3-calendar-heatmap 要求 { date, count }；date 直接传 'YYYY-MM-DD'。
+    const d = new Date(t);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    out.push({ date: `${yyyy}-${mm}-${dd}`, count: byDay.get(dayStartUnix) ?? 0 });
   }
   return out;
 });
@@ -152,13 +159,14 @@ onMounted(refresh);
 
 <template>
   <div class="space-y-6">
-    <HCard variant="outlined" padding="md">
-      <template #header>
+    <Card class="border border-slate-200 bg-white">
+      <CardHeader class="py-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h2 class="text-base font-semibold">今日请求（本地日）</h2>
-          <HButton variant="outline" size="sm" type="button" @click="refreshStats">刷新统计</HButton>
+          <Button variant="outline" size="sm" type="button" @click="refreshStats">刷新统计</Button>
         </div>
-      </template>
+      </CardHeader>
+      <CardContent class="flex flex-col gap-3">
       <p class="mb-3 text-xs text-slate-500">
         基于请求日志；成功 = 2xx 且无 error；失败 = 状态 ≥400 或有 error；故障转移 = 记录了换源。
       </p>
@@ -212,37 +220,46 @@ onMounted(refresh);
         <p v-else-if="!lastSuccessError" class="mt-3 text-sm text-slate-500">暂无成功请求</p>
         <p v-if="lastSuccessError" class="mt-3 text-sm text-rose-600">{{ lastSuccessError }}</p>
       </div>
-    </HCard>
+    </CardContent>
+    </Card>
 
-    <HCard variant="outlined" padding="md">
-      <template #header>
+    <Card class="border border-slate-200 bg-white">
+      <CardHeader class="py-3">
         <h2 class="text-base font-semibold">每日请求量（近一年）</h2>
-      </template>
+      </CardHeader>
+      <CardContent class="flex flex-col gap-3">
       <p class="mb-3 text-xs text-slate-500">
         按本地自然日聚合的请求总条数；随上方「刷新统计」一起刷新。
       </p>
-      <HHeatmap :data="heatmapData" :loading="dailyLoading" />
+      <CalendarHeatmap
+        :values="heatmapData"
+        :end-date="new Date(daily?.end_unix ? daily.end_unix * 1000 : Date.now())"
+        :range-color="['#e2e8f0', '#bae6fd', '#38bdf8', '#0284c7', '#0c4a6e']"
+        :tooltip="false"
+      />
       <p v-if="dailyError" class="mt-3 text-sm text-rose-600">{{ dailyError }}</p>
-    </HCard>
+    </CardContent>
+    </Card>
 
-    <HCard variant="outlined" padding="md">
-      <template #header>
+    <Card class="border border-slate-200 bg-white">
+      <CardHeader class="py-3">
         <h2 class="text-base font-semibold">本地代理</h2>
-      </template>
+      </CardHeader>
+      <CardContent class="flex flex-col gap-3">
       <div class="grid gap-3 text-sm md:grid-cols-2">
         <div>
           <div class="text-slate-500">状态</div>
           <div class="mt-1 font-medium">
-            <HBadge :variant="statusBadgeVariant">
+            <Badge :variant="statusBadgeVariant === 'danger' ? 'destructive' : statusBadgeVariant === 'success' ? 'secondary' : 'outline'">
               {{ status?.state || "未知" }}
-            </HBadge>
+            </Badge>
           </div>
         </div>
         <div>
           <div class="text-slate-500">Base URL</div>
           <div class="mt-1 flex items-center gap-2 font-mono text-sm">
             <span>{{ status?.base_url || "-" }}</span>
-            <HButton variant="tertiary" size="sm" type="button" @click="copyBaseUrl">复制</HButton>
+            <Button variant="secondary" size="sm" type="button" @click="copyBaseUrl">复制</Button>
           </div>
         </div>
         <div>
@@ -252,9 +269,9 @@ onMounted(refresh);
       </div>
 
       <div class="mt-5 flex flex-wrap items-center gap-3">
-        <HButton variant="secondary" type="button" :disabled="loading" @click="start">启动</HButton>
-        <HButton variant="danger" type="button" :disabled="loading" @click="stop">停止</HButton>
-        <HButton variant="outline" type="button" @click="refresh">刷新</HButton>
+        <Button variant="secondary" type="button" :disabled="loading" @click="start">启动</Button>
+        <Button variant="danger" type="button" :disabled="loading" @click="stop">停止</Button>
+        <Button variant="outline" type="button" @click="refresh">刷新</Button>
       </div>
 
       <p v-if="message" class="mt-3 whitespace-pre-line text-sm text-emerald-700">{{ message }}</p>
@@ -270,12 +287,14 @@ onMounted(refresh);
       <p class="mt-2 text-xs text-slate-500">
         关闭窗口会隐藏到系统托盘，代理继续运行；仅托盘菜单「退出」会停止代理并释放端口。若首选端口被占用，会自动向后寻找可用端口；若意外多开旧实例，请在旧进程托盘选择「退出」。端口配置和数据目录可在「设置」页查看。
       </p>
-    </HCard>
+    </CardContent>
+    </Card>
 
-    <HCard variant="outlined" padding="md">
-      <template #header>
+    <Card class="border border-slate-200 bg-white">
+      <CardHeader class="py-3">
         <h2 class="text-base font-semibold">本机接入步骤</h2>
-      </template>
+      </CardHeader>
+      <CardContent class="flex flex-col gap-3">
       <ol class="list-decimal space-y-2 pl-5 text-sm text-slate-700">
         <li>
           <span class="font-medium">启动代理</span>
@@ -298,16 +317,19 @@ onMounted(refresh);
         完整可勾选验收步骤见仓库
         <code class="rounded bg-slate-100 px-1">docs/local-acceptance.md</code>。
       </p>
-    </HCard>
+    </CardContent>
+    </Card>
 
-    <HCard variant="outlined" padding="md">
-      <template #header>
+    <Card class="border border-slate-200 bg-white">
+      <CardHeader class="py-3">
         <h2 class="text-base font-semibold">调用示例</h2>
-      </template>
+      </CardHeader>
+      <CardContent class="flex flex-col gap-3">
       <p class="mb-2 text-sm text-slate-500">
         客户端使用统一 Base URL；请求体中的 model 填分组名，无需配置客户端密钥。
       </p>
       <pre class="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-100">{{ exampleCurl() }}</pre>
-    </HCard>
+    </CardContent>
+    </Card>
   </div>
 </template>

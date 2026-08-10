@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
-import { HButton } from "happier-ui";
+import { Button } from "@/components/ui/button";
 import type { Group, GroupItem, ThinkingEffort } from "../../api/tauri";
 
 const props = defineProps<{
@@ -119,12 +119,12 @@ function onDragEnd() {
       <p class="text-sm font-medium text-slate-800">确认删除分组「{{ group.name }}」？</p>
       <p class="text-xs text-slate-500">此操作不可恢复。</p>
       <div class="flex gap-2">
-        <HButton variant="outline" size="sm" type="button" :disabled="saving" @click="cancelDelete">
+        <Button variant="outline" size="sm" type="button" :disabled="saving" @click="cancelDelete">
           取消
-        </HButton>
-        <HButton variant="danger-soft" size="sm" type="button" :disabled="saving" @click="confirmDelete">
+        </Button>
+        <Button variant="destructive" size="sm" type="button" :disabled="saving" @click="confirmDelete">
           {{ saving ? "删除中…" : "确认删除" }}
-        </HButton>
+        </Button>
       </div>
     </div>
 
@@ -194,7 +194,7 @@ function onDragEnd() {
 
     <!-- 操作区 -->
     <div class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-slate-100 pt-3">
-      <HButton
+      <Button
         variant="outline"
         size="sm"
         type="button"
@@ -202,12 +202,12 @@ function onDragEnd() {
         @click="emit('export-pi')"
       >
         {{ exportingPi ? "配置中…" : "配置到 Pi" }}
-      </HButton>
-      <HButton variant="ghost" size="sm" type="button" :disabled="saving" @click="emit('edit')">
+      </Button>
+      <Button variant="ghost" size="sm" type="button" :disabled="saving" @click="emit('edit')">
         编辑
-      </HButton>
-      <HButton
-        variant="danger-soft"
+      </Button>
+      <Button
+        variant="destructive"
         size="sm"
         type="button"
         class="ml-auto"
@@ -215,7 +215,7 @@ function onDragEnd() {
         @click="openDeleteConfirm"
       >
         删除
-      </HButton>
+      </Button>
     </div>
   </article>
 </template>

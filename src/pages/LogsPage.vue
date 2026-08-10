@@ -1,15 +1,33 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
-  HBadge,
-  HButton,
-  HCard,
-  HPagination,
-  HSelect,
-  HTable,
-  type HSelectOption,
-  type HTableColumn,
-} from "happier-ui";
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationFirst,
+  PaginationItem,
+  PaginationLast,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   clearLogs,
   extractInvokeError,
@@ -18,7 +36,7 @@ import {
   type RequestLog,
 } from "../api/tauri";
 
-const pageSizeOptions: HSelectOption[] = [
+const pageSizeOptions: { value: number; label: string }[] = [
   { value: 20, label: "20" },
   { value: 50, label: "50" },
   { value: 100, label: "100" },
@@ -34,7 +52,17 @@ function statusCodeVariant(
   return "default";
 }
 
-const logColumns: HTableColumn[] = [
+function statusCodeBadgeVariant(
+  code: number | null | undefined,
+): "default" | "secondary" | "outline" | "destructive" {
+  const v = statusCodeVariant(code);
+  if (v === "success") return "secondary";
+  if (v === "danger") return "destructive";
+  if (v === "warning") return "outline";
+  return "default";
+}
+
+const logColumns: { key: string; title: string }[] = [
   { key: "time", title: "时间" },
   { key: "group_name", title: "分组" },
   { key: "provider_name", title: "供应商" },
@@ -154,115 +182,141 @@ onUnmounted(() => {
 <template>
   <div class="h-full flex flex-col overflow-hidden">
     <!-- 操作卡片：顶部不滚 -->
-    <HCard variant="outlined" padding="md">
-      <div class="flex flex-wrap items-end gap-3">
-        <div class="w-24">
-          <HSelect
-            label="每页"
-            :options="pageSizeOptions"
-            :model-value="pageSize"
-            @update:model-value="
-              (v) => {
-                pageSize = Number(v);
-                void onPageSizeChange();
-              }
-            "
-          />
+    <Card class="border border-slate-200 bg-white">
+      <CardContent class="flex flex-col gap-3 py-4">
+        <div class="flex flex-wrap items-end gap-3">
+          <div class="w-24">
+            <label class="block text-sm">
+              <span class="mb-1 block text-slate-600">每页</span>
+              <Select
+                :model-value="String(pageSize)"
+                @update:model-value="
+                  (v) => {
+                    pageSize = Number(v);
+                    void onPageSizeChange();
+                  }
+                "
+              >
+                <SelectTrigger class="w-24">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem v-for="opt in pageSizeOptions" :key="opt.value" :value="String(opt.value)">
+                    {{ opt.label }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </label>
+          </div>
+          <Button variant="outline" type="button" :disabled="loading" @click="refresh">
+            刷新
+          </Button>
+          <Button
+            :variant="autoRefresh ? 'secondary' : 'outline'"
+            type="button"
+            @click="toggleAutoRefresh"
+          >
+            {{ autoRefresh ? "自动刷新：3 秒" : "自动刷新：已暂停" }}
+          </Button>
+          <Button variant="secondary" type="button" :disabled="loading" @click="purgeExpired">
+            清理过期
+          </Button>
+          <Button variant="destructive" type="button" @click="clear">清空全部</Button>
         </div>
-        <HButton variant="outline" type="button" :disabled="loading" @click="refresh">
-          刷新
-        </HButton>
-        <HButton
-          :variant="autoRefresh ? 'secondary' : 'outline'"
-          type="button"
-          @click="toggleAutoRefresh"
-        >
-          {{ autoRefresh ? "自动刷新：3 秒" : "自动刷新：已暂停" }}
-        </HButton>
-        <HButton variant="tertiary" type="button" :disabled="loading" @click="purgeExpired">
-          清理过期
-        </HButton>
-        <HButton variant="danger" type="button" @click="clear">清空全部</HButton>
-      </div>
-      <p class="mt-3 text-xs text-slate-500">
-        默认仅保留最近 {{ retentionDays }} 天内的最新 {{ maxRows }} 条；打开列表/写入日志时会自动清理。库内现有
-        {{ storedTotal }} 条。
-      </p>
-    </HCard>
+        <p class="text-xs text-slate-500">
+          默认仅保留最近 {{ retentionDays }} 天内的最新 {{ maxRows }} 条；打开列表/写入日志时会自动清理。库内现有
+          {{ storedTotal }} 条。
+        </p>
+      </CardContent>
+    </Card>
 
     <p v-if="message" class="shrink-0 text-sm text-emerald-700">{{ message }}</p>
     <p v-if="error" class="shrink-0 text-sm text-rose-600">{{ error }}</p>
 
-    <HCard variant="outlined" padding="md" class="min-h-0 flex-1 flex flex-col">
-      <p class="mb-3 shrink-0 text-sm text-slate-600">
-        筛选 {{ total }} 条 · 库内 {{ storedTotal }} 条 · 第 {{ page }} / {{ totalPages }} 页
-      </p>
-      <!-- 表格区：flex-1 min-h-0 overflow-y-auto 仅表格 body 滚动 -->
-      <div class="min-h-0 flex-1 overflow-y-auto">
-        <!-- HTable data 只接受 Record<string, unknown>[]，interface 无索引签名需双重断言；等 happier-ui#9 泛型化后简化 -->
-        <HTable
-          :columns="logColumns"
-          :data="items as unknown as Record<string, unknown>[]"
-          row-key="id"
-          :loading="loading"
-          :sticky-header="true"
-          empty-text="暂无日志"
-          class="text-xs"
-        >
-        <template #cell="{ column, row }">
-          <template v-if="column.key === 'time'">
-            <span class="whitespace-nowrap">{{ formatTime((row as RequestLog).time) }}</span>
-          </template>
-          <template v-else-if="column.key === 'upstream_model'">
-            <span class="font-mono">{{ (row as RequestLog).upstream_model }}</span>
-          </template>
-          <template v-else-if="column.key === 'status_code'">
-            <HBadge :variant="statusCodeVariant((row as RequestLog).status_code)">
-              {{ (row as RequestLog).status_code || "-" }}
-            </HBadge>
-          </template>
-          <template v-else-if="column.key === 'error'">
-            <span class="block max-w-[200px] break-words text-rose-600">{{
-              (row as RequestLog).error || "-"
-            }}</span>
-          </template>
-          <template v-else-if="column.key === 'failover'">
-            <div class="max-w-[220px] break-words">
-              <template v-if="(row as RequestLog).failover_from || (row as RequestLog).failover_to">
-                {{ (row as RequestLog).failover_from }} → {{ (row as RequestLog).failover_to }}
-                <div class="text-slate-500">{{ (row as RequestLog).failover_reason }}</div>
+    <Card class="min-h-0 flex-1 flex flex-col border border-slate-200 bg-white">
+      <CardHeader class="shrink-0 py-3">
+        <p class="text-sm text-slate-600">
+          筛选 {{ total }} 条 · 库内 {{ storedTotal }} 条 · 第 {{ page }} / {{ totalPages }} 页
+        </p>
+      </CardHeader>
+      <CardContent class="flex min-h-0 flex-1 flex-col gap-3">
+        <!-- 表格区：flex-1 min-h-0 overflow-y-auto 仅表格 body 滚动 -->
+        <div class="min-h-0 flex-1 overflow-y-auto">
+          <Table class="text-xs">
+            <TableHeader>
+              <TableRow>
+                <TableHead v-for="col in logColumns" :key="col.key">{{ col.title }}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="row in items" :key="row.id">
+                <TableCell v-for="col in logColumns" :key="col.key">
+                  <template v-if="col.key === 'time'">
+                    <span class="whitespace-nowrap">{{ formatTime(row.time) }}</span>
+                  </template>
+                  <template v-else-if="col.key === 'upstream_model'">
+                    <span class="font-mono">{{ row.upstream_model }}</span>
+                  </template>
+                  <template v-else-if="col.key === 'status_code'">
+                    <Badge :variant="statusCodeBadgeVariant(row.status_code)">
+                      {{ row.status_code || "-" }}
+                    </Badge>
+                  </template>
+                  <template v-else-if="col.key === 'error'">
+                    <span class="block max-w-[200px] break-words text-rose-600">{{
+                      row.error || "-"
+                    }}</span>
+                  </template>
+                  <template v-else-if="col.key === 'failover'">
+                    <div class="max-w-[220px] break-words">
+                      <template v-if="row.failover_from || row.failover_to">
+                        {{ row.failover_from }} → {{ row.failover_to }}
+                        <div class="text-slate-500">{{ row.failover_reason }}</div>
+                      </template>
+                      <template v-else>-</template>
+                    </div>
+                  </template>
+                  <template v-else>{{ (row as Record<string, unknown>)[col.key] }}</template>
+                </TableCell>
+              </TableRow>
+              <TableRow v-if="items.length === 0">
+                <TableCell :colspan="logColumns.length" class="py-8 text-center text-slate-400">
+                  {{ loading ? "加载中…" : "暂无日志" }}
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+        <!-- 分页器：表格滚动区之外，不随表格滚动 -->
+        <div class="flex shrink-0 justify-end">
+          <Pagination
+            :page="page"
+            :total="total"
+            :page-size="pageSize"
+            :disabled="loading"
+            @update:page="goPage"
+          >
+            <PaginationContent v-slot="{ items: pageItems }" class="gap-0.5">
+              <PaginationFirst class="hidden sm:inline-flex" @click="goPage(1)" />
+              <PaginationPrevious @click="goPage(page - 1)" />
+              <template v-for="item in pageItems" :key="item.type + item.value">
+                <PaginationItem
+                  v-if="item.type === 'page'"
+                  :value="item.value"
+                  :is-active="item.value === page"
+                  @click="goPage(item.value)"
+                >
+                  {{ item.value }}
+                </PaginationItem>
+                <PaginationEllipsis v-else-if="item.type === 'ellipsis'" />
               </template>
-              <template v-else>-</template>
-            </div>
-          </template>
-          <template v-else>{{ (row as RequestLog)[column.key as keyof RequestLog] }}</template>
-        </template>
-        </HTable>
-      </div>
-      <!-- 分页器：表格滚动区之外，不随表格滚动 -->
-      <div class="mt-3 flex justify-end shrink-0">
-        <HPagination
-          :current="page"
-          :total="total"
-          :page-size="pageSize"
-          :disabled="loading"
-          @change="({ current }) => goPage(current)"
-        />
-      </div>
-    </HCard>
+              <PaginationNext @click="goPage(page + 1)" />
+              <PaginationLast class="hidden sm:inline-flex" @click="goPage(totalPages)" />
+            </PaginationContent>
+          </Pagination>
+        </div>
+      </CardContent>
+    </Card>
   </div>
 </template>
 
-<style scoped>
-:deep(.h-card) {
-  display: flex;
-  flex-direction: column;
-}
-
-:deep(.h-card__body) {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-</style>

@@ -2,7 +2,9 @@
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { Plus } from "@lucide/vue";
-import { HButton, HCard, HEmpty } from "happier-ui";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Empty } from "@/components/ui/empty";
 import {
   deleteGroup,
   exportGroupToPiAgent,
@@ -127,65 +129,49 @@ onMounted(async () => {
 
 <template>
   <div class="h-full flex flex-col overflow-hidden">
-    <HCard variant="outlined" padding="md" class="min-h-0 flex-1 flex flex-col">
-      <template #header>
-        <div class="flex items-center justify-between gap-2">
-          <h2 class="text-base font-semibold">分组</h2>
-          <HButton
-            variant="ghost"
-            size="sm"
-            isIconOnly
-            shape="circle"
-            title="新建分组"
-            aria-label="新建分组"
-            type="button"
-            @click="openCreate"
-          >
-            <Plus :size="18" aria-hidden="true" />
-          </HButton>
+    <Card class="min-h-0 flex-1 flex flex-col border border-slate-200 bg-white">
+      <CardHeader class="flex shrink-0 flex-row items-center justify-between gap-2 py-3">
+        <h2 class="text-base font-semibold">分组</h2>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="新建分组"
+          aria-label="新建分组"
+          type="button"
+          @click="openCreate"
+        >
+          <Plus :size="18" aria-hidden="true" />
+        </Button>
+      </CardHeader>
+      <CardContent class="flex min-h-0 flex-1 flex-col gap-3">
+        <p class="shrink-0 text-xs text-slate-500">
+          「配置到 Pi」会将该分组名写入本机
+          <code class="rounded bg-slate-100 px-1">~/.pi/agent/models.json</code>
+          的
+          <code class="rounded bg-slate-100 px-1">model-hub</code>
+          （固定占位 Key，无需客户端密钥）。
+        </p>
+        <p v-if="message" class="shrink-0 whitespace-pre-line text-sm text-emerald-700">{{ message }}</p>
+        <p v-if="error" class="shrink-0 text-sm text-rose-600">{{ error }}</p>
+        <Empty v-if="groups.length === 0" class="app-empty-compact shrink-0" title="暂无分组" />
+        <div v-if="groups.length > 0" class="min-h-0 flex-1 overflow-y-auto pr-1">
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <GroupCard
+              v-for="g in groups"
+              :key="g.id"
+              :group="g"
+              :provider-name="providerName"
+              :thinking-effort-labels="thinkingEffortLabels"
+              :saving="cardSavingIds.has(g.id)"
+              :exporting-pi="exportingPiId === g.id"
+              @edit="startEdit(g)"
+              @export-pi="exportToPi(g.id)"
+              @delete-group="removeGroup(g.id)"
+              @persist-items="persistGroupItems(g, $event)"
+            />
+          </div>
         </div>
-      </template>
-      <p class="mb-3 shrink-0 text-xs text-slate-500">
-        「配置到 Pi」会将该分组名写入本机
-        <code class="rounded bg-slate-100 px-1">~/.pi/agent/models.json</code>
-        的
-        <code class="rounded bg-slate-100 px-1">model-hub</code>
-        （固定占位 Key，无需客户端密钥）。
-      </p>
-      <p v-if="message" class="mb-3 shrink-0 whitespace-pre-line text-sm text-emerald-700">{{ message }}</p>
-      <p v-if="error" class="mb-3 shrink-0 text-sm text-rose-600">{{ error }}</p>
-      <HEmpty v-if="groups.length === 0" class="app-empty-compact shrink-0" title="暂无分组" />
-      <div v-if="groups.length > 0" class="min-h-0 flex-1 overflow-y-auto pr-1">
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <GroupCard
-            v-for="g in groups"
-            :key="g.id"
-            :group="g"
-            :provider-name="providerName"
-            :thinking-effort-labels="thinkingEffortLabels"
-            :saving="cardSavingIds.has(g.id)"
-            :exporting-pi="exportingPiId === g.id"
-            @edit="startEdit(g)"
-            @export-pi="exportToPi(g.id)"
-            @delete-group="removeGroup(g.id)"
-            @persist-items="persistGroupItems(g, $event)"
-          />
-        </div>
-      </div>
-    </HCard>
+      </CardContent>
+    </Card>
   </div>
 </template>
-
-<style scoped>
-:deep(.h-card) {
-  display: flex;
-  flex-direction: column;
-}
-
-:deep(.h-card__body) {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-</style>

@@ -3,7 +3,21 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ChevronDown } from "@lucide/vue";
 import { useForm } from "@tanstack/vue-form";
-import { HButton, HCard, HCell, HEmpty, HInput, HLoading, HSelect, HSwitch, HTag, type HSelectOption } from "happier-ui";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Empty } from "@/components/ui/empty";
+import { Input } from "@/components/ui/input";
+import { Item, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import {
   createGroup,
   extractInvokeError,
@@ -44,7 +58,7 @@ const defaultFormValues: GroupFormValues = {
   items: [],
 };
 
-const thinkingEffortOptions: HSelectOption[] = [
+const thinkingEffortOptions: { value: ThinkingEffort; label: string }[] = [
   { value: "off", label: "关闭（不注入）" },
   { value: "auto", label: "自动最佳" },
   { value: "minimal", label: "最小" },
@@ -478,7 +492,7 @@ async function autoSaveAfterSort(): Promise<boolean> {
         </span>
         分组名 = 客户端 model；队列顺序即故障转移优先级。
       </p>
-      <HButton
+      <Button
         variant="ghost"
         size="sm"
         type="button"
@@ -486,56 +500,62 @@ async function autoSaveAfterSort(): Promise<boolean> {
         @click="goBack"
       >
         返回列表
-      </HButton>
+      </Button>
     </div>
 
     <!-- 编辑态加载中 -->
-    <HLoading
-      v-if="loading"
-      mode="local"
-      label="正在加载分组…"
-      class="py-6"
-    />
+    <div v-if="loading" class="flex items-center gap-2 py-6 text-sm text-slate-500">
+      <Spinner class="size-4" />
+      正在加载分组…
+    </div>
 
     <!-- 编辑态加载失败：分组不存在 / 加载失败 -->
-    <HCard
-      v-else-if="loadFailed"
-      variant="outlined"
-      class="border-rose-200 bg-rose-50"
-    >
-      <p class="text-sm text-rose-700">{{ error }}</p>
-      <HButton
-        variant="outline"
-        size="sm"
-        type="button"
-        class="mt-3"
-        @click="goBack"
-      >
-        返回列表
-      </HButton>
-    </HCard>
+    <Card v-else-if="loadFailed" class="border border-rose-200 bg-rose-50">
+      <CardContent class="py-4">
+        <p class="text-sm text-rose-700">{{ error }}</p>
+        <Button
+          variant="outline"
+          size="sm"
+          type="button"
+          class="mt-3"
+          @click="goBack"
+        >
+          返回列表
+        </Button>
+      </CardContent>
+    </Card>
 
     <div v-else class="flex min-h-0 flex-1 flex-col gap-4">
       <form class="flex min-h-0 flex-1 flex-col gap-4" @submit.prevent="form.handleSubmit()">
         <div class="grid gap-3 md:grid-cols-2">
           <form.Field name="name">
             <template #default="{ field }">
-              <HInput
-                :model-value="field.state.value"
-                label="分组名（对外 model）"
-                @update:model-value="field.handleChange"
-              />
+              <label class="block text-sm">
+                <span class="mb-1 block text-slate-600">分组名（对外 model）</span>
+                <Input
+                  :model-value="field.state.value"
+                  @update:model-value="field.handleChange"
+                />
+              </label>
             </template>
           </form.Field>
           <form.Field name="thinking_effort">
             <template #default="{ field }">
-              <label class="text-sm">
+              <label class="block text-sm">
                 <span class="mb-1 block text-slate-600">思考强度</span>
-                <HSelect
-                  :options="thinkingEffortOptions"
+                <Select
                   :model-value="field.state.value"
                   @update:model-value="(v) => field.handleChange(v as ThinkingEffort)"
-                />
+                >
+                  <SelectTrigger class="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem v-for="opt in thinkingEffortOptions" :key="opt.value" :value="opt.value">
+                      {{ opt.label }}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
                 <span class="mt-1 block text-xs text-slate-500">
                   代理转发时按上游模型家族翻译为对应字段；客户端自带则不覆盖。
                 </span>
@@ -549,60 +569,61 @@ async function autoSaveAfterSort(): Promise<boolean> {
         <!-- 双栏：左可选模型 / 右已选队列（flex 而非 grid：grid item 上 flex-1 不生效，会回退到内容高度导致整页滚动） -->
         <div class="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
           <!-- 左：按供应商手风琴选模 -->
-          <HCard variant="outlined" padding="none" class="flex min-h-0 flex-1 flex-col">
-            <template #header>
+          <Card class="flex min-h-0 flex-1 flex-col border border-slate-200 bg-white">
+            <CardHeader class="shrink-0 py-0">
               <div class="flex items-center justify-between px-3 py-2">
                 <h3 class="text-sm font-medium">可选模型</h3>
                 <span class="text-xs text-slate-400">展开供应商以加载其模型</span>
               </div>
-            </template>
+            </CardHeader>
+            <CardContent class="flex min-h-0 flex-1 flex-col p-0">
             <div class="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
               <div
                 v-for="p in providers"
                 :key="p.id"
                 class="rounded-lg border border-slate-200"
               >
-                <HCell
-                  clickable
-                  :show-chevron="false"
-                  :title="p.name"
+                <Item
+                  class="w-full cursor-pointer rounded-lg border border-transparent hover:bg-slate-50"
                   @click="toggleProvider(p.id)"
                 >
-                  <template #prefix>
-                    <ChevronDown
-                      :size="14"
-                      class="text-slate-400 transition-transform"
-                      :class="{ '-rotate-90': !expandedProviders.has(p.id) }"
-                    />
-                  </template>
-                  <template #suffix>
-                    <!-- 自动同步开关：点击不展开手风琴（stop），仅切换 auto_sync -->
-                    <div class="flex items-center gap-2" @click.stop>
-                      <HSwitch
-                        :model-value="p.auto_sync"
-                        :disabled="autoSyncTogglingIds.has(p.id)"
-                        :aria-label="`${p.name} 自动同步`"
-                        title="自动同步"
-                        @update:model-value="toggleProviderAutoSync(p, $event)"
-                      />
-                      <!-- 模型已加载显示数量；未加载显示同步状态（数据来自 list_providers 返回的 last_sync_at） -->
-                      <span v-if="modelCache.getStatus(p.id) === 'ready'" class="text-xs text-slate-400">
-                        {{ modelCache.getModels(p.id).length }} 个模型
-                      </span>
-                      <span v-else class="text-xs text-slate-400">
-                        {{ p.last_sync_at ? `已同步 ${formatUnix(p.last_sync_at)}` : "未同步" }}
-                      </span>
-                    </div>
-                  </template>
-                </HCell>
+                  <ChevronDown
+                    :size="14"
+                    class="shrink-0 text-slate-400 transition-transform"
+                    :class="{ '-rotate-90': !expandedProviders.has(p.id) }"
+                  />
+                  <ItemContent class="min-w-0 flex-1">
+                    <ItemTitle>{{ p.name }}</ItemTitle>
+                    <ItemDescription>
+                      <!-- 自动同步开关：点击不展开手风琴（stop），仅切换 auto_sync -->
+                      <div class="flex items-center gap-2" @click.stop>
+                        <Switch
+                          :model-value="p.auto_sync"
+                          :disabled="autoSyncTogglingIds.has(p.id)"
+                          :aria-label="`${p.name} 自动同步`"
+                          title="自动同步"
+                          @update:model-value="toggleProviderAutoSync(p, $event)"
+                        />
+                        <!-- 模型已加载显示数量；未加载显示同步状态（数据来自 list_providers 返回的 last_sync_at） -->
+                        <span v-if="modelCache.getStatus(p.id) === 'ready'" class="text-xs text-slate-400">
+                          {{ modelCache.getModels(p.id).length }} 个模型
+                        </span>
+                        <span v-else class="text-xs text-slate-400">
+                          {{ p.last_sync_at ? `已同步 ${formatUnix(p.last_sync_at)}` : "未同步" }}
+                        </span>
+                      </div>
+                    </ItemDescription>
+                  </ItemContent>
+                </Item>
 
                 <div v-if="expandedProviders.has(p.id)" class="border-t border-slate-100 px-3 py-2">
-                  <div v-if="modelCache.getStatus(p.id) === 'loading'" class="py-2">
-                    <HLoading mode="local" size="sm" label="正在拉取模型…" />
+                  <div v-if="modelCache.getStatus(p.id) === 'loading'" class="flex items-center gap-2 py-2 text-xs text-slate-500">
+                    <Spinner class="size-3" />
+                    正在拉取模型…
                   </div>
                   <div v-else-if="modelCache.getStatus(p.id) === 'error'" class="py-2">
                     <p class="text-xs text-rose-600">{{ modelCache.getError(p.id) }}</p>
-                    <HButton
+                    <Button
                       variant="ghost"
                       size="sm"
                       type="button"
@@ -610,15 +631,15 @@ async function autoSaveAfterSort(): Promise<boolean> {
                       @click="modelCache.refresh(p.id)"
                     >
                       重试
-                    </HButton>
+                    </Button>
                   </div>
                   <template v-else>
-                    <HInput
+                    <Input
                       v-model="leftFilter"
                       placeholder="过滤该供应商已加载模型"
                       class="mb-2"
                     />
-                    <HEmpty v-if="modelCache.getModels(p.id).length === 0" class="app-empty-compact" title="上游未返回模型" />
+                    <Empty v-if="modelCache.getModels(p.id).length === 0" class="app-empty-compact" title="上游未返回模型" />
                     <div
                       v-else
                       class="flex max-h-56 flex-col gap-1 overflow-y-auto"
@@ -638,29 +659,30 @@ async function autoSaveAfterSort(): Promise<boolean> {
                       </p>
                     </div>
                     <div class="mt-2 flex justify-end">
-                      <HButton
+                      <Button
                         variant="outline"
                         size="sm"
                         type="button"
                         @click="addAllFromProvider(p.id)"
                       >
                         全部加入
-                      </HButton>
+                      </Button>
                     </div>
                   </template>
                 </div>
               </div>
-              <HEmpty v-if="providers.length === 0" class="app-empty-compact" title="暂无供应商，请先到「供应商」页添加" />
+              <Empty v-if="providers.length === 0" class="app-empty-compact" title="暂无供应商，请先到「供应商」页添加" />
             </div>
-          </HCard>
+            </CardContent>
+          </Card>
 
           <!-- 右：已选故障转移队列 -->
-          <HCard variant="outlined" padding="none" class="flex min-h-0 flex-1 flex-col">
-            <template #header>
+          <Card class="flex min-h-0 flex-1 flex-col border border-slate-200 bg-white">
+            <CardHeader class="shrink-0 py-0">
               <div class="flex items-center justify-between px-3 py-2">
                 <h3 class="text-sm font-medium">故障转移队列</h3>
                 <span class="flex items-center gap-1">
-                  <HButton
+                  <Button
                     variant="ghost"
                     size="sm"
                     type="button"
@@ -668,8 +690,8 @@ async function autoSaveAfterSort(): Promise<boolean> {
                     @click="sortQueueByCapability"
                   >
                     按模型能力排序
-                  </HButton>
-                  <HButton
+                  </Button>
+                  <Button
                     variant="ghost"
                     size="sm"
                     type="button"
@@ -677,10 +699,11 @@ async function autoSaveAfterSort(): Promise<boolean> {
                     @click="clearQueue"
                   >
                     清空
-                  </HButton>
+                  </Button>
                 </span>
               </div>
-            </template>
+            </CardHeader>
+            <CardContent class="flex min-h-0 flex-1 flex-col p-0">
             <div class="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
               <div
                 v-for="(item, index) in formValues.items"
@@ -713,9 +736,9 @@ async function autoSaveAfterSort(): Promise<boolean> {
                   </span>
                   <span class="block truncate font-mono text-xs text-slate-500">{{ item.upstream_model }}</span>
                 </div>
-                <HTag
-                  size="sm"
-                  :variant="queueDisplayScores[index] ? 'success' : 'default'"
+                <Badge
+                  variant="outline"
+                  :class="queueDisplayScores[index] ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : ''"
                   :title="
                     queueDisplayScores[index]
                       ? `llm_benchmark 分数 ${queueDisplayScores[index]?.score}（匹配层级：${queueDisplayScores[index]?.tier}）`
@@ -726,8 +749,8 @@ async function autoSaveAfterSort(): Promise<boolean> {
                     llm_benchmark · {{ queueDisplayScores[index]?.score }}
                   </template>
                   <template v-else>未匹配</template>
-                </HTag>
-                <HButton
+                </Badge>
+                <Button
                   variant="ghost"
                   size="sm"
                   type="button"
@@ -736,24 +759,25 @@ async function autoSaveAfterSort(): Promise<boolean> {
                   @click="removeQueueItem(index)"
                 >
                   ×
-                </HButton>
+                </Button>
               </div>
-              <HEmpty
+              <Empty
                 v-if="formValues.items.length === 0"
                 class="app-empty-compact"
                 title="队列为空：从左侧选择模型加入"
               />
             </div>
-          </HCard>
+            </CardContent>
+          </Card>
         </div>
 
         <div class="flex gap-2">
-          <HButton variant="primary" type="submit" :disabled="saving">
+          <Button variant="default" type="submit" :disabled="saving">
             {{ saving ? "保存中…" : isEditing ? "保存修改" : "创建分组" }}
-          </HButton>
-          <HButton variant="outline" type="button" :disabled="saving" @click="goBack">
+          </Button>
+          <Button variant="outline" type="button" :disabled="saving" @click="goBack">
             取消
-          </HButton>
+          </Button>
         </div>
         <p v-if="error" class="text-sm text-rose-600">{{ error }}</p>
       </form>
@@ -761,18 +785,4 @@ async function autoSaveAfterSort(): Promise<boolean> {
   </div>
 </template>
 
-<style scoped>
-/* 让 HCard (.h-card) 内部 .h-card__body slot 容器参与 flex 列布局并撑满高度，
-   否则双栏内部 overflow-y-auto 滚动区的 flex-1 失效，内容被 max-h 截断无法滚动。 */
-:deep(.h-card) {
-  display: flex;
-  flex-direction: column;
-}
 
-:deep(.h-card__body) {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-</style>

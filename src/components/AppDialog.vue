@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, watch } from "vue";
-import { HButton, HDialog } from "happier-ui";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const props = withDefaults(
   defineProps<{
@@ -15,7 +22,7 @@ const props = withDefaults(
 const emit = defineEmits<{ close: [] }>();
 
 /**
- * 对外 open ↔ HDialog modelValue。
+ * 对外 open ↔ Dialog 开合。
  * closeDisabled 时忽略关闭；仅在 v-model 路径 emit close，避免与 @close 重复。
  */
 const modelOpen = computed({
@@ -24,8 +31,6 @@ const modelOpen = computed({
     if (!value && !props.closeDisabled) emit("close");
   },
 });
-
-const allowClose = computed(() => !props.closeDisabled);
 
 let restoreFocus: HTMLElement | null = null;
 
@@ -50,36 +55,33 @@ function requestClose() {
 
 <template>
   <!-- Teleport 到 body，避免被 AppShell 内容区 overflow 裁切 -->
-  <!-- 宿主 class 挂在外层：HDialog 根 class 写死为 h-dialog，外传 class 不可靠 -->
+  <!-- 宿主 class 挂在外层：Dialog 内容宽度由 class 控制 -->
   <Teleport to="body">
-    <div
-      v-if="open"
-      class="app-dialog-host"
-      :class="{ 'app-dialog-host--wide': size === 'wide' }"
-    >
-      <HDialog
-        v-model="modelOpen"
-        :aria-label="title"
-        :close-on-overlay="allowClose"
-        :close-on-esc="allowClose"
+    <Dialog v-model:open="modelOpen">
+      <DialogContent
+        :class="size === 'wide' ? 'max-w-3xl' : 'max-w-lg'"
+        :close-on-esc="!closeDisabled"
+        :close-on-overlay="!closeDisabled"
       >
-        <template #title>
-          <div class="app-dialog-title-row">
-            <h2 class="app-dialog-title">{{ title }}</h2>
-            <HButton
-              variant="ghost"
-              size="sm"
-              type="button"
-              aria-label="关闭对话框"
-              :disabled="closeDisabled"
-              @click="requestClose"
-            >
-              ×
-            </HButton>
-          </div>
-        </template>
+        <DialogHeader>
+          <DialogTitle>
+            <div class="app-dialog-title-row">
+              <h2 class="app-dialog-title">{{ title }}</h2>
+            </div>
+          </DialogTitle>
+        </DialogHeader>
         <slot />
-      </HDialog>
-    </div>
+        <DialogClose
+          :disabled="closeDisabled"
+          class="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
+          aria-label="关闭对话框"
+          @click="requestClose"
+        >
+          <Button variant="ghost" size="sm" type="button" class="h-6 w-6 p-0" aria-label="关闭对话框">
+            ×
+          </Button>
+        </DialogClose>
+      </DialogContent>
+    </Dialog>
   </Teleport>
 </template>

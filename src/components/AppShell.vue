@@ -2,7 +2,18 @@
 import { computed, onMounted, ref } from "vue";
 import { X } from "@lucide/vue";
 import { useRoute, useRouter, RouterLink, RouterView } from "vue-router";
-import { HButton, HSidebar, type HSidebarItem } from "happier-ui";
+import { Button } from "@/components/ui/button";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+} from "@/components/ui/sidebar";
 import { checkForUpdate, getShellPrefs } from "../api/tauri";
 import AppTitleBar from "./AppTitleBar.vue";
 
@@ -18,7 +29,7 @@ const activeNavKey = computed(() => {
   return path;
 });
 
-const navItems: HSidebarItem[] = [
+const navItems: { key: string; label: string }[] = [
   { key: "/", label: "首页" },
   { key: "/providers", label: "供应商" },
   { key: "/groups", label: "分组" },
@@ -50,18 +61,29 @@ onMounted(checkUpdateOnAppStartup);
   <div class="flex h-screen flex-col overflow-hidden bg-slate-100 text-slate-900">
     <AppTitleBar />
     <div class="flex min-h-0 flex-1 overflow-hidden">
-      <HSidebar
-        :items="navItems"
-        :model-value="activeNavKey"
-        :show-collapse-toggle="false"
-        aria-label="主导航"
-        @update:model-value="(key: string) => router.push(key)"
-      >
-        <template #header>
-          <div class="text-lg font-semibold tracking-wide">Model Hub</div>
-          <div class="mt-1 text-xs text-slate-400">Vue3 · 内嵌代理</div>
-        </template>
-      </HSidebar>
+      <SidebarProvider>
+        <Sidebar collapsible="icon" class="border-r border-slate-200 bg-white">
+          <SidebarHeader class="flex flex-col items-start gap-1 px-4 py-3">
+            <div class="text-lg font-semibold tracking-wide">Model Hub</div>
+            <div class="text-xs text-slate-400">Vue3 · 内嵌代理</div>
+          </SidebarHeader>
+          <SidebarContent>
+            <SidebarGroup>
+              <SidebarGroupLabel>导航</SidebarGroupLabel>
+              <SidebarMenu>
+                <SidebarMenuItem v-for="item in navItems" :key="item.key">
+                  <SidebarMenuButton
+                    as-child
+                    :is-active="activeNavKey === item.key"
+                  >
+                    <RouterLink :to="item.key">{{ item.label }}</RouterLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroup>
+          </SidebarContent>
+        </Sidebar>
+      </SidebarProvider>
       <main class="flex min-w-0 flex-1 flex-col">
         <div
           v-if="availableVersion"
@@ -71,17 +93,15 @@ onMounted(checkUpdateOnAppStartup);
           <RouterLink class="shrink-0 font-medium text-cyan-800 hover:text-cyan-950" to="/settings">
             前往设置
           </RouterLink>
-          <HButton
+          <Button
             variant="ghost"
-            size="sm"
-            isIconOnly
-            shape="circle"
+            size="icon"
             aria-label="关闭更新提示"
             title="关闭更新提示"
             @click="availableVersion = ''"
           >
             <X :size="16" aria-hidden="true" />
-          </HButton>
+          </Button>
         </div>
         <header class="border-b border-slate-200 bg-white px-6 py-4">
           <h1 class="text-xl font-semibold">{{ title }}</h1>

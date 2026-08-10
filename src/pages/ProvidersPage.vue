@@ -2,18 +2,32 @@
 import { computed, onMounted, ref } from "vue";
 import { Plus } from "@lucide/vue";
 import { useForm } from "@tanstack/vue-form";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Empty } from "@/components/ui/empty";
+import { Input } from "@/components/ui/input";
 import {
-  HButton,
-  HCard,
-  HCheckbox,
-  HEmpty,
-  HInput,
-  HPagination,
-  HSwitch,
-  HTable,
-  type HTableColumn,
-  HTextarea,
-} from "happier-ui";
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationFirst,
+  PaginationItem,
+  PaginationLast,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import { Switch } from "@/components/ui/switch";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import {
   createProvider,
   deleteProvider,
@@ -52,7 +66,7 @@ const pageSize = 10;
 const totalPages = computed(() => Math.max(1, Math.ceil(items.value.length / pageSize) || 1));
 const pagedItems = computed(() => items.value.slice((page.value - 1) * pageSize, page.value * pageSize));
 
-const providerColumns: HTableColumn[] = [
+const providerColumns: { key: string; title: string }[] = [
   { key: "name", title: "名称" },
   { key: "base_url", title: "Base URL" },
   { key: "enabled", title: "启用" },
@@ -263,21 +277,21 @@ onMounted(refresh);
             支持 NewAPI 分享 JSON（含
             <code class="rounded bg-white px-1">newapi_channel_conn</code>）、环境变量、curl 与普通文本。仅本地解析，不会上传。
           </p>
-          <!-- HTextarea 内部 textarea 无法接收等宽字体（class 落到外层 div，表单元素不继承 font-family）；
-               原 font-mono 暂时降级，等 happier-ui#8 补 monospace 支持后恢复。 -->
-          <HTextarea
+          <!-- Textarea 支持 class 透传，可直接加 font-mono -->
+          <Textarea
             v-model="pasteText"
             :rows="4"
             :spellcheck="false"
             placeholder='例如：{"_type":"newapi_channel_conn","key":"sk-...","url":"https://..."}'
+            class="font-mono"
           />
           <div class="mt-2 flex flex-wrap gap-2">
-            <HButton variant="secondary" size="sm" type="button" @click="applyPaste">
+            <Button variant="secondary" size="sm" type="button" @click="applyPaste">
               识别并填入表单
-            </HButton>
-            <HButton variant="outline" size="sm" type="button" @click="pasteText = ''">
+            </Button>
+            <Button variant="outline" size="sm" type="button" @click="pasteText = ''">
               清空粘贴框
-            </HButton>
+            </Button>
           </div>
         </div>
         <form
@@ -286,51 +300,59 @@ onMounted(refresh);
         >
           <form.Field name="name">
             <template #default="{ field }">
-              <HInput
-                :model-value="field.state.value"
-                label="名称"
-                @update:model-value="field.handleChange"
-              />
+              <label class="block text-sm">
+                <span class="mb-1 block text-slate-600">名称</span>
+                <Input
+                  :model-value="field.state.value"
+                  @update:model-value="field.handleChange"
+                />
+              </label>
             </template>
           </form.Field>
           <form.Field name="base_url">
             <template #default="{ field }">
-              <HInput
-                :model-value="field.state.value"
-                label="Base URL"
-                @update:model-value="field.handleChange"
-              />
+              <label class="block text-sm">
+                <span class="mb-1 block text-slate-600">Base URL</span>
+                <Input
+                  :model-value="field.state.value"
+                  @update:model-value="field.handleChange"
+                />
+              </label>
             </template>
           </form.Field>
           <div class="md:col-span-2">
             <form.Field name="api_key">
               <template #default="{ field }">
-                <HInput
-                  :model-value="field.state.value"
-                  type="password"
-                  autocomplete="off"
-                  label="上游 API Key"
-                  @update:model-value="field.handleChange"
-                />
+                <label class="block text-sm">
+                  <span class="mb-1 block text-slate-600">上游 API Key</span>
+                  <Input
+                    :model-value="field.state.value"
+                    type="password"
+                    autocomplete="off"
+                    @update:model-value="field.handleChange"
+                  />
+                </label>
               </template>
             </form.Field>
           </div>
           <form.Field name="enabled">
             <template #default="{ field }">
-              <HCheckbox
-                :model-value="field.state.value"
-                label="启用"
-                @update:model-value="field.handleChange"
-              />
+              <label class="flex items-center gap-2 text-sm">
+                <Checkbox
+                  :model-value="field.state.value"
+                  @update:model-value="field.handleChange"
+                />
+                <span>启用</span>
+              </label>
             </template>
           </form.Field>
           <div class="mt-1 flex flex-wrap gap-2 md:col-span-2">
-            <HButton variant="primary" type="submit" :disabled="saving">
+            <Button variant="default" type="submit" :disabled="saving">
               {{ saving ? "保存中…" : "保存" }}
-            </HButton>
-            <HButton variant="outline" type="button" :disabled="saving" @click="closeDialog">
+            </Button>
+            <Button variant="outline" type="button" :disabled="saving" @click="closeDialog">
               取消
-            </HButton>
+            </Button>
           </div>
         </form>
         <p v-if="message" class="mt-3 text-sm text-emerald-700">{{ message }}</p>
@@ -338,111 +360,121 @@ onMounted(refresh);
       </section>
     </AppDialog>
 
-    <HCard variant="outlined" padding="md" class="min-h-0 flex-1 flex flex-col">
-      <template #header>
+    <Card class="min-h-0 flex-1 flex flex-col border border-slate-200 bg-white">
+      <CardHeader class="shrink-0 py-3">
         <div class="flex items-center justify-between gap-2">
           <h2 class="text-base font-semibold">供应商</h2>
-          <HButton
+          <Button
             variant="ghost"
-            size="sm"
-            isIconOnly
-            shape="circle"
+            size="icon"
             title="新建供应商"
             aria-label="新建供应商"
             type="button"
             @click="openCreate"
           >
             <Plus :size="18" aria-hidden="true" />
-          </HButton>
+          </Button>
         </div>
-      </template>
-      <p v-if="error && !dialogOpen" class="mb-3 text-sm text-rose-600">{{ error }}</p>
-      <p v-if="items.length > 0" class="mb-3 text-sm text-slate-600">共 {{ items.length }} 个供应商</p>
-      <HEmpty v-if="items.length === 0" class="app-empty-compact" title="暂无供应商" />
-      <template v-else>
-        <!-- 表格滚动区：flex-1 撑满，min-h-0 overflow-y-auto 仅表格 body 滚动 -->
-        <div class="min-h-0 flex-1 overflow-y-auto">
-          <!-- HTable data 只接受 Record<string, unknown>[]，interface 无索引签名需双重断言；等 happier-ui#9 泛型化后简化 -->
-          <HTable
-            :columns="providerColumns"
-            :data="pagedItems as unknown as Record<string, unknown>[]"
-            row-key="id"
-            :sticky-header="true"
-            class="text-sm"
-          >
-            <template #cell="{ column, row }">
-              <template v-if="column.key === 'name'">
-                <span class="font-medium">{{ (row as Provider).name }}</span>
-              </template>
-              <template v-else-if="column.key === 'base_url'">
-                <span class="font-mono text-xs">{{ (row as Provider).base_url }}</span>
-              </template>
-              <template v-else-if="column.key === 'enabled'">
-                <HSwitch
-                  :model-value="(row as Provider).enabled"
-                  :disabled="togglingIds.has((row as Provider).id) || saving"
-                  :aria-label="`${(row as Provider).name} 启用`"
-                  @update:model-value="toggleProviderEnabled(row as Provider, $event)"
-                />
-              </template>
-              <template v-else-if="column.key === 'last_sync_at'">
-                <span class="text-xs text-slate-500">
-                  {{ formatSyncTime((row as Provider).last_sync_at) }}
-                </span>
-              </template>
-              <template v-else-if="column.key === 'actions'">
-                <span class="space-x-2">
-                  <HButton
-                    variant="outline"
-                    size="sm"
-                    type="button"
-                    :disabled="syncingIds.has((row as Provider).id)"
-                    @click="syncNow(row as Provider)"
+      </CardHeader>
+      <CardContent class="flex min-h-0 flex-1 flex-col gap-3">
+        <p v-if="error && !dialogOpen" class="text-sm text-rose-600">{{ error }}</p>
+        <p v-if="items.length > 0" class="text-sm text-slate-600">共 {{ items.length }} 个供应商</p>
+        <Empty v-if="items.length === 0" class="app-empty-compact" title="暂无供应商" />
+        <template v-else>
+          <!-- 表格滚动区：flex-1 撑满，min-h-0 overflow-y-auto 仅表格 body 滚动 -->
+          <div class="min-h-0 flex-1 overflow-y-auto">
+            <Table class="text-sm">
+              <TableHeader>
+                <TableRow>
+                  <TableHead v-for="col in providerColumns" :key="col.key">{{ col.title }}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow v-for="row in pagedItems" :key="row.id">
+                  <TableCell v-for="col in providerColumns" :key="col.key">
+                    <template v-if="col.key === 'name'">
+                      <span class="font-medium">{{ row.name }}</span>
+                    </template>
+                    <template v-else-if="col.key === 'base_url'">
+                      <span class="font-mono text-xs">{{ row.base_url }}</span>
+                    </template>
+                    <template v-else-if="col.key === 'enabled'">
+                      <Switch
+                        :model-value="row.enabled"
+                        :disabled="togglingIds.has(row.id) || saving"
+                        :aria-label="`${row.name} 启用`"
+                        @update:model-value="toggleProviderEnabled(row, $event)"
+                      />
+                    </template>
+                    <template v-else-if="col.key === 'last_sync_at'">
+                      <span class="text-xs text-slate-500">
+                        {{ formatSyncTime(row.last_sync_at) }}
+                      </span>
+                    </template>
+                    <template v-else-if="col.key === 'actions'">
+                      <span class="space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          :disabled="syncingIds.has(row.id)"
+                          @click="syncNow(row)"
+                        >
+                          {{ syncingIds.has(row.id) ? "同步中…" : "立即同步" }}
+                        </Button>
+                        <Button variant="outline" size="sm" type="button" @click="startEdit(row)">
+                          编辑
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          type="button"
+                          @click="remove(row.id)"
+                        >
+                          删除
+                        </Button>
+                      </span>
+                    </template>
+                    <template v-else>{{ (row as Record<string, unknown>)[col.key] }}</template>
+                  </TableCell>
+                </TableRow>
+                <TableRow v-if="pagedItems.length === 0">
+                  <TableCell :colspan="providerColumns.length" class="py-8 text-center text-slate-400">
+                    暂无数据
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+          <!-- 分页器：表格滚动区之后，不随表格滚动 -->
+          <div v-if="items.length > pageSize" class="flex shrink-0 justify-end">
+            <Pagination
+              :page="page"
+              :total="items.length"
+              :page-size="pageSize"
+              @update:page="goPage"
+            >
+              <PaginationContent v-slot="{ items: pageItems }" class="gap-0.5">
+                <PaginationFirst class="hidden sm:inline-flex" @click="goPage(1)" />
+                <PaginationPrevious @click="goPage(page - 1)" />
+                <template v-for="item in pageItems" :key="item.type + item.value">
+                  <PaginationItem
+                    v-if="item.type === 'page'"
+                    :value="item.value"
+                    :is-active="item.value === page"
+                    @click="goPage(item.value)"
                   >
-                    {{ syncingIds.has((row as Provider).id) ? "同步中…" : "立即同步" }}
-                  </HButton>
-                  <HButton variant="outline" size="sm" type="button" @click="startEdit(row as Provider)">
-                    编辑
-                  </HButton>
-                  <HButton
-                    variant="danger-soft"
-                    size="sm"
-                    type="button"
-                    @click="remove((row as Provider).id)"
-                  >
-                    删除
-                  </HButton>
-                </span>
-              </template>
-              <template v-else>{{ (row as Provider)[column.key as keyof Provider] }}</template>
-            </template>
-          </HTable>
-        </div>
-        <!-- 分页器：表格滚动区之后，不随表格滚动 -->
-        <div v-if="items.length > pageSize" class="mt-3 flex justify-end shrink-0">
-          <HPagination
-            :current="page"
-            :total="items.length"
-            :page-size="pageSize"
-            @change="({ current }) => goPage(current)"
-          />
-        </div>
-      </template>
-    </HCard>
+                    {{ item.value }}
+                  </PaginationItem>
+                  <PaginationEllipsis v-else-if="item.type === 'ellipsis'" />
+                </template>
+                <PaginationNext @click="goPage(page + 1)" />
+                <PaginationLast class="hidden sm:inline-flex" @click="goPage(totalPages)" />
+              </PaginationContent>
+            </Pagination>
+          </div>
+        </template>
+      </CardContent>
+    </Card>
   </div>
 </template>
-
-<style scoped>
-/* 让 HCard (.h-card) 内部 .h-card__body slot 容器参与 flex 列布局并撑满高度 */
-:deep(.h-card) {
-  display: flex;
-  flex-direction: column;
-}
-
-:deep(.h-card__body) {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-</style>
