@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 43
+- **Total Sessions**: 44
 - **Last Active**: 2026-08-10
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~107 | Active |
+| `journal-2.md` | ~140 | Active |
 | `journal-1.md` | ~1992 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 44 | 2026-08-10 | 消耗费用：OpenRouter 单价自动同步 + 统计时算费用（首页/设置页） | - | `master` |
 | 43 | 2026-08-10 | 统计卡片只显示总计：移除今日 tab 与刷新按钮，首页 5s 轮询实时刷新 | - | `master` |
 | 42 | 2026-08-10 | 首页统计改 octopus 同款四统计卡片（总计/今日切换 + 数值动画） | - | `master` |
 | 41 | 2026-08-10 | 首页统计总览：token/耗时记录 + 聚合（总计+今日） | - | `master` |

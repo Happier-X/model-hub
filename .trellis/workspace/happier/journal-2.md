@@ -105,3 +105,36 @@ StatsCards 去掉今日/总计切换与刷新按钮，只渲染总计四卡片�
 ### Next Steps
 
 - 无
+
+
+## Session 44: 消耗费用：OpenRouter 单价自动同步 + 统计时算费用（首页/设置页）
+
+**Date**: 2026-08-10
+**Task**: 消耗费用：OpenRouter 单价自动同步 + 统计时算费用（首页/设置页）
+**Branch**: `master`
+
+### Summary
+
+model_pricing 单价表 + OpenRouter 自动同步（后台 24h 到期检查 + 立即同步按钮，无手动编辑）；request_overview LEFT JOIN 按模型算输入/输出费用（别名匹配，无价按 0）；首页三费用显示 $ 金额；设置页模型单价只读表格（搜索/同步状态）
+
+### Main Changes
+
+- 后端：migrate 建 model_pricing；pricing.rs（parse_openrouter_pricing 纯函数/replace_pricing/list/pricing_info）；commands 3 命令 + runtime timer 追加
+- log.rs overview SQL LEFT JOIN 算 input_cost/output_cost（别名 LIKE 匹配）
+- 前端：formatCost 工具；StatsCards 费用三项显示金额；SettingsPage 模型单价卡片（搜索+立即同步）
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] cargo test --lib 140 全绿（+7：pricing 解析 4/replace 1/overview 费用 2/migrate 幂等 1）；node test 41（+4 formatCost）；typecheck/lint/build 全绿；headless 验证首页 $0×3 + 设置页卡片
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 用户 dev 重启（Rust 改动）→ 点立即同步 → 发请求看费用增长
