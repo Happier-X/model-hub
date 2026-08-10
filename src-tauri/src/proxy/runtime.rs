@@ -214,6 +214,7 @@ impl ProxyHandle {
                 // 首个 tick 立即返回：静默期结束后立刻做一次过期检查。
                 interval.tick().await;
                 crate::commands::perform_due_provider_syncs(&stores).await;
+                crate::commands::perform_due_price_syncs(&stores).await;
             }
         };
 

@@ -1,6 +1,7 @@
 pub mod group;
 pub mod leaderboard;
 pub mod log;
+pub mod pricing;
 pub mod provider;
 pub mod upstream_models;
 

@@ -95,7 +95,11 @@ pub struct OverviewRow {
     pub input_tokens: i64,
     pub output_tokens: i64,
     pub use_time_ms: i64,
-    /// 费用：本期恒 0（单价配置后续任务引入）。
+    /// 输入 token 费用（美元，按模型单价统计时算）。
+    pub input_cost: f64,
+    /// 输出 token 费用（美元，按模型单价统计时算）。
+    pub output_cost: f64,
+    /// 总费用 = 输入 + 输出（美元）。
     pub cost: f64,
 }
 
@@ -457,27 +461,36 @@ impl Stores {
         let mut sql = String::from(
             "SELECT
                 COUNT(*) AS requests,
-                COALESCE(SUM(input_tokens), 0),
-                COALESCE(SUM(output_tokens), 0),
-                COALESCE(SUM(use_time_ms), 0)
-             FROM request_logs
-             WHERE status_code BETWEEN 200 AND 299
-               AND (error IS NULL OR length(error) = 0)",
+                COALESCE(SUM(l.input_tokens), 0),
+                COALESCE(SUM(l.output_tokens), 0),
+                COALESCE(SUM(l.use_time_ms), 0),
+                COALESCE(SUM(CAST(l.input_tokens AS REAL) * COALESCE(p.prompt_price_per_mtok, 0) / 1000000.0), 0),
+                COALESCE(SUM(CAST(l.output_tokens AS REAL) * COALESCE(p.completion_price_per_mtok, 0) / 1000000.0), 0)
+             FROM request_logs l
+             LEFT JOIN model_pricing p
+               ON l.upstream_model = p.model_name
+               OR p.model_name LIKE '%/' || l.upstream_model
+             WHERE l.status_code BETWEEN 200 AND 299
+               AND (l.error IS NULL OR length(l.error) = 0)",
         );
         let mut params: Vec<rusqlite::types::Value> = Vec::new();
         if let Some((start_ts, end_ts)) = range {
-            sql.push_str(" AND time >= ?1 AND time < ?2");
+            sql.push_str(" AND l.time >= ?1 AND l.time < ?2");
             params.push(rusqlite::types::Value::Integer(start_ts));
             params.push(rusqlite::types::Value::Integer(end_ts));
         }
         self.with_conn(|conn| {
             conn.query_row(&sql, rusqlite::params_from_iter(params), |row| {
+                let input_cost: f64 = row.get(4)?;
+                let output_cost: f64 = row.get(5)?;
                 Ok(OverviewRow {
                     requests: row.get(0)?,
                     input_tokens: row.get(1)?,
                     output_tokens: row.get(2)?,
                     use_time_ms: row.get(3)?,
-                    cost: 0.0,
+                    input_cost,
+                    output_cost,
+                    cost: input_cost + output_cost,
                 })
             })
             .map_err(|e| AppError::Database(e.to_string()))
@@ -1206,5 +1219,67 @@ mod tests {
         let overview = stores.request_overview().unwrap();
         assert_eq!(overview.total.requests, 3);
         assert_eq!(overview.today.requests, 1);
+    }
+
+    #[test]
+    fn overview_costs_aggregate_by_model_price() {
+        let (_dir, stores) = setup();
+        // 直接 SQL 造数：日志带 token 与模型名；单价表按模型配价。
+        stores
+            .with_conn(|conn| {
+                conn.execute(
+                    "INSERT INTO request_logs
+                     (time, group_name, provider_name, upstream_model, status_code, use_time_ms, input_tokens, output_tokens, error, failover_from, failover_to, failover_reason)
+                     VALUES (1, 'g', 'p', 'deepseek-chat', 200, 5, 1000000, 500000, '', '', '', '')",
+                    [],
+                )
+                .map_err(|e| AppError::Database(e.to_string()))?;
+                conn.execute(
+                    "INSERT INTO request_logs
+                     (time, group_name, provider_name, upstream_model, status_code, use_time_ms, input_tokens, output_tokens, error, failover_from, failover_to, failover_reason)
+                     VALUES (2, 'g', 'p', 'unpriced-model', 200, 5, 1000, 1000, '', '', '', '')",
+                    [],
+                )
+                .map_err(|e| AppError::Database(e.to_string()))?;
+                conn.execute(
+                    "INSERT INTO model_pricing (model_name, prompt_price_per_mtok, completion_price_per_mtok, updated_at)
+                     VALUES ('deepseek/deepseek-chat', 1.25, 4.25, 0)",
+                    [],
+                )
+                .map_err(|e| AppError::Database(e.to_string()))?;
+                Ok(())
+            })
+            .unwrap();
+
+        let overview = stores.request_overview().unwrap();
+        // deepseek-chat 别名匹配：输入 1M × 1.25/1M = 1.25；输出 0.5M × 4.25/1M = 2.125
+        assert!((overview.total.input_cost - 1.25).abs() < 1e-9, "input_cost={}", overview.total.input_cost);
+        assert!((overview.total.output_cost - 2.125).abs() < 1e-9, "output_cost={}", overview.total.output_cost);
+        assert!((overview.total.cost - 3.375).abs() < 1e-9);
+        // 无价模型贡献 0，但请求计入
+        assert_eq!(overview.total.requests, 2);
+        assert_eq!(overview.total.input_tokens, 1_001_000);
+    }
+
+    #[test]
+    fn overview_cost_zero_without_pricing_rows() {
+        let (_dir, stores) = setup();
+        stores
+            .insert_log(NewRequestLog {
+                group_name: "g".into(),
+                provider_name: "p".into(),
+                upstream_model: "deepseek-chat".into(),
+                status_code: 200,
+                use_time_ms: 1,
+                input_tokens: 500,
+                output_tokens: 300,
+                ..Default::default()
+            })
+            .unwrap();
+        let overview = stores.request_overview().unwrap();
+        assert_eq!(overview.total.cost, 0.0);
+        assert_eq!(overview.total.input_cost, 0.0);
+        assert_eq!(overview.total.output_cost, 0.0);
+        assert_eq!(overview.total.requests, 1);
     }
 }

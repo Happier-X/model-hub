@@ -5,6 +5,7 @@ use tauri::{AppHandle, State};
 
 use crate::domain::group::{CreateGroupPayload, Group, UpdateGroupPayload};
 use crate::domain::leaderboard::ModelLeaderboardSnapshot;
+use crate::domain::pricing::{ModelPrice, PricingInfo, PricingSyncInfo};
 use crate::domain::provider::{CreateProviderPayload, Provider, UpdateProviderPayload};
 use crate::domain::upstream_models::{fetch_upstream_model_ids, FetchProviderModelsPayload};
 use crate::domain::Stores;
@@ -312,6 +313,90 @@ pub fn set_provider_auto_sync(
     stores(&proxy)?
         .set_provider_auto_sync(id, enabled)
         .map_err(Into::into)
+}
+
+const OPENROUTER_MODELS_URL: &str = "https://openrouter.ai/api/v1/models";
+const OPENROUTER_FETCH_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// 拉取 OpenRouter 模型单价（每百万 token 美元）。失败向上抛（后台调用方自行降级）。
+pub async fn fetch_openrouter_pricing() -> Result<Vec<ModelPrice>, AppError> {
+    let client = reqwest::Client::builder()
+        .timeout(OPENROUTER_FETCH_TIMEOUT)
+        .build()
+        .map_err(|e| AppError::Business(format!("无法创建 HTTP 客户端：{e}")))?;
+    let response = client
+        .get(OPENROUTER_MODELS_URL)
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .map_err(|e| AppError::Business(format!("请求 OpenRouter 模型列表失败：{e}")))?;
+    if !response.status().is_success() {
+        return Err(AppError::Business(format!(
+            "OpenRouter 返回异常状态：{}",
+            response.status()
+        )));
+    }
+    let body = response
+        .bytes()
+        .await
+        .map_err(|e| AppError::Business(format!("读取 OpenRouter 响应失败：{e}")))?;
+    let prices = crate::domain::pricing::parse_openrouter_pricing(&body);
+    if prices.is_empty() {
+        return Err(AppError::Business("OpenRouter 响应未解析到任何模型价格".into()));
+    }
+    Ok(prices)
+}
+
+/// 后台轮询：单价从未同步或超过 24h 到期时从 OpenRouter 拉取一次；失败仅记录 warning。
+pub async fn perform_due_price_syncs(stores: &Stores) {
+    let last = match stores.last_pricing_sync_at() {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "后台同步：读取单价同步时间失败");
+            return;
+        }
+    };
+    let now = chrono::Utc::now().timestamp();
+    let due = match last {
+        None => true,
+        Some(t) => now - t >= SYNC_STALE_AFTER_SECS,
+    };
+    if !due {
+        return;
+    }
+    match fetch_openrouter_pricing().await {
+        Ok(prices) => {
+            if let Err(e) = stores.replace_pricing(&prices) {
+                tracing::warn!(error = %e, "后台同步：写入单价表失败");
+            }
+        }
+        Err(e) => tracing::warn!(error = %e, "后台同步 OpenRouter 单价失败"),
+    }
+}
+
+/// 设置页「模型单价」只读列表 + 同步状态。
+#[tauri::command]
+pub fn get_model_pricing(
+    proxy: State<'_, ProxyHandle>,
+) -> Result<PricingInfo, InvokeError> {
+    stores(&proxy)?.pricing_info().map_err(Into::into)
+}
+
+/// 设置页「立即同步」：强制从 OpenRouter 拉取并替换单价表。
+#[tauri::command]
+pub async fn sync_pricing_now(
+    proxy: State<'_, ProxyHandle>,
+) -> Result<PricingSyncInfo, InvokeError> {
+    let s = stores(&proxy)?;
+    let prices = fetch_openrouter_pricing().await?;
+    s.replace_pricing(&prices)?;
+    let updated_at = s
+        .last_pricing_sync_at()?
+        .ok_or_else(|| AppError::Business("同步后读取更新时间失败".into()))?;
+    Ok(PricingSyncInfo {
+        count: prices.len() as i64,
+        updated_at,
+    })
 }
 
 #[tauri::command]

@@ -156,6 +156,22 @@ CREATE TABLE IF NOT EXISTS provider_models (
     Ok(())
 }
 
+/// 单价表：OpenRouter 同步的模型单价（每百万 token 美元）。
+fn ensure_model_pricing_table(conn: &Connection) -> Result<(), AppError> {
+    conn.execute_batch(
+        r#"
+CREATE TABLE IF NOT EXISTS model_pricing (
+  model_name TEXT PRIMARY KEY,
+  prompt_price_per_mtok REAL NOT NULL DEFAULT 0,
+  completion_price_per_mtok REAL NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL DEFAULT 0
+);
+"#,
+    )
+    .map_err(|e| AppError::Database(format!("创建 model_pricing 表失败: {e}")))?;
+    Ok(())
+}
+
 /// 旧库若含 `groups.auto_failover`，以重建表方式删除该列并保留 id/name/created_at 与 group_items。
 fn drop_groups_auto_failover_if_present(conn: &Connection) -> Result<(), AppError> {
     let columns = table_column_names(conn, "groups")?;
@@ -394,6 +410,7 @@ pub fn migrate(conn: &Connection) -> Result<(), AppError> {
     ensure_request_logs_columns(conn)?;
     ensure_provider_columns(conn)?;
     ensure_provider_models_table(conn)?;
+    ensure_model_pricing_table(conn)?;
     apply_version(conn, 1)?;
     Ok(())
 }
@@ -949,5 +966,27 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM provider_models", [], |r| r.get(0))
             .unwrap();
         assert_eq!(n, 0, "删除供应商后 provider_models 应级联删除");
+    }
+
+    #[test]
+    fn migrate_creates_model_pricing_table_idempotently() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        // 建表 + 幂等重跑
+        conn.execute(
+            "INSERT INTO model_pricing (model_name, prompt_price_per_mtok, completion_price_per_mtok, updated_at)
+             VALUES ('a/x', 1.5, 2.5, 1)",
+            [],
+        )
+        .unwrap();
+        migrate(&conn).unwrap();
+        let (name, prompt, completion): (String, f64, f64) = conn
+            .query_row("SELECT model_name, prompt_price_per_mtok, completion_price_per_mtok FROM model_pricing", [], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })
+            .unwrap();
+        assert_eq!(name, "a/x");
+        assert_eq!(prompt, 1.5);
+        assert_eq!(completion, 2.5);
     }
 }
