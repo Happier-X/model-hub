@@ -7,9 +7,8 @@
 1. 使用 Vue 单文件组件与 `<script setup lang="ts">`。
 2. Props 使用 `defineProps` 声明明确类型；事件使用 `defineEmits` 声明名称和参数。
 3. 页面负责加载与提交，通用组件负责展示和用户交互；复杂领域操作下沉到 `src/api/tauri.ts` 或组合式函数。
-3.1 **happier-ui（渐进，0.1.1）**：入口导入 `happier-ui/tokens.css` 与 `happier-ui/styles.css`（**CSS 入口为复数 `styles.css`**，旧名 `style.css` 已不存在）；peer 提供 `@lucide/vue`。**CSS 引入顺序**：`main.ts` 保持先 `import "./index.css"`（含 `@import "tailwindcss"`）再 `import "happier-ui/styles.css"`。历史原因：0.1.0 之前 `styles.css` 把组件样式裸包在 `@layer components{}` 且未声明 layer 顺序，若先加载会被注册成首个层，Tailwind preflight（base 层 `button` reset）反而覆盖 `.h-button` 等组件样式；**0.1.1 已在 `styles.css` 顶部自带 `@layer theme, base, components, utilities;` 声明（上游 [happier-ui#10](https://github.com/Happier-X/happier-ui/issues/10) 已修复），消费侧顺序敏感解除**，现有顺序无害，保持不动。`tokens.css` 纯 `:root` 变量，与 `styles.css` 相对顺序无关，统一放 index.css 之后。映射：按钮 → `HButton`；单行输入 → `HInput`；布尔 → `HSwitch`/`HCheckbox`；空列表 → `HEmpty`；**分区卡片 → `HCard`**（`variant="outlined"` + `padding`，标题进 `#header`；库卡无 box-shadow，靠 border+surface 表达层次）；**侧栏壳 → `HSidebar`**（`items` + `:model-value="route.path"` + `@update:model-value` 里 `router.push`，品牌区进 `#header`，`:show-collapse-toggle="false"`）；**下拉选择 → `HSelect`**（`:options="HSelectOption[]"` + `:model-value` + `@update:model-value`；string 联合类型需 `v as XxxType` 断言、数字选项需 `Number(v)`；动态列表保留 `value=0` 占位选项时不用 `placeholder`）；**状态徽章 → `HBadge`**（`variant` 映射：running/2xx→success、4xx→warning、error/5xx→danger、其余→default；文本进默认 slot）；**多行输入 → `HTextarea`**（`v-model` + `:rows` + `:spellcheck`）；**分页 → `HPagination`**（`:current`/`:total`/`:page-size` + `@change="({current})=>goPage(current)"`；「筛选 N 条」等统计文本不属分页职责，保留独立 span；每页条数选择保留独立 `HSelect`，不并入 `show-size-changer` 以免改布局）；**数据表格 → `HTable`**（`:columns="HTableColumn[]"` + `:data` + `row-key`；复杂/条件渲染统一走 `#cell="{ column, row }"` slot 按 `column.key` 分支，`row` 需 `row as Xxx` 断言；空态用 `empty-text` 或外层 `HEmpty` v-if/v-else；loading 用 `:loading`）。内层小卡与改造收益低的保留 Tailwind，不硬套。**因库缺功能保留手写/降级**：`HTextarea` 内部 `<textarea>` 无法接收等宽字体（`class` 落到外层 `div`，表单元素不继承 `font-family`），粘贴框 `font-mono` 暂降级，等 [happier-ui#8](https://github.com/Happier-X/happier-ui/issues/8) 补 monospace；`HTable` 的 `:data` 只接受 `Record<string, unknown>[]`，interface 无索引签名须 `as unknown as Record<string, unknown>[]` 双重断言，等 [happier-ui#9](https://github.com/Happier-X/happier-ui/issues/9) 泛型化后简化。**本轮不启用**：`HIconButton`（实测不契合：固定正方形+圆角、只有 `:active` 无 `:hover` 背景、深底 ghost 显蓝——做不出标题栏 OS 惯例贴边矩形与关闭 hover 变红，故 AppTitleBar 三窗控件、AppShell 更新提示钮、OverlayApp 打开钮均保留原生 `<button>`）、`HToast`（更新提示是持久横幅非自动关闭浮层；另见上游 issue #7）、`HProgress`（文本进度改进度条属新增非替换）、`HFloatingBubble`（overlay 是 Tauri 独立窗口非 DOM 气泡）、`HRange`（无场景）。
-**分组表单已启用**：`HTag`（用作非 closable 的状态标签如队列分数）、`HCell`（用作左栏供应商手风琴触发条目，注意 `:show-chevron="false"` 以使用自定义旋转箭头，利用其 `clickable` 样式与键盘支持）、`HLoading`（`mode="local"` 替换局部加载文字）。
-3.2 **业务表单（TanStack Form）**：供应商对话框表单与分组表单页（`GroupFormPage`）用 `@tanstack/vue-form` 的 `useForm` + `form.Field` 管理字段与提交；控件仍用 `HInput`/`HCheckbox` 等，绑定 `field.state.value` + `field.handleChange`（或 `:model-value` + `@update:model-value`），**禁止**再用独立 `reactive` 作为提交字段真源。粘贴识别、拖拽排序、批量添加等通过 `form.setFieldValue` / 整体替换数组写回。保存走 `form.handleSubmit` / `onSubmit`；打开新建 `form.reset(defaults)`，打开编辑 `form.reset(entityFields)`；保存失败保留 values 与 `editing*Id`。日志筛选、设置页端口/偏好等非对话框表单可用 `ref`，不强制迁 Form。不强制 Zod。
+3.1 **shadcn-vue（reka-ui 底层，源码入仓）**：组件源码位于 `src/components/ui/*`（`shadcn-vue add` 拷入，`components.json` 管理别名）；`cn` 工具在 `src/lib/utils.ts`（clsx + tailwind-merge）。**依赖**：`reka-ui`、`clsx`、`tailwind-merge`、`class-variance-authority`、`tw-animate-css`（index.css 已 `@import`）、图标 `@lucide/vue`。样式变量（oklch `--background` 等）在 `src/index.css`，风格 `reka-nova`、baseColor `neutral`。**不再使用 happier-ui**（已移除依赖与 `tokens.css`/`styles.css` 导入）。映射：按钮 → `Button`（variant：default/outline/secondary/ghost/destructive/link；尺寸含 `size="icon"`；旧 `isIconOnly`/`shape="circle"` 无此概念，图标按钮用 `size="icon"`）；单行输入 → `Input`（无 `label` prop，用 `<label>` 包裹 + `span` 文本，或 `:model-value` + `@update:model-value`）；布尔 → `Switch`/`Checkbox`（均 v-model，`label` 文本由外层 `<label class="flex items-center gap-2">` 承载）；空列表 → `Empty`；**分区卡片 → `Card`**（`CardHeader`/`CardContent` 子组件，`class` 直接透传可写 `flex flex-col min-h-0 flex-1`，不再需要 `.h-card__body` 深选择器 hack）；**侧栏壳 → `Sidebar` 全家桶**（`SidebarProvider > Sidebar > SidebarHeader + SidebarContent + SidebarMenu + SidebarMenuItem + SidebarMenuButton(as-child → RouterLink)`，`:is-active` 高亮当前项）；**下拉选择 → `Select` 全家桶**（`Select > SelectTrigger > SelectValue + SelectContent > SelectItem`；`:model-value` + `@update:model-value`；string 联合类型需 `v as XxxType` 断言、数字选项需 `String(v)`/`Number(v)` 转换——reka-ui SelectItem 的 value 是 string）；**状态徽章 → `Badge`**（variant：default/secondary/destructive/outline/ghost/link；旧 success/warning/danger 映射：success→secondary（或 outline+emerald class）、warning→outline、danger→destructive）；**多行输入 → `Textarea`**（`v-model` + `:rows`，class 透传到 `<textarea>` 本体，`font-mono` 可直接加）；**分页 → `Pagination` 全家桶**（reka-ui 分页：`Pagination(:page :total :page-size @update:page) > PaginationContent v-slot="{ items }" > PaginationFirst/Previous + v-for PaginationItem(点击传 `item.value`) + Ellipsis + Next/Last`；「筛选 N 条」等统计文本不属分页职责，保留独立 span）；**数据表格 → `Table` 结构**（`Table > TableHeader(TableRow>TableHead v-for) + TableBody(TableRow v-for > TableCell v-for)`；`columns` 数组 `{ key, title }[]` 驱动表头与单元格 v-for，复杂/条件渲染按 `column.key` 分支，`row` 已是泛型对象无需断言（`(row as Record<string, unknown>)[col.key]`）；空态用 `<TableRow v-if="items.length===0"><TableCell :colspan>` 或外层 `Empty`；loading 用文本/`Spinner`）。**额外组件**：`Spinner`（替代旧 `HLoading`）、`Item` 全家桶（`Item + ItemContent + ItemTitle + ItemDescription`，替代旧 `HCell`，供应商手风琴行用：Item 默认 slot 放展开箭头、ItemTitle 放名称、ItemDescription 放自动同步开关行）、`Badge` 兼作状态标签（替代旧 `HTag`，用 `variant="outline"` + 自定义 class 表达成功/默认）、`Dialog`（见对话框合同）、`Tooltip`、`Progress`（替代旧 HProgress：`:model-value` + `:max` + `:indeterminate` + class 调高度）。热力图用 **vue3-calendar-heatmap**（`CalendarHeatmap`，props `:values="{ date:'YYYY-MM-DD', count }[]"`、`:end-date="new Date(...)"`、`:range-color="string[]"`、`:tooltip="false"` 可关提示）；首页 `HHeatmapData {timestamp,value}` 需 computed 转为 `{date,count}`。**因 shadcn 无 `label` 概念，所有带 label 的控件统一 `<label class="block text-sm"><span class="mb-1 block text-slate-600">…</span><Input/></label>` 模式**。
+3.2 **业务表单（TanStack Form）**：供应商对话框表单与分组表单页（`GroupFormPage`）用 `@tanstack/vue-form` 的 `useForm` + `form.Field` 管理字段与提交；控件用 `Input`/`Checkbox`/`Select` 等，绑定 `field.state.value` + `field.handleChange`（或 `:model-value` + `@update:model-value`），**禁止**再用独立 `reactive` 作为提交字段真源。粘贴识别、拖拽排序、批量添加等通过 `form.setFieldValue` / 整体替换数组写回。保存走 `form.handleSubmit` / `onSubmit`；打开新建 `form.reset(defaults)`，打开编辑 `form.reset(entityFields)`；保存失败保留 values 与 `editing*Id`。日志筛选、设置页端口/偏好等非对话框表单可用 `ref`，不强制迁 Form。不强制 Zod。
 4. 代理运行状态、Base URL 和最后错误必须使用清晰、可行动的中文文案。
 5. 列表必须覆盖加载、空数据和错误状态。
 6. 表单中的上游 Key 输入使用密码类型；不向用户展示完整上游 Key。
@@ -23,7 +22,7 @@
 14. **页面职责**：首页只承载代理运行状态、Base URL、启停/刷新、请求统计与接入指引；端口修改、数据目录、应用更新和自动检查偏好统一放在设置页。
 15. **启动更新检查**：应用壳层仅在挂载时读取一次 `check_update_on_startup`；发现新版本只展示可关闭提示和设置页入口，探测后立即关闭 `Update` 资源，不自动下载或安装。
 16. **分组卡片内即时编辑**：分组页卡片支持拖拽排序 / 删成员即时保存（`update_group` 全量 `items` 替换）。子组件（`src/components/groups/GroupCard.vue`）用**乐观本地态**展示新顺序：`localItems` 初始化自 props、`watch(() => props.group.items)` 随服务端回写同步；操作时先改 `localItems` 再 `emit('persist-items', items)`，页面收到后组装完整 payload 并 `updateGroup`，成功后用服务端返回替换 `groups[idx]`，失败 `error + refresh()` 回滚。同一分组保存中通过 `cardSavingIds`（`Set<number>`）禁用冲突操作，避免全量替换写穿。分组队列纯手动维护（无绑定态只读限制）。删除分组用卡片内覆盖层二次确认，**禁止** `window.confirm`。
-17. **分组双栏选模独立页（octopus 风格）**：新建/编辑复用 `src/pages/GroupFormPage.vue`（路由 `/groups/new`、`/groups/:id/edit`，不再使用 `AppDialog`）+ `@tanstack/vue-form`；左栏按供应商手风琴选模、右栏已选队列拖拽/删除/清空。**左栏模型加载合同**：`useProviderModelCache`（`src/composables/useProviderModelCache.ts`）按 `provider_id` 缓存，`ensure(id)` **先读本地持久化** `getProviderModels`（`provider_models` 表），非空即 ready（离线可用，不发网络请求），空则实时拉取一次兑底并防并发（inflight map）；`refresh(id)` 强制实时拉取。**只在用户展开手风琴 / 点刷新 / 点「全部加入」时调用**，打开页面、`onMounted`、保存均不预拉（D4=L1，见 upstream-access）。去重 key 为 `` `${provider_id}\u0000${upstream_model.trim()}` ``；「全部加入」只追加未在队列中的模型。队列始终可交互（无绑定态只读）。**双栏 HCard 滚动链（整页占满版）**：页面根 `flex h-full min-h-0 flex-col gap-4 overflow-hidden`（自身不滚动），表单 `flex min-h-0 flex-1 flex-col`，双栏容器必须用 **flex 而非 grid**——`grid item` 上 `flex-1`（flex 属性）不生效，卡片高度回退内容高会撑高整页产生滚动条；正确写法 `flex min-h-0 flex-1 flex-col gap-4 lg:flex-row`（响应式等价 grid-cols）。HCard 内部 `.h-card__body` 默认是块级普通 div，内部滚动区的 `flex-1` 会失效导致内容被截断无法滚动——**必须在页面补 scoped `:deep(.h-card)`/`:deep(.h-card__body)` 把 body 接成 flex 列链**（与 ProvidersPage 同款样式，见「关键点（坑）」），否则双栏不可滚动。保存成功 / 取消均回 `/groups`；无 dirty 守卫，未保存直接丢弃；编辑页用 `listGroups` 按 id 定位，找不到展示错误 + 返回列表。
+17. **分组双栏选模独立页（octopus 风格）**：新建/编辑复用 `src/pages/GroupFormPage.vue`（路由 `/groups/new`、`/groups/:id/edit`，不再使用 `AppDialog`）+ `@tanstack/vue-form`；左栏按供应商手风琴选模、右栏已选队列拖拽/删除/清空。**左栏模型加载合同**：`useProviderModelCache`（`src/composables/useProviderModelCache.ts`）按 `provider_id` 缓存，`ensure(id)` **先读本地持久化** `getProviderModels`（`provider_models` 表），非空即 ready（离线可用，不发网络请求），空则实时拉取一次兑底并防并发（inflight map）；`refresh(id)` 强制实时拉取。**只在用户展开手风琴 / 点刷新 / 点「全部加入」时调用**，打开页面、`onMounted`、保存均不预拉（D4=L1，见 upstream-access）。去重 key 为 `` `${provider_id}\u0000${upstream_model.trim()}` ``；「全部加入」只追加未在队列中的模型。队列始终可交互（无绑定态只读）。**双栏 Card 滚动链（整页占满版）**：页面根 `flex h-full min-h-0 flex-col gap-4 overflow-hidden`（自身不滚动），表单 `flex min-h-0 flex-1 flex-col`，双栏容器必须用 **flex 而非 grid**——`grid item` 上 `flex-1`（flex 属性）不生效，卡片高度回退内容高会撑高整页产生滚动条；正确写法 `flex min-h-0 flex-1 flex-col gap-4 lg:flex-row`（响应式等价 grid-cols）。shadcn `Card` 根自带 `flex flex-col`，`CardContent` 直接加 `min-h-0 flex-1 flex flex-col p-0` 接出内部滚动区（`min-h-0 flex-1 overflow-y-auto p-3`）即可，**无需任何深选择器 hack**（历史 `.h-card__body` 约束已随 happier-ui 移除而消亡）。保存成功 / 取消均回 `/groups`；无 dirty 守卫，未保存直接丢弃；编辑页用 `listGroups` 按 id 定位，找不到展示错误 + 返回列表。
 
 ## 应用外壳布局（AppShell）
 
@@ -31,7 +30,7 @@
 
 - 最外层锁视口高度并禁止自身滚动：`h-screen overflow-hidden` + `flex-col`（**不要**用 `min-h-screen`，它允许整体高度撑破视口，导致 body/最外层出现滚动条，把 titlebar、侧栏一起滚走）。
 - 顶部 `AppTitleBar` 固定高度（`h-11 shrink-0`），不参与滚动。
-- 下方横向区域 `flex min-h-0 flex-1 overflow-hidden`：左侧 `HSidebar` 固定，右侧 `main` 用 `flex min-w-0 flex-1 flex-col` 占满剩余宽度。
+- 下方横向区域 `flex min-h-0 flex-1 overflow-hidden`：左侧 `SidebarProvider > Sidebar` 固定，右侧 `main` 用 `flex min-w-0 flex-1 flex-col` 占满剩余宽度。
 - 右主区内：更新提示条（如有）+ 页面标题 `header` 固定不滚，只有最下方的 `RouterView` 容器可纵向溢出滚动。
 
 > **Warning**: flex 子项默认 `min-height: auto` / `min-width: auto`，内容超长时会撑高/撑宽父项，使祖先的 `overflow-auto` / `overflow-hidden` 失效——滚动条跑到外层而非目标容器。
@@ -43,7 +42,23 @@
 <div class="flex h-screen flex-col overflow-hidden">
   <AppTitleBar />
   <div class="flex min-h-0 flex-1 overflow-hidden">
-    <HSidebar ... />
+    <SidebarProvider>
+      <Sidebar collapsible="icon">
+        <SidebarHeader><!-- 品牌区 --></SidebarHeader>
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupLabel>导航</SidebarGroupLabel>
+            <SidebarMenu>
+              <SidebarMenuItem v-for="item in navItems" :key="item.key">
+                <SidebarMenuButton as-child :is-active="activeNavKey === item.key">
+                  <RouterLink :to="item.key">{{ item.label }}</RouterLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroup>
+        </SidebarContent>
+      </Sidebar>
+    </SidebarProvider>
     <main class="flex min-w-0 flex-1 flex-col">
       <!-- 更新提示条 / header：固定不滚 -->
       <div class="min-h-0 flex-1 overflow-auto p-6"><RouterView /></div>
@@ -70,48 +85,37 @@
 <template>
   <!-- 1. 页面根节点：h-full 撑满 + overflow-hidden 防整页滚动 -->
   <div class="h-full flex flex-col overflow-hidden">
-    <!-- 2. HCard：flex-1 min-h-0 吃掉页高；class fallthrough 落到 <article class="h-card"> -->
-    <HCard variant="outlined" padding="md" class="min-h-0 flex-1 flex flex-col">
-      <template #header><!-- 标题 + 新建按钮（固定不滚） --></template>
-      <HEmpty v-if="items.length === 0" ... />
-      <template v-else>
-        <!-- 3. 表格滚动区：min-h-0 flex-1 overflow-y-auto，仅此区滚动 -->
-        <div class="min-h-0 flex-1 overflow-y-auto">
-          <HTable :data="pagedItems" :sticky-header="true" ... />
-        </div>
-        <!-- 4. 分页器：在滚动区之外，shrink-0 不被压缩，mt-3 右对齐 -->
-        <div v-if="items.length > pageSize" class="mt-3 flex justify-end shrink-0">
-          <HPagination :current="page" :total="items.length" :page-size="pageSize"
-            @change="({ current }) => goPage(current)" />
-        </div>
-      </template>
-    </HCard>
+    <!-- 2. Card：flex-1 min-h-0 吃掉页高；class 透传落到 Card 根（自身即 flex flex-col） -->
+    <Card class="min-h-0 flex-1 flex flex-col border border-slate-200 bg-white">
+      <CardHeader class="shrink-0 py-3"><!-- 标题 + 新建按钮（固定不滚） --></CardHeader>
+      <CardContent class="flex min-h-0 flex-1 flex-col gap-3">
+        <Empty v-if="items.length === 0" ... />
+        <template v-else>
+          <!-- 3. 表格滚动区：min-h-0 flex-1 overflow-y-auto，仅此区滚动 -->
+          <div class="min-h-0 flex-1 overflow-y-auto">
+            <Table>
+              <TableHeader>…</TableHeader>
+              <TableBody>…</TableBody>
+            </Table>
+          </div>
+          <!-- 4. 分页器：在滚动区之外，shrink-0 不被压缩，右对齐 -->
+          <div v-if="items.length > pageSize" class="flex shrink-0 justify-end">
+            <Pagination …/>
+          </div>
+        </template>
+      </CardContent>
+    </Card>
   </div>
 </template>
-
-<style scoped>
-/* 5. HCard 内部 .h-card__body slot 容器默认是普通 div（无 flex），
-   必须用 :deep 让它 flex-1 + min-h-0 参与卡片 flex 列布局，否则 body 不撑高、表格滚动区塌缩为 0。 */
-:deep(.h-card) { display: flex; flex-direction: column; }
-:deep(.h-card__body) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-</style>
 ```
 
 ### 关键点（坑）
 
-- **`:sticky-header` 需滚动祖先**：`.h-table--sticky .h-table__th` 用 `position: sticky; top: 0`，
-  sticky 相对最近滚动祖先定位。`.h-table-wrapper` 只有 `overflow-x: auto`（无纵向滚动），
-  所以**必须在 wrapper 外再套一层 `overflow-y-auto` 容器**，sticky 表头才会粘住。
-- **`.h-card__body` 默认不 flex**：HCard 库 CSS 中 `.h-card__header/.h-card__body/.h-card__footer` 仅
-  `padding` + `border-top`，无 `display:flex`。直接在 HCard 上加 `flex flex-col` 只让 `<article>`
-  变 flex 列，**body 容器自身仍是块级且无 `flex-1`，不会撑满剩余高度**——必须 `:deep(.h-card__body)`。
+- **shadcn Card 自身即 flex 列**：`Card` 根带 `flex flex-col`，`CardContent` 直接可加 `min-h-0 flex-1 flex flex-col`——不再需要 `.h-card__body` 深选择器 hack，高度链与双栏模式见 §17。
 - **分页器必须在滚动区外**：若放进 `overflow-y-auto` 内，会随表格行一起滚动消失。用 `shrink-0` 防止被压缩。
-- **前端假分页**：后端 `list_providers` 无分页参数，前端对全量 `items` 切片传 `HTable :data`，
-  `total` 传 `items.length`（全量数），`page` 为页面级 ref，`refresh()` 后重置 `page=1`。
-- **乐观更新改 `items` 非 `pagedItems`**：行内开关等局部更新操作真源是 `items`（全量），
-  `pagedItems` 是 computed slice 自动反映；分页与乐观更新正交。
-- **不破坏 AppShell 契约**：此模式不改动 AppShell `.overflow-auto .p-6` 容器，只在页面内用
-  `h-full overflow-hidden` + flex 列把滚动从主区"接管"到表格内部；其他页面仍走整体滚动模式。
+- **前端假分页**：后端 `list_providers` 无分页参数，前端对全量 `items` 切片传表格 `v-for`，`total` 传 `items.length`（全量数），`page` 为页面级 ref，`refresh()` 后重置 `page=1`。
+- **乐观更新改 `items` 非 `pagedItems`**：行内开关等局部更新操作真源是 `items`（全量），`pagedItems` 是 computed slice 自动反映；分页与乐观更新正交。
+- **不破坏 AppShell 契约**：此模式不改动 AppShell `.overflow-auto .p-6` 容器，只在页面内用 `h-full overflow-hidden` + flex 列把滚动从主区"接管"到表格内部；其他页面仍走整体滚动模式。
 
 ## 状态与生命周期
 
@@ -123,10 +127,10 @@
 
 ## 对话框合同
 
-- 通用外壳使用 `src/components/AppDialog.vue`（**内部**基于 `HDialog` 的薄封装），页面保留表单和领域保存逻辑，不引入页面专用遮罩实现。**当前仅供应商页使用**；分组新建/编辑已迁独立路由页（`GroupFormPage`，见 §17），不得回归对话框。
+- 通用外壳使用 `src/components/AppDialog.vue`（**内部**基于 shadcn `Dialog` 的薄封装），页面保留表单和领域保存逻辑，不引入页面专用遮罩实现。**当前仅供应商页使用**；分组新建/编辑已迁独立路由页（`GroupFormPage`，见 §17），不得回归对话框。
 - 对外 props 保持：`open` / `title` / `size`（`default`|`wide`）/ `closeDisabled`、`@close`。
-- 适配：`open` ↔ `modelValue`；`closeDisabled` 时 `closeOnOverlay`/`closeOnEsc` 为 false 并忽略关闭更新；`wide` 由 **Teleport 外层宿主** class（`app-dialog-host--wide`）约束宽度与内容滚动——勿把 class 直接挂在 `HDialog` 上（库根节点 class 写死为 `h-dialog`）。
-- 必须 Teleport 到 `body`（避免主区 `overflow` 裁切）；提供关闭按钮；关闭后恢复焦点。焦点陷阱以 `HDialog` 行为为准。
+- 适配：`open` ↔ `Dialog v-model:open`；`closeDisabled` 时 `DialogContent` 的 `close-on-esc`/`close-on-overlay` 为 false 并忽略关闭更新；宽度由 `DialogContent` 的 class 控制（`max-w-lg` / `max-w-3xl`），关闭按钮用 `DialogClose` + `Button`（`@click` 里按 `closeDisabled` 守卫 `emit("close")`）；标题区用 `DialogHeader > DialogTitle`。
+- 必须 Teleport 到 `body`（`Dialog` 内部 `DialogPortal` 已默认 teleport 到 body，避免主区 `overflow` 裁切）；关闭后恢复焦点（`AppDialog` 用 watch 保存/恢复 `document.activeElement`）。焦点陷阱以 reka-ui `Dialog` 行为为准。
 - 对话框打开不得隐式触发上游请求；分组拉模型仍只允许用户点击。
 
 ```vue

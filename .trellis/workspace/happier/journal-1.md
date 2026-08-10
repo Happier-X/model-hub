@@ -1894,3 +1894,30 @@ typecheck/lint/unit(26)/build 全绿。spec 无需改（backend 24h 自动同步
 ### 验证
 
 typecheck/lint/unit(26)/build 全绿。
+
+## 2026-08-10 组件库迁移 happier-ui → shadcn-vue（task: 08-10-migrate-happier-ui-to-shadcn）✅
+
+### Status
+
+[OK] **Completed**（AC 全部达成）
+
+### 需求
+
+移除私有库 happier-ui（0.1.1），全量迁到 shadcn-vue v2.8.2（reka-ui 底层，组件源码入仓 `src/components/ui/*`）+ 现成库 vue3-calendar-heatmap；UI 形态与 Tailwind 4 体系一致。
+
+### 关键实施点
+
+- **pnpm store 冲突**：shadcn CLI 内部 corepack 拉 pnpm v11（store v11）与本地 v10 冲突报 `ERR_PNPM_UNEXPECTED_STORE`。解法：package.json 加 `"packageManager": "pnpm@10.33.0"`，corepack 解析回 v10 后 `npx shadcn-vue add` 成功。
+- **基建**：`pnpm remove happier-ui`；`pnpm add clsx tailwind-merge class-variance-authority tw-animate-css reka-ui` + `-D shadcn-vue@latest` + `pnpm add vue3-calendar-heatmap`；`shadcn-vue init` 注入 components.json + index.css 主题变量（Geist 字体、tw-animate-css、oklch 变量）；手写 `src/lib/utils.ts`（cn）；`@/*` alias 加到 tsconfig.json/app + vite.config.ts。
+- **TS 6.x baseUrl 弃用**：init 写入根 tsconfig 的 `baseUrl` 触发 TS5101，删除（paths 相对 tsconfig 解析）。
+- **组件映射**：Button（variant 映射 primary→default、danger-soft→destructive、tertiary→secondary；isIconOnly→size="icon"）、Card+CardHeader/CardContent、Dialog（AppDialog 薄封装，close-on-esc/overlay 透传 DialogContent）、Sidebar 全家桶（SidebarMenuButton as-child → RouterLink）、Select 全家桶（value 是 string 需转换）、Switch/Checkbox（label 用外层 label 元素）、Table 结构（columns `{key,title}[]` v-for 驱动）、Pagination 全家桶（reka-ui :page/@update:page + PaginationContent v-slot items）、Badge（success→secondary、warning→outline、danger→destructive）、Textarea（class 透传到 textarea，font-mono 直接可用）、Spinner（替 HLoading）、Item 全家桶（Item+ItemContent+ItemTitle+ItemDescription 替 HCell）、Empty、Progress。
+- **热力图**：vue3-calendar-heatmap CalendarHeatmap（`:values` 需 `{date:'YYYY-MM-DD', count}`，首页 HHeatmapData {timestamp,value} computed 转换；`:end-date` required）。
+- **高度链收益**：shadcn Card 根自带 flex flex-col，CardContent 直接加 `min-h-0 flex-1`，`.h-card__body` 深选择器 hack 全部删除（GroupsPage/LogsPage/ProvidersPage/GroupFormPage 的 style scoped 清空）。
+
+### 验证
+
+typecheck/lint/unit(26)/build 全绿；grep 残留 `happier-ui`/`<H[A-Z]`/`.h-`/`--h-` 清零（仅 index.css 一条迁移注释）；用户 dev 进程（port 1420 + model-hub.exe）HMR 实时生效中。
+
+### 变更文件
+
+11 个业务文件 + tsconfig×2 + vite.config.ts + package.json + components.json + src/lib/utils.ts + src/components/ui/*（20 个组件目录）+ spec 两篇。

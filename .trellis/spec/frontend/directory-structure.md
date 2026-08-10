@@ -4,14 +4,25 @@
 src/
 ├── main.ts
 ├── App.vue
-├── index.css
+├── index.css                # Tailwind 4 + shadcn-vue 主题变量（oklch）+ 应用级全局样式
 ├── api/
 │   └── tauri.ts          # invoke 封装与跨层类型
 ├── components/
-│   └── AppShell.vue
+│   ├── AppShell.vue
+│   ├── AppDialog.vue        # shadcn Dialog 薄封装（供应商对话框）
+│   ├── AppTitleBar.vue
+│   ├── groups/
+│   │   └── GroupCard.vue
+│   └── ui/                  # shadcn-vue 组件源码（`shadcn-vue add` 生成，勿手改骨架）
+│       ├── badge/ button/ card/ checkbox/ dialog/ empty/ input/ item/
+│       ├── pagination/ progress/ select/ separator/ sheet/ sidebar/ skeleton/
+│       ├── spinner/ switch/ table/ textarea/ tooltip/
+│       └── …
 ├── composables/          # 仅在确有复用时创建
+├── lib/
+│   └── utils.ts          # cn()（clsx + tailwind-merge），shadcn-vue 要求
 ├── pages/
-│   ├── HomePage.vue      # 代理运行状态、Base URL、统计、接入指引
+│   ├── HomePage.vue      # 代理运行状态、Base URL、统计（热力图 vue3-calendar-heatmap）、接入指引
 │   ├── ProvidersPage.vue
 │   ├── GroupsPage.vue    # 分组列表 + 卡片即时操作（编辑入口跳转表单页）
 │   ├── GroupFormPage.vue # 分组新建/编辑独立页（/groups/new、/groups/:id/edit）
@@ -36,3 +47,4 @@ src/
 5. 无客户端 API Key 管理页；供应商上游 Key 仅在供应商表单中编辑。
 6. 可独立测试的纯函数放 `utils/`，并配同名 `*.test.ts`（`node:test` + `node:assert/strict`，import 带 `.ts` 后缀）；页面组件内不放可复用的纯逻辑。
 7. 渲染外部 markdown（更新日志等）统一走 `utils/markdown.ts` 的 `renderMarkdown`，它以 `html: false` 转义原始 HTML 作为 `v-html` 的安全前提，并强制链接 `target="_blank" rel="noopener noreferrer"`；不要在组件里另建 MarkdownIt 实例或放开 `html`。
+8. **shadcn-vue 组件管理**：`src/components/ui/*` 是 shadcn-vue CLI（`npx shadcn-vue add <name>`）生成的组件源码，别名由 `components.json` 定义（`@/components/ui`、`@/lib/utils`），应随官方 registry 更新；业务层引用用 `@/components/ui/xxx`。`package.json` 的 `packageManager` 固定为 `pnpm@10.33.0`（corepack 一致性，防止 CLI 拉新 store）。
