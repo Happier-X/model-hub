@@ -1937,3 +1937,19 @@ shadcn-vue init 因依赖安装失败只注入了颜色变量，**`--sidebar-wid
 ### 验证
 
 typecheck/build 全绿；用户 dev HMR 实时生效。
+
+## 2026-08-10 修复：首页空白（热力图 peer 依赖缺失）✅
+
+### 根因
+
+vue3-calendar-heatmap 的 peerDependencies 含 `tippy.js@^6.3.7`，pnpm 默认不自动装 peer → 组件顶层 `import { createSingleton } from "tippy.js"` 解析失败 → HomePage 模块加载崩溃 → 首页空白。build 能过是 rolldown 对缺失 peer 宽松，运行时才炸。
+
+### 修复
+
+- `pnpm add tippy.js@^6.3.7`（peer 补齐）
+- `main.ts` 引 `vue3-calendar-heatmap/dist/style.css`（vch__* 方块/图例样式，组件不内联）
+- `AppShell.vue` 删除 `SidebarGroupLabel`「导航」（用户反馈多余）
+
+### 验证
+
+typecheck/build 全绿；用户 dev 需重启（新依赖加入后 vite 重优化）。

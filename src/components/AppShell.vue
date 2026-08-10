@@ -7,7 +7,6 @@ import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -69,7 +68,6 @@ onMounted(checkUpdateOnAppStartup);
           </SidebarHeader>
           <SidebarContent>
             <SidebarGroup>
-              <SidebarGroupLabel>导航</SidebarGroupLabel>
               <SidebarMenu>
                 <SidebarMenuItem v-for="item in navItems" :key="item.key">
                   <SidebarMenuButton
