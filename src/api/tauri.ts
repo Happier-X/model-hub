@@ -237,6 +237,24 @@ export const listLogs = (query: LogQuery = {}) =>
 export const clearLogs = () => invoke<void>("clear_logs");
 export const purgeExpiredLogs = () => invoke<LogPurgeResult>("purge_expired_logs");
 export const getRequestStats = () => invoke<RequestStats>("get_request_stats");
+
+/** 首页统计总览单行（总计 / 今日共用）。仅成功请求口径（2xx 且 error 为空）。 */
+export interface OverviewRow {
+  requests: number;
+  input_tokens: number;
+  output_tokens: number;
+  use_time_ms: number;
+  /** 费用：本期恒 0（单价配置后续任务引入）。 */
+  cost: number;
+}
+
+/** 首页统计总览：总计 + 今日。 */
+export interface RequestOverview {
+  total: OverviewRow;
+  today: OverviewRow;
+}
+
+export const getRequestOverview = () => invoke<RequestOverview>("get_request_overview");
 export const getLastSuccessRequest = () =>
   invoke<LastSuccessRequest | null>("get_last_success_request");
 export const getRequestDailyCounts = (days?: number) =>

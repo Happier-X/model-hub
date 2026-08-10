@@ -5,26 +5,27 @@ import { type HeatmapValue } from "@/utils/heatmap";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { formatDuration } from "@/utils/formatDuration";
 import {
   extractInvokeError,
   getLastSuccessRequest,
   getRequestDailyCounts,
-  getRequestStats,
+  getRequestOverview,
   proxyStart,
   proxyStatus,
   proxyStop,
   type LastSuccessRequest,
   type ProxyStatus,
   type RequestDailyCounts,
-  type RequestStats,
+  type RequestOverview,
 } from "../api/tauri";
 
 const status = ref<ProxyStatus | null>(null);
 const loading = ref(false);
 const message = ref("");
 const error = ref("");
-const stats = ref<RequestStats | null>(null);
-const statsError = ref("");
+const overview = ref<RequestOverview | null>(null);
+const overviewError = ref("");
 const lastSuccess = ref<LastSuccessRequest | null>(null);
 const lastSuccessError = ref("");
 const daily = ref<RequestDailyCounts | null>(null);
@@ -72,13 +73,13 @@ function formatSuccessTime(unix: number): string {
 }
 
 async function refreshStats() {
-  const statsPromise = getRequestStats()
+  const overviewPromise = getRequestOverview()
     .then((value) => {
-      stats.value = value;
-      statsError.value = "";
+      overview.value = value;
+      overviewError.value = "";
     })
     .catch((e) => {
-      statsError.value = extractInvokeError(e);
+      overviewError.value = extractInvokeError(e);
     });
   const lastSuccessPromise = getLastSuccessRequest()
     .then((value) => {
@@ -100,7 +101,7 @@ async function refreshStats() {
     .finally(() => {
       dailyLoading.value = false;
     });
-  await Promise.all([statsPromise, lastSuccessPromise, dailyPromise]);
+  await Promise.all([overviewPromise, lastSuccessPromise, dailyPromise]);
 }
 
 async function refresh() {
@@ -163,44 +164,61 @@ onMounted(refresh);
     <Card class="border border-slate-200 bg-white">
       <CardHeader class="py-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <h2 class="text-base font-semibold">今日请求（本地日）</h2>
+          <h2 class="text-base font-semibold">统计总览</h2>
           <Button variant="outline" size="sm" type="button" @click="refreshStats">刷新统计</Button>
         </div>
       </CardHeader>
       <CardContent class="flex flex-col gap-3">
-      <p class="mb-3 text-xs text-slate-500">
-        基于请求日志；成功 = 2xx 且无 error；失败 = 状态 ≥400 或有 error；故障转移 = 记录了换源。
-      </p>
-      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div class="rounded-lg bg-slate-50 px-3 py-3">
-          <div class="text-xs text-slate-500">总请求</div>
-          <div class="mt-1 text-2xl font-semibold tabular-nums">{{ stats?.total ?? 0 }}</div>
-        </div>
-        <div class="rounded-lg bg-emerald-50 px-3 py-3">
-          <div class="text-xs text-emerald-700">成功</div>
-          <div class="mt-1 text-2xl font-semibold tabular-nums text-emerald-800">
-            {{ stats?.success ?? 0 }}
+        <p class="text-xs text-slate-500">
+          仅统计成功请求（2xx 且无 error）；总计 = 全部成功请求，今日 = 本地自然日；费用待单价配置后启用。
+        </p>
+        <div class="overflow-x-auto">
+          <!-- 表头 -->
+          <div class="grid min-w-[560px] grid-cols-7 items-center gap-2 px-3 text-center text-xs text-slate-500">
+            <span class="text-left">指标</span>
+            <span>请求次数</span>
+            <span>输入 tokens</span>
+            <span>输出 tokens</span>
+            <span>总 tokens</span>
+            <span>耗时</span>
+            <span>费用</span>
+          </div>
+          <!-- 总计行 -->
+          <div class="mt-2 grid min-w-[560px] grid-cols-7 items-center gap-2 rounded-lg bg-slate-50 px-3 py-3 text-center text-sm">
+            <span class="text-left font-medium text-slate-600">总计</span>
+            <span class="font-semibold tabular-nums">{{ overview?.total.requests ?? 0 }}</span>
+            <span class="tabular-nums">{{ overview?.total.input_tokens ?? 0 }}</span>
+            <span class="tabular-nums">{{ overview?.total.output_tokens ?? 0 }}</span>
+            <span class="tabular-nums">
+              {{ (overview?.total.input_tokens ?? 0) + (overview?.total.output_tokens ?? 0) }}
+            </span>
+            <span class="tabular-nums">{{ formatDuration(overview?.total.use_time_ms ?? 0) }}</span>
+            <span>-</span>
+          </div>
+          <!-- 今日行 -->
+          <div class="mt-2 grid min-w-[560px] grid-cols-7 items-center gap-2 rounded-lg px-3 py-3 text-center text-sm">
+            <span class="text-left font-medium text-slate-600">今日</span>
+            <span class="font-semibold tabular-nums">{{ overview?.today.requests ?? 0 }}</span>
+            <span class="tabular-nums">{{ overview?.today.input_tokens ?? 0 }}</span>
+            <span class="tabular-nums">{{ overview?.today.output_tokens ?? 0 }}</span>
+            <span class="tabular-nums">
+              {{ (overview?.today.input_tokens ?? 0) + (overview?.today.output_tokens ?? 0) }}
+            </span>
+            <span class="tabular-nums">{{ formatDuration(overview?.today.use_time_ms ?? 0) }}</span>
+            <span>-</span>
           </div>
         </div>
-        <div class="rounded-lg bg-rose-50 px-3 py-3">
-          <div class="text-xs text-rose-700">失败</div>
-          <div class="mt-1 text-2xl font-semibold tabular-nums text-rose-800">
-            {{ stats?.failure ?? 0 }}
-          </div>
-        </div>
-        <div class="rounded-lg bg-amber-50 px-3 py-3">
-          <div class="text-xs text-amber-800">故障转移</div>
-          <div class="mt-1 text-2xl font-semibold tabular-nums text-amber-900">
-            {{ stats?.failover ?? 0 }}
-          </div>
-        </div>
-      </div>
-      <p v-if="statsError" class="mt-3 text-sm text-rose-600">{{ statsError }}</p>
+        <p v-if="overviewError" class="mt-1 text-sm text-rose-600">{{ overviewError }}</p>
+      </CardContent>
+    </Card>
 
-      <div class="mt-4 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-3">
-        <div class="text-sm font-medium text-slate-800">最近成功请求</div>
-        <p class="mt-0.5 text-xs text-slate-500">全局最近一次 2xx 且无 error 的请求（日志态，非配置首选）</p>
-        <div v-if="lastSuccess" class="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+    <Card class="border border-slate-200 bg-white">
+      <CardHeader class="py-3">
+        <h2 class="text-base font-semibold">最近成功请求</h2>
+      </CardHeader>
+      <CardContent class="flex flex-col gap-3">
+        <p class="text-xs text-slate-500">全局最近一次 2xx 且无 error 的请求（日志态，非配置首选）</p>
+        <div v-if="lastSuccess" class="grid gap-2 text-sm sm:grid-cols-2">
           <div>
             <div class="text-xs text-slate-500">分组</div>
             <div class="mt-0.5 font-medium break-all">{{ lastSuccess.group_name || "-" }}</div>
@@ -218,10 +236,9 @@ onMounted(refresh);
             <div class="mt-0.5 tabular-nums">{{ formatSuccessTime(lastSuccess.time) }}</div>
           </div>
         </div>
-        <p v-else-if="!lastSuccessError" class="mt-3 text-sm text-slate-500">暂无成功请求</p>
-        <p v-if="lastSuccessError" class="mt-3 text-sm text-rose-600">{{ lastSuccessError }}</p>
-      </div>
-    </CardContent>
+        <p v-else-if="!lastSuccessError" class="text-sm text-slate-500">暂无成功请求</p>
+        <p v-if="lastSuccessError" class="text-sm text-rose-600">{{ lastSuccessError }}</p>
+      </CardContent>
     </Card>
 
     <Card class="border border-slate-200 bg-white">
