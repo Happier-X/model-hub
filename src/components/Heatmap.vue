@@ -97,7 +97,7 @@ const gridStyle = computed(() => ({
         <span
           v-for="(label, i) in grid.months"
           :key="i"
-          class="truncate text-[10px] leading-3 text-muted-foreground"
+          class="whitespace-nowrap text-[10px] leading-3 text-muted-foreground"
         >
           {{ label || "" }}
         </span>
