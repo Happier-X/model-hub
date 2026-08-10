@@ -59,8 +59,8 @@ onMounted(checkUpdateOnAppStartup);
 <template>
   <div class="flex h-screen flex-col overflow-hidden bg-slate-100 text-slate-900">
     <AppTitleBar />
-    <div class="flex min-h-0 flex-1 overflow-hidden">
-      <SidebarProvider>
+    <SidebarProvider class="flex min-h-0 flex-1">
+      <div class="flex min-h-0 flex-1 overflow-hidden">
         <Sidebar collapsible="none" class="border-r border-slate-200 bg-white">
           <SidebarHeader class="flex flex-col items-start gap-1 px-4 py-3">
             <div class="text-lg font-semibold tracking-wide">Model Hub</div>
@@ -81,8 +81,7 @@ onMounted(checkUpdateOnAppStartup);
             </SidebarGroup>
           </SidebarContent>
         </Sidebar>
-      </SidebarProvider>
-      <main class="flex min-w-0 flex-1 flex-col">
+        <main class="flex min-w-0 flex-1 flex-col">
         <div
           v-if="availableVersion"
           class="flex min-h-11 items-center gap-3 border-b border-cyan-200 bg-cyan-50 px-6 py-2 text-sm text-cyan-950"
@@ -108,6 +107,7 @@ onMounted(checkUpdateOnAppStartup);
           <RouterView />
         </div>
       </main>
-    </div>
+      </div>
+    </SidebarProvider>
   </div>
 </template>

@@ -1953,3 +1953,17 @@ vue3-calendar-heatmap 的 peerDependencies 含 `tippy.js@^6.3.7`，pnpm 默认�
 ### 验证
 
 typecheck/build 全绿；用户 dev 需重启（新依赖加入后 vite 重优化）。
+
+## 2026-08-10 修复：内容区整体消失（SidebarProvider 布局劫持）✅
+
+### 根因
+
+`SidebarProvider` 渲染包裹 div `flex min-h-svh w-full`。原 AppShell 把它作为外层 flex 容器的子项（只包 Sidebar，main 是兄弟），其 `w-full`（flex-basis:100%）把同级 `main`（flex-1 basis:0）挤到 0 宽 → 内容区完全消失，只剩侧栏。
+
+### 修复
+
+`SidebarProvider` 提到外层包住「侧栏 + main」整体，传 `class="flex min-h-0 flex-1"`（tailwind-merge 覆盖 `min-h-svh`，`w-full` 保留在 flex-col 中无碍）；内部再 `div.flex.min-h-0.flex-1.overflow-hidden` 做 Sidebar(16rem 文档流) + main(flex-1) 横向布局。
+
+### 验证
+
+twMerge 实测输出 `w-full flex min-h-0 flex-1`；typecheck/build 全绿。
