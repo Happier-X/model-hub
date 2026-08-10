@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import Heatmap from "@/components/Heatmap.vue";
 import StatsCards from "@/components/StatsCards.vue";
 import { type HeatmapValue } from "@/utils/heatmap";
@@ -117,6 +117,24 @@ async function refresh() {
   }
 }
 
+/** 仅轮询刷新统计总览（5s），避免频繁刷新每日热力图。 */
+async function refreshOverviewOnly() {
+  try {
+    overview.value = await getRequestOverview();
+    overviewError.value = "";
+  } catch (e) {
+    overviewError.value = extractInvokeError(e);
+  }
+}
+
+let overviewTimer: ReturnType<typeof setInterval> | undefined;
+onMounted(() => {
+  refresh();
+  overviewTimer = setInterval(refreshOverviewOnly, 5000);
+});
+onUnmounted(() => {
+  if (overviewTimer !== undefined) clearInterval(overviewTimer);
+});
 async function start() {
   loading.value = true;
   message.value = "";
@@ -156,12 +174,11 @@ const exampleCurl = () => {
   -d '{"model":"你的分组名","messages":[{"role":"user","content":"hi"}]}'`;
 };
 
-onMounted(refresh);
 </script>
 
 <template>
   <div class="space-y-6">
-    <StatsCards :overview="overview" :error="overviewError" :on-refresh="refreshStats" />
+    <StatsCards :overview="overview" :error="overviewError" />
 
     <Card class="border border-slate-200 bg-white">
       <CardHeader class="py-3">
@@ -198,7 +215,7 @@ onMounted(refresh);
       </CardHeader>
       <CardContent class="flex flex-col gap-3">
       <p class="mb-3 text-xs text-slate-500">
-        按本地自然日聚合的请求总条数；随上方「刷新统计」一起刷新。
+        按本地自然日聚合的请求总条数。
       </p>
       <Heatmap :values="heatmapData" />
       <p v-if="dailyError" class="mt-3 text-sm text-rose-600">{{ dailyError }}</p>

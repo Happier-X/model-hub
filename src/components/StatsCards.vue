@@ -12,7 +12,6 @@ import {
   MessageSquare,
   Rewind,
 } from "@lucide/vue";
-import { Button } from "@/components/ui/button";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { formatDuration } from "@/utils/formatDuration";
 import type { OverviewRow, RequestOverview } from "@/api/tauri";
@@ -20,10 +19,8 @@ import type { OverviewRow, RequestOverview } from "@/api/tauri";
 const props = defineProps<{
   overview: RequestOverview | null;
   error: string;
-  onRefresh: () => void;
 }>();
 
-const mode = ref<"total" | "today">("total");
 const entered = ref(false);
 onMounted(() => {
   entered.value = true;
@@ -37,10 +34,7 @@ const EMPTY_ROW: OverviewRow = {
   cost: 0,
 };
 
-const displayRow = computed<OverviewRow>(() => {
-  if (!props.overview) return EMPTY_ROW;
-  return mode.value === "total" ? props.overview.total : props.overview.today;
-});
+const displayRow = computed<OverviewRow>(() => props.overview?.total ?? EMPTY_ROW);
 
 interface MetricItem {
   label: string;
@@ -154,38 +148,7 @@ const cards = computed<StatsCard[]>(() => {
 
 <template>
   <div>
-    <!-- 工具条：总计/今日切换 + 刷新 -->
-    <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
-      <div class="inline-flex items-center rounded-lg bg-muted p-1">
-        <button
-          type="button"
-          class="rounded-md px-3 py-1 text-sm transition-colors"
-          :class="
-            mode === 'total'
-              ? 'bg-background font-medium text-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
-          "
-          @click="mode = 'total'"
-        >
-          总计
-        </button>
-        <button
-          type="button"
-          class="rounded-md px-3 py-1 text-sm transition-colors"
-          :class="
-            mode === 'today'
-              ? 'bg-background font-medium text-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
-          "
-          @click="mode = 'today'"
-        >
-          今日
-        </button>
-      </div>
-      <Button variant="outline" size="sm" type="button" @click="onRefresh">刷新统计</Button>
-    </div>
-
-    <!-- octopus 风格四统计卡片 -->
+    <!-- octopus 风格四统计卡片（总计，实时轮询刷新） -->
     <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
       <section
         v-for="(card, index) in cards"
