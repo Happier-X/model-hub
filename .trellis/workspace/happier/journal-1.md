@@ -1971,3 +1971,7 @@ twMerge 实测输出 `w-full flex min-h-0 flex-1`；typecheck/build 全绿。
 ## 2026-08-10 日志页简化：只保留表格展示 ✅
 
 用户要求日志页只需展示日志，去掉顶部筛选/操作卡片。删除：每页条数 Select、刷新、自动刷新（含定时器）、清理过期、清空全部按钮及说明文字；清理对应 state/函数/导入（pageSizeOptions/autoRefresh/refreshTimer/clear/purgeExpired/onPageSizeChange/message/retentionDays/maxRows）。保留：表格 + 分页器 + 表头统计（共 N 条 · 库内 N 条 · 第 x/y 页）+ 错误提示。onMounted 只做一次加载。
+
+## 2026-08-10 日志保留：启动时即清理过期（保留最近 7 天）✅
+
+保留策略本为 `LOG_RETENTION_DAYS=7` + `LOG_MAX_ROWS=10000`，但只在「写入日志后 / 打开列表时」触发 purge——无新日志时旧日志滞留。lib.rs setup 在 manage ProxyHandle 后补一次 `purge_expired_logs_best_effort()`，打开应用即清掉 7 天前的记录。cargo test --lib 123 全绿。

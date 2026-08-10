@@ -52,6 +52,14 @@ pub fn run() {
 
             app.manage(proxy);
             app.manage(AppExitState::new());
+
+            // 启动即按保留策略清理过期日志（默认最近 7 天）。
+            // 打开日志列表/写入日志时也会清，这里保证旧日志不长期滞留。
+            if let Some(proxy) = app.try_state::<ProxyHandle>() {
+                if let Ok(stores) = proxy.ensure_stores() {
+                    stores.purge_expired_logs_best_effort();
+                }
+            }
             tray::setup_tray(app)?;
 
             // 若启动时悬浮条开关为开，则创建并显示悬浮窗；失败不阻塞主流程。
