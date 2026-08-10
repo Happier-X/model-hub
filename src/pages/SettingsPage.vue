@@ -7,10 +7,19 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { renderMarkdown } from "../utils/markdown";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   checkForUpdate,
   downloadAndInstallUpdate,
   extractInvokeError,
   getAppVersion,
+  getModelPricing,
   getPaths,
   getShellPrefs,
   proxySetPort,
@@ -18,8 +27,10 @@ import {
   relaunchApp,
   setCheckUpdateOnStartup,
   setOverlayEnabled,
+  syncPricingNow,
   type AppPaths,
   type DownloadEvent,
+  type PricingInfo,
   type ProxyStatus,
   type Update,
 } from "../api/tauri";
@@ -219,6 +230,7 @@ async function refresh() {
     } catch {
       /* 浏览器开发态无版本 */
     }
+    await refreshPricing();
     error.value = "";
   } catch (e) {
     error.value = extractInvokeError(e);
@@ -237,6 +249,51 @@ async function savePort() {
   } finally {
     loading.value = false;
   }
+}
+
+// ---- 模型单价（OpenRouter 同步，只读） ----
+
+const pricingInfo = ref<PricingInfo | null>(null);
+const pricingError = ref("");
+const pricingLoading = ref(false);
+const syncLoading = ref(false);
+const pricingSearch = ref("");
+
+async function refreshPricing() {
+  pricingLoading.value = true;
+  try {
+    pricingInfo.value = await getModelPricing();
+    pricingError.value = "";
+  } catch (e) {
+    pricingError.value = extractInvokeError(e);
+  } finally {
+    pricingLoading.value = false;
+  }
+}
+
+async function syncPricing() {
+  syncLoading.value = true;
+  pricingError.value = "";
+  try {
+    await syncPricingNow();
+    await refreshPricing();
+  } catch (e) {
+    pricingError.value = extractInvokeError(e);
+  } finally {
+    syncLoading.value = false;
+  }
+}
+
+const pricingFiltered = computed(() => {
+  const items = pricingInfo.value?.items ?? [];
+  const kw = pricingSearch.value.trim().toLowerCase();
+  if (!kw) return items;
+  return items.filter((item) => item.model_name.toLowerCase().includes(kw));
+});
+
+function formatPricingTime(unix: number | null): string {
+  if (unix === null) return "从未同步";
+  return new Date(unix * 1000).toLocaleString("zh-CN");
 }
 
 onMounted(async () => {
@@ -414,6 +471,65 @@ onUnmounted(() => {
       </p>
       <p v-if="updateError" class="mt-3 text-sm text-rose-600">{{ updateError }}</p>
     </CardContent>
+    </Card>
+
+    <Card class="border border-slate-200 bg-white">
+      <CardHeader class="py-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h2 class="text-base font-semibold">模型单价</h2>
+          <Button
+            variant="outline"
+            size="sm"
+            type="button"
+            :disabled="syncLoading"
+            @click="syncPricing"
+          >
+            {{ syncLoading ? "同步中…" : "立即同步" }}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent class="flex flex-col gap-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+          <span>
+            已同步 {{ pricingInfo?.count ?? 0 }} 个模型 · 最后同步：
+            {{ formatPricingTime(pricingInfo?.updated_at ?? null) }}
+          </span>
+          <Input
+            v-model="pricingSearch"
+            placeholder="搜索模型名…"
+            class="h-8 w-56"
+          />
+        </div>
+        <p class="text-xs text-slate-500">
+          价格来源 OpenRouter，每百万 token 美元；未覆盖的模型按 $0 计入费用。启动代理后会自动同步（约 24h 检查一次）。
+        </p>
+        <p v-if="pricingError" class="text-sm text-rose-600">{{ pricingError }}</p>
+        <div v-if="pricingLoading" class="py-6 text-center text-sm text-slate-500">加载中…</div>
+        <div v-else-if="(pricingFiltered.length === 0 && pricingSearch) || (pricingFiltered.length === 0 && (pricingInfo?.count ?? 0) > 0)" class="py-6 text-center text-sm text-slate-500">
+          无匹配模型
+        </div>
+        <div v-else-if="(pricingInfo?.count ?? 0) === 0" class="py-6 text-center text-sm text-slate-500">
+          尚未同步，点击「立即同步」或等待后台自动同步。
+        </div>
+        <div v-else class="max-h-96 overflow-auto rounded-lg border border-slate-200">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>模型</TableHead>
+                <TableHead class="text-right">输入价 /百万 token</TableHead>
+                <TableHead class="text-right">输出价 /百万 token</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="item in pricingFiltered" :key="item.model_name">
+                <TableCell class="font-mono text-xs break-all">{{ item.model_name }}</TableCell>
+                <TableCell class="text-right tabular-nums">${{ item.prompt_price_per_mtok }}</TableCell>
+                <TableCell class="text-right tabular-nums">${{ item.completion_price_per_mtok }}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
     </Card>
   </div>
 </template>

@@ -14,6 +14,7 @@ import {
 } from "@lucide/vue";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { formatDuration } from "@/utils/formatDuration";
+import { formatCost } from "@/utils/formatCost";
 import type { OverviewRow, RequestOverview } from "@/api/tauri";
 
 const props = defineProps<{
@@ -31,6 +32,8 @@ const EMPTY_ROW: OverviewRow = {
   input_tokens: 0,
   output_tokens: 0,
   use_time_ms: 0,
+  input_cost: 0,
+  output_cost: 0,
   cost: 0,
 };
 
@@ -93,7 +96,7 @@ const cards = computed<StatsCard[]>(() => {
           icon: DollarSign,
           color: "text-primary",
           bgColor: "bg-primary/10",
-          value: "-",
+          value: formatCost(r.cost),
           kind: "raw",
         },
       ],
@@ -115,7 +118,7 @@ const cards = computed<StatsCard[]>(() => {
           icon: DollarSign,
           color: "text-primary",
           bgColor: "bg-primary/10",
-          value: "-",
+          value: formatCost(r.input_cost),
           kind: "raw",
         },
       ],
@@ -137,7 +140,7 @@ const cards = computed<StatsCard[]>(() => {
           icon: DollarSign,
           color: "text-primary",
           bgColor: "bg-primary/10",
-          value: "-",
+          value: formatCost(r.output_cost),
           kind: "raw",
         },
       ],
