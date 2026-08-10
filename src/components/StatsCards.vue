@@ -81,7 +81,7 @@ const cards = computed<StatsCard[]>(() => {
       headerIcon: ChartColumnBig,
       items: [
         {
-          label: "总 token",
+          label: "总 Token",
           icon: Bot,
           color: "text-primary",
           bgColor: "bg-primary/10",
@@ -103,7 +103,7 @@ const cards = computed<StatsCard[]>(() => {
       headerIcon: ArrowDownToLine,
       items: [
         {
-          label: "输入 tokens",
+          label: "输入 Tokens",
           icon: Rewind,
           color: "text-primary",
           bgColor: "bg-primary/10",
@@ -125,7 +125,7 @@ const cards = computed<StatsCard[]>(() => {
       headerIcon: ArrowUpFromLine,
       items: [
         {
-          label: "输出 tokens",
+          label: "输出 Tokens",
           icon: FastForward,
           color: "text-primary",
           bgColor: "bg-primary/10",
