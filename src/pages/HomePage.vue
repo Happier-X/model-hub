@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { CalendarHeatmap, type Value as HeatmapValue } from "vue3-calendar-heatmap";
+import Heatmap from "@/components/Heatmap.vue";
+import { type HeatmapValue } from "@/utils/heatmap";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -45,7 +46,7 @@ const heatmapData = computed<HeatmapValue[]>(() => {
   for (let t = startMs; t < endMs; t += dayMs) {
     // counts 的 day_start_unix 是 unix 秒，除以 1000 换回去。
     const dayStartUnix = Math.round(t / 1000);
-    // vue3-calendar-heatmap 要求 { date, count }；date 直接传 'YYYY-MM-DD'。
+    // 自研 Heatmap 要求 { date, count }；date 传 'YYYY-MM-DD'（本地自然日）。
     const d = new Date(t);
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -231,12 +232,7 @@ onMounted(refresh);
       <p class="mb-3 text-xs text-slate-500">
         按本地自然日聚合的请求总条数；随上方「刷新统计」一起刷新。
       </p>
-      <CalendarHeatmap
-        :values="heatmapData"
-        :end-date="new Date(daily?.end_unix ? daily.end_unix * 1000 : Date.now())"
-        :range-color="['#e2e8f0', '#bae6fd', '#38bdf8', '#0284c7', '#0c4a6e']"
-        :tooltip="false"
-      />
+      <Heatmap :values="heatmapData" />
       <p v-if="dailyError" class="mt-3 text-sm text-rose-600">{{ dailyError }}</p>
     </CardContent>
     </Card>

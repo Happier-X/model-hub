@@ -1975,3 +1975,12 @@ twMerge 实测输出 `w-full flex min-h-0 flex-1`；typecheck/build 全绿。
 ## 2026-08-10 日志保留：启动时即清理过期（保留最近 7 天）✅
 
 保留策略本为 `LOG_RETENTION_DAYS=7` + `LOG_MAX_ROWS=10000`，但只在「写入日志后 / 打开列表时」触发 purge——无新日志时旧日志滞留。lib.rs setup 在 manage ProxyHandle 后补一次 `purge_expired_logs_best_effort()`，打开应用即清掉 7 天前的记录。cargo test --lib 123 全绿。
+
+## 2026-08-10 自研热力图替换 vue3-calendar-heatmap ✅
+
+用户嫌现成热力图丑。新建 `src/components/Heatmap.vue`（GitHub 风格 53 列 × 7 行网格）：
+- 配色用 shadcn token：bg-muted（无数据）+ bg-primary/30/60（低中）+ bg-primary（高），colorTier 按 max 分档（utils/heatmap.ts，单测覆盖边界）
+- 布局 grid `repeat(cols, minmax(8px,1fr))` + aspect-square，任意宽度自适应铺满
+- 月份标签（跨月列）+ 图例 + shadcn Tooltip 悬浮日期/请求数
+- 移除依赖 vue3-calendar-heatmap + tippy.js（其 peer，仅被该库用）；main.ts 删库 CSS；HomePage 换组件
+- 坑：node --test 相对导入须带 .ts 扩展名；<script setup> 内不能 export（类型/纯函数抽到 utils）
