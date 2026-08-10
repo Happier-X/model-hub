@@ -166,3 +166,9 @@
 - 指标图标块统一用 `bg-primary/10 text-primary`（四卡一致）；图标用 `@lucide/vue`。
 - 数值动画：纯渲染函数组件 `AnimatedNumber.ts`（`.ts` + `defineComponent` + `h`，rAF 600ms easeOutCubic）；number 按 `kind`（`count` 千分位 / `token` 缩写 `x.xk`）滚动，string 直接显示（耗时/费用等已格式化文本）。动画属增强，数值始终由 props 决定。
 - 数值格式工具在 `src/utils/formatTokenCount.ts`（`formatNumber` / `formatTokenCount`）+ `formatDuration.ts`，均可独立单测。
+
+## 模型单价（设置页）
+
+- 设置页「模型单价」卡片为**只读**：OpenRouter 自动同步（后台 24h 到期检查 + 启动静默 5 分钟，复用 provider auto_sync 模式），「立即同步」按钮手动触发（`sync_pricing_now`）；无手动编辑价格表单。
+- 展示：同步状态行（模型数 + 最后同步时间）+ 搜索过滤 + shadcn Table（模型名/输入价/输出价，`$`/百万 token）；空态提示尚未同步。
+- 费用计算在统计时（`request_overview` LEFT JOIN `model_pricing`，别名匹配 `xxx/model` ↔ `model`）；首页 StatsCards 三项费用用 `formatCost`（`$0` / `$x.xxxx` 去尾 0）。
