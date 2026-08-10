@@ -138,3 +138,36 @@ model_pricing 单价表 + OpenRouter 自动同步（后台 24h 到期检查 + �
 ### Next Steps
 
 - 用户 dev 重启（Rust 改动）→ 点立即同步 → 发请求看费用增长
+
+
+## Session 45: 统计卡片数值单位对齐 octopus（value/unit 分离）
+
+**Date**: 2026-08-10
+**Task**: 统计卡片数值单位对齐 octopus（value/unit 分离）
+**Branch**: `master`
+
+### Summary
+
+照抄 octopus lib/utils formatNumber 规则：formatCount(B/M/K)、formatMoney(B$/M$/K$/ $)、formatTime(d/h/m/s/ms)，返回 {value,unit}，全部 toFixed(2)；AnimatedNumber 改为滚动格式化 value 字符串并按含小数点显示 0/2 位；StatsCards 单位独立 span 渲染
+
+### Main Changes
+
+- 新增 formatOctopus.ts（formatCount/formatMoney/formatTime）+ 3 组边界单测
+- AnimatedNumber.ts 入参改为已格式化 value 字符串（parseFloat 滚动）
+- StatsCards 八指标改 value+unit 结构，费用/耗时单位独立渲染
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] node test 44 全绿（+3）；typecheck/lint/build 全绿；headless 验证 8 指标 0.00 + ms×1 + $×3 + 无 K/M（空库）
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 无
