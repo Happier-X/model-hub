@@ -203,3 +203,35 @@ model_pricing 单价表 + OpenRouter 自动同步（后台 24h 到期检查 + �
 ### Next Steps
 
 - 用户 dev 重启（Rust 改动）查看热力图效果
+
+
+## Session 47: 首页精简：移除本地代理/接入步骤/调用示例三卡片
+
+**Date**: 2026-08-10
+**Task**: 首页精简：移除本地代理/接入步骤/调用示例三卡片
+**Branch**: `master`
+
+### Summary
+
+首页只保留统计总览四卡片 + 每日请求热力图；删除本地代理（状态/启停/复制 Base URL）、本机接入步骤、调用示例三卡片及关联代码
+
+### Main Changes
+
+- 删除 status/loading/message/error 状态、proxyStart/proxyStop/proxyStatus 请求、statusBadgeVariant/start/stop/refresh/copyBaseUrl/exampleCurl 函数、Badge/Button 导入
+- onMounted 改为直接 refreshStats + 5s 轮询 overview
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] typecheck/lint/unit 44/build 全绿；headless 确认三卡片文案/按钮 0 残留
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 无
