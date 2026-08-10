@@ -95,7 +95,7 @@ const gridStyle = computed(() => ({
       <!-- 月份标签：与列同宽对齐 -->
       <div class="grid gap-[3px]" :style="gridStyle">
         <span
-          v-for="(label, i) in months"
+          v-for="(label, i) in grid.months"
           :key="i"
           class="truncate text-[10px] leading-3 text-muted-foreground"
         >
@@ -110,7 +110,7 @@ const gridStyle = computed(() => ({
         class="mt-[3px] grid gap-[3px]"
         :style="gridStyle"
       >
-        <Tooltip v-for="cell in cells" :key="cell[row - 1].date">
+        <Tooltip v-for="cell in grid.cells" :key="cell[row - 1].date">
           <TooltipTrigger as-child>
             <button
               type="button"

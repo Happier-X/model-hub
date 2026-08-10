@@ -1984,3 +1984,9 @@ twMerge 实测输出 `w-full flex min-h-0 flex-1`；typecheck/build 全绿。
 - 月份标签（跨月列）+ 图例 + shadcn Tooltip 悬浮日期/请求数
 - 移除依赖 vue3-calendar-heatmap + tippy.js（其 peer，仅被该库用）；main.ts 删库 CSS；HomePage 换组件
 - 坑：node --test 相对导入须带 .ts 扩展名；<script setup> 内不能 export（类型/纯函数抽到 utils）
+
+## 2026-08-10 热力图不渲染修复 ✅
+
+用户反馈自研热力图不展示。headless Edge dump DOM 发现：7 个格子行全是空 div、无 button，但图例/月份正常。
+根因：模板直接引用 `cells` / `months`，而数据在 `grid`（computed）里——模板不自动解构 computed 属性，`v-for="cell in cells"` 中 `cells` 未定义 → 空转。改为 `grid.months` / `grid.cells`（模板自动解包 computed）。
+验证：preview 5199 + headless dump，376 个 button（371 格 + 5 页内按钮）、月份 1-12月 全部渲染。
