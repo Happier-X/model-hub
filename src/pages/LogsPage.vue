@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Pagination,
@@ -14,13 +13,6 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -28,19 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  clearLogs,
-  extractInvokeError,
-  listLogs,
-  purgeExpiredLogs,
-  type RequestLog,
-} from "../api/tauri";
-
-const pageSizeOptions: { value: number; label: string }[] = [
-  { value: 20, label: "20" },
-  { value: 50, label: "50" },
-  { value: 100, label: "100" },
-];
+import { extractInvokeError, listLogs, type RequestLog } from "../api/tauri";
 
 function statusCodeVariant(
   code: number | null | undefined,
@@ -76,16 +56,10 @@ const logColumns: { key: string; title: string }[] = [
 const items = ref<RequestLog[]>([]);
 const total = ref(0);
 const storedTotal = ref(0);
-const retentionDays = ref(7);
-const maxRows = ref(10000);
 const page = ref(1);
 const pageSize = ref(50);
 const loading = ref(false);
 const error = ref("");
-const message = ref("");
-const autoRefresh = ref(true);
-const AUTO_REFRESH_MS = 3_000;
-let refreshTimer: ReturnType<typeof setInterval> | undefined;
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value) || 1));
 
@@ -95,7 +69,7 @@ function formatTime(unix: number) {
 }
 
 async function refresh() {
-  // 定时器与手动操作撞车时跳过，防止 invoke 重叠及旧响应覆盖新响应。
+  // 分页操作重叠时跳过，防止 invoke 重叠及旧响应覆盖新响应。
   if (loading.value) return;
   loading.value = true;
   try {
@@ -106,8 +80,6 @@ async function refresh() {
     items.value = result.items;
     total.value = result.total;
     storedTotal.value = result.stored_total ?? result.total;
-    retentionDays.value = result.retention_days ?? 7;
-    maxRows.value = result.max_rows ?? 10000;
     page.value = result.page;
     pageSize.value = result.page_size;
     error.value = "";
@@ -120,123 +92,23 @@ async function refresh() {
 
 async function goPage(next: number) {
   const p = Math.min(Math.max(1, next), totalPages.value);
-  if (p === page.value && items.value.length > 0) {
-    // 仍允许强制刷新
-  }
   page.value = p;
   await refresh();
 }
 
-async function onPageSizeChange() {
-  page.value = 1;
-  await refresh();
-}
-
-async function clear() {
-  if (!confirm("确认清空全部日志？")) return;
-  try {
-    await clearLogs();
-    page.value = 1;
-    message.value = "已清空全部日志";
-    await refresh();
-  } catch (e) {
-    error.value = extractInvokeError(e);
-  }
-}
-
-async function purgeExpired() {
-  try {
-    const result = await purgeExpiredLogs();
-    message.value = `已按最近 ${result.retention_days} 天、最新 ${result.max_rows} 条策略清理 ${result.deleted} 条日志，库内剩余 ${result.retained} 条`;
-    page.value = 1;
-    await refresh();
-  } catch (e) {
-    error.value = extractInvokeError(e);
-  }
-}
-
-function startAutoRefresh() {
-  if (refreshTimer) clearInterval(refreshTimer);
-  refreshTimer = setInterval(() => {
-    if (autoRefresh.value && !document.hidden) void refresh();
-  }, AUTO_REFRESH_MS);
-}
-
-function toggleAutoRefresh() {
-  autoRefresh.value = !autoRefresh.value;
-  message.value = autoRefresh.value ? "已恢复每 3 秒自动刷新" : "已暂停自动刷新";
-  if (autoRefresh.value) void refresh();
-}
-
-onMounted(async () => {
-  await refresh();
-  startAutoRefresh();
-});
-
-onUnmounted(() => {
-  if (refreshTimer) clearInterval(refreshTimer);
-  refreshTimer = undefined;
+onMounted(() => {
+  void refresh();
 });
 </script>
 
 <template>
   <div class="h-full flex flex-col overflow-hidden">
-    <!-- 操作卡片：顶部不滚 -->
-    <Card class="border border-slate-200 bg-white">
-      <CardContent class="flex flex-col gap-3 py-4">
-        <div class="flex flex-wrap items-end gap-3">
-          <div class="w-24">
-            <label class="block text-sm">
-              <span class="mb-1 block text-slate-600">每页</span>
-              <Select
-                :model-value="String(pageSize)"
-                @update:model-value="
-                  (v) => {
-                    pageSize = Number(v);
-                    void onPageSizeChange();
-                  }
-                "
-              >
-                <SelectTrigger class="w-24">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem v-for="opt in pageSizeOptions" :key="opt.value" :value="String(opt.value)">
-                    {{ opt.label }}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </label>
-          </div>
-          <Button variant="outline" type="button" :disabled="loading" @click="refresh">
-            刷新
-          </Button>
-          <Button
-            :variant="autoRefresh ? 'secondary' : 'outline'"
-            type="button"
-            @click="toggleAutoRefresh"
-          >
-            {{ autoRefresh ? "自动刷新：3 秒" : "自动刷新：已暂停" }}
-          </Button>
-          <Button variant="secondary" type="button" :disabled="loading" @click="purgeExpired">
-            清理过期
-          </Button>
-          <Button variant="destructive" type="button" @click="clear">清空全部</Button>
-        </div>
-        <p class="text-xs text-slate-500">
-          默认仅保留最近 {{ retentionDays }} 天内的最新 {{ maxRows }} 条；打开列表/写入日志时会自动清理。库内现有
-          {{ storedTotal }} 条。
-        </p>
-      </CardContent>
-    </Card>
-
-    <p v-if="message" class="shrink-0 text-sm text-emerald-700">{{ message }}</p>
     <p v-if="error" class="shrink-0 text-sm text-rose-600">{{ error }}</p>
 
     <Card class="min-h-0 flex-1 flex flex-col border border-slate-200 bg-white">
       <CardHeader class="shrink-0 py-3">
         <p class="text-sm text-slate-600">
-          筛选 {{ total }} 条 · 库内 {{ storedTotal }} 条 · 第 {{ page }} / {{ totalPages }} 页
+          共 {{ total }} 条 · 库内 {{ storedTotal }} 条 · 第 {{ page }} / {{ totalPages }} 页
         </p>
       </CardHeader>
       <CardContent class="flex min-h-0 flex-1 flex-col gap-3">
@@ -319,4 +191,3 @@ onUnmounted(() => {
     </Card>
   </div>
 </template>
-

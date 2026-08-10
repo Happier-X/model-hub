@@ -1967,3 +1967,7 @@ typecheck/build 全绿；用户 dev 需重启（新依赖加入后 vite 重优�
 ### 验证
 
 twMerge 实测输出 `w-full flex min-h-0 flex-1`；typecheck/build 全绿。
+
+## 2026-08-10 日志页简化：只保留表格展示 ✅
+
+用户要求日志页只需展示日志，去掉顶部筛选/操作卡片。删除：每页条数 Select、刷新、自动刷新（含定时器）、清理过期、清空全部按钮及说明文字；清理对应 state/函数/导入（pageSizeOptions/autoRefresh/refreshTimer/clear/purgeExpired/onPageSizeChange/message/retentionDays/maxRows）。保留：表格 + 分页器 + 表头统计（共 N 条 · 库内 N 条 · 第 x/y 页）+ 错误提示。onMounted 只做一次加载。
