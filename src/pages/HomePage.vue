@@ -8,13 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   extractInvokeError,
-  getLastSuccessRequest,
   getRequestDailyCounts,
   getRequestOverview,
   proxyStart,
   proxyStatus,
   proxyStop,
-  type LastSuccessRequest,
   type ProxyStatus,
   type RequestDailyCounts,
   type RequestOverview,
@@ -26,8 +24,6 @@ const message = ref("");
 const error = ref("");
 const overview = ref<RequestOverview | null>(null);
 const overviewError = ref("");
-const lastSuccess = ref<LastSuccessRequest | null>(null);
-const lastSuccessError = ref("");
 const daily = ref<RequestDailyCounts | null>(null);
 const dailyError = ref("");
 const dailyLoading = ref(false);
@@ -63,15 +59,6 @@ const statusBadgeVariant = computed<"success" | "danger" | "default">(() => {
   return "default";
 });
 
-function formatSuccessTime(unix: number): string {
-  if (!unix) return "-";
-  try {
-    return new Date(unix * 1000).toLocaleString("zh-CN", { hour12: false });
-  } catch {
-    return String(unix);
-  }
-}
-
 async function refreshStats() {
   const overviewPromise = getRequestOverview()
     .then((value) => {
@@ -80,14 +67,6 @@ async function refreshStats() {
     })
     .catch((e) => {
       overviewError.value = extractInvokeError(e);
-    });
-  const lastSuccessPromise = getLastSuccessRequest()
-    .then((value) => {
-      lastSuccess.value = value;
-      lastSuccessError.value = "";
-    })
-    .catch((e) => {
-      lastSuccessError.value = extractInvokeError(e);
     });
   dailyLoading.value = true;
   const dailyPromise = getRequestDailyCounts()
@@ -101,7 +80,7 @@ async function refreshStats() {
     .finally(() => {
       dailyLoading.value = false;
     });
-  await Promise.all([overviewPromise, lastSuccessPromise, dailyPromise]);
+  await Promise.all([overviewPromise, dailyPromise]);
 }
 
 async function refresh() {
@@ -179,35 +158,6 @@ const exampleCurl = () => {
 <template>
   <div class="space-y-6">
     <StatsCards :overview="overview" :error="overviewError" />
-
-    <Card class="border border-slate-200 bg-white">
-      <CardHeader class="py-3">
-        <h2 class="text-base font-semibold">最近成功请求</h2>
-      </CardHeader>
-      <CardContent class="flex flex-col gap-3">
-        <p class="text-xs text-slate-500">全局最近一次 2xx 且无 error 的请求（日志态，非配置首选）</p>
-        <div v-if="lastSuccess" class="grid gap-2 text-sm sm:grid-cols-2">
-          <div>
-            <div class="text-xs text-slate-500">分组</div>
-            <div class="mt-0.5 font-medium break-all">{{ lastSuccess.group_name || "-" }}</div>
-          </div>
-          <div>
-            <div class="text-xs text-slate-500">供应商</div>
-            <div class="mt-0.5 font-medium break-all">{{ lastSuccess.provider_name || "-" }}</div>
-          </div>
-          <div>
-            <div class="text-xs text-slate-500">上游模型</div>
-            <div class="mt-0.5 font-mono text-xs break-all">{{ lastSuccess.upstream_model || "-" }}</div>
-          </div>
-          <div>
-            <div class="text-xs text-slate-500">请求时间</div>
-            <div class="mt-0.5 tabular-nums">{{ formatSuccessTime(lastSuccess.time) }}</div>
-          </div>
-        </div>
-        <p v-else-if="!lastSuccessError" class="text-sm text-slate-500">暂无成功请求</p>
-        <p v-if="lastSuccessError" class="text-sm text-rose-600">{{ lastSuccessError }}</p>
-      </CardContent>
-    </Card>
 
     <Card class="border border-slate-200 bg-white">
       <CardHeader class="py-3">
