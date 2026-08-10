@@ -73,3 +73,35 @@
 ### Next Steps
 
 - 用户 dev 查看：发请求后数字滚动与卡片动画效果
+
+
+## Session 43: 统计卡片只显示总计：移除今日 tab 与刷新按钮，首页 5s 轮询实时刷新
+
+**Date**: 2026-08-10
+**Task**: 统计卡片只显示总计：移除今日 tab 与刷新按钮，首页 5s 轮询实时刷新
+**Branch**: `master`
+
+### Summary
+
+StatsCards 去掉今日/总计切换与刷新按钮，只渲染总计四卡片；HomePage onMounted 后 setInterval 每 5s 轮询 get_request_overview（onUnmounted 清理），挂载时仍全量拉一次；每日热力图不随轮询刷新
+
+### Main Changes
+
+- StatsCards.vue：删 mode tab、onRefresh prop、刷新按钮，displayRow 直取 overview.total
+- HomePage.vue：refreshOverviewOnly 轮询函数 + setInterval(5000) + onUnmounted 清理；删旧 onMounted(refresh) 重复调用
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] typecheck/lint/build 全绿；node test 37 全绿；headless 验证 tab/刷新按钮 0 残留、4 卡片+8 指标完整
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 无
