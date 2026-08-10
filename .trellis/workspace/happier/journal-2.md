@@ -266,3 +266,36 @@ model_pricing 单价表 + OpenRouter 自动同步（后台 24h 到期检查 + �
 ### Next Steps
 
 - 无
+
+
+## Session 49: 首页新增使用统计折线图（octopus StatsChart 同款）
+
+**Date**: 2026-08-10
+**Task**: 首页新增使用统计折线图（octopus StatsChart 同款）
+**Branch**: `master`
+
+### Summary
+
+热力图下方加折线图卡片：指标 tabs（请求数/费用/Token）+ 周期切换（今日按小时/近7天/近30天按日，点击循环）+ 汇总行（总请求/总费用/总Token 随周期）+ 自研 SVG 面积图（渐变填充/网格/轴标签/hover tooltip/ResizeObserver 自适应）；替代上一轮的静态今日汇总区块；后端新增按日/按小时时间序列统计（成功口径+别名单价）
+
+### Main Changes
+
+- log.rs：DailyStatRow/HourlyStatRow/TimeseriesStats + request_daily_stats/request_hourly_stats/success_rows_in_range（空桶补 0，跨天/跨小时正确分桶）
+- commands.rs get_timeseries_stats + lib.rs 注册；tauri.ts 类型+API
+- 新增 StatsChart.vue（自研 SVG 面积图，无外部图表库）；HomePage 移除今日使用情况静态区块
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] cargo test --lib 143 全绿（+2）；typecheck/lint/build 全绿；headless 确认卡片/tabs/汇总/SVG path 渲染、旧区块 0 残留
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 用户 dev 重启（Rust 改动）后查看折线图
