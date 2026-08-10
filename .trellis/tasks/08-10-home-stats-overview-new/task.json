@@ -1,0 +1,28 @@
+{
+  "id": "home-stats-overview-new",
+  "name": "home-stats-overview-new",
+  "title": "08-10-home-stats-overview-2",
+  "description": "首页统计总览卡片新设计稿（用户上传截图）",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "happier",
+  "assignee": "happier",
+  "createdAt": "2026-08-10",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "08-10-home-stats-overview-v2"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
