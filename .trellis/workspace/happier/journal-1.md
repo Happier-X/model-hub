@@ -1921,3 +1921,19 @@ typecheck/lint/unit(26)/build 全绿；grep 残留 `happier-ui`/`<H[A-Z]`/`.h-`/
 ### 变更文件
 
 11 个业务文件 + tsconfig×2 + vite.config.ts + package.json + components.json + src/lib/utils.ts + src/components/ui/*（20 个组件目录）+ spec 两篇。
+
+## 2026-08-10 修复：Sidebar 导航全消失（迁移回归）✅
+
+### 根因
+
+shadcn-vue init 因依赖安装失败只注入了颜色变量，**`--sidebar-width` 等尺寸变量缺失**；Sidebar 用 `w-(--sidebar-width)`（= `width: var(--sidebar-width)`），变量无值 → 侧栏宽度塌缩为 0 → 导航整体消失。另外 `collapsible="icon"` 折叠态对纯文字导航（无图标）是空白。
+
+### 修复
+
+- `src/index.css` :root 补 `--sidebar-width: 16rem` / `--sidebar-width-icon: 3rem` / `--sidebar-width-mobile: 18rem` / `--sidebar-header-height` / `--sidebar-footer-height`（与 utils.ts 常量一致）
+- `AppShell.vue`：`collapsible="icon"` → `collapsible="none"`（文档流固定布局，无 fixed/Sheet，无需 SidebarInset padding）
+- spec component-guidelines 同步（Sidebar 段注明 none 模式 + 变量契约）
+
+### 验证
+
+typecheck/build 全绿；用户 dev HMR 实时生效。

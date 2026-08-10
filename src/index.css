@@ -80,6 +80,13 @@
     oklch(0.922 0 0);
   --sidebar-ring:
     oklch(0.708 0 0);
+  /* Sidebar 尺寸（与 src/components/ui/sidebar/utils.ts 常量一致）；
+     shadcn-vue init 时因依赖安装中断未写入，手动补齐 */
+  --sidebar-width: 16rem;
+  --sidebar-width-icon: 3rem;
+  --sidebar-width-mobile: 18rem;
+  --sidebar-header-height: 3.5rem;
+  --sidebar-footer-height: 3.5rem;
 }
 
 * {

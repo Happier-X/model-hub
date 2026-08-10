@@ -62,7 +62,7 @@ onMounted(checkUpdateOnAppStartup);
     <AppTitleBar />
     <div class="flex min-h-0 flex-1 overflow-hidden">
       <SidebarProvider>
-        <Sidebar collapsible="icon" class="border-r border-slate-200 bg-white">
+        <Sidebar collapsible="none" class="border-r border-slate-200 bg-white">
           <SidebarHeader class="flex flex-col items-start gap-1 px-4 py-3">
             <div class="text-lg font-semibold tracking-wide">Model Hub</div>
             <div class="text-xs text-slate-400">Vue3 · 内嵌代理</div>
