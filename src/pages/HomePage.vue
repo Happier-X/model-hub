@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import Heatmap from "@/components/Heatmap.vue";
+import StatsCards from "@/components/StatsCards.vue";
 import { type HeatmapValue } from "@/utils/heatmap";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { formatDuration } from "@/utils/formatDuration";
 import {
   extractInvokeError,
   getLastSuccessRequest,
@@ -161,56 +161,7 @@ onMounted(refresh);
 
 <template>
   <div class="space-y-6">
-    <Card class="border border-slate-200 bg-white">
-      <CardHeader class="py-3">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <h2 class="text-base font-semibold">统计总览</h2>
-          <Button variant="outline" size="sm" type="button" @click="refreshStats">刷新统计</Button>
-        </div>
-      </CardHeader>
-      <CardContent class="flex flex-col gap-3">
-        <p class="text-xs text-slate-500">
-          仅统计成功请求（2xx 且无 error）；总计 = 全部成功请求，今日 = 本地自然日；费用待单价配置后启用。
-        </p>
-        <div class="overflow-x-auto">
-          <!-- 表头 -->
-          <div class="grid min-w-[560px] grid-cols-7 items-center gap-2 px-3 text-center text-xs text-slate-500">
-            <span class="text-left">指标</span>
-            <span>请求次数</span>
-            <span>输入 tokens</span>
-            <span>输出 tokens</span>
-            <span>总 tokens</span>
-            <span>耗时</span>
-            <span>费用</span>
-          </div>
-          <!-- 总计行 -->
-          <div class="mt-2 grid min-w-[560px] grid-cols-7 items-center gap-2 rounded-lg bg-slate-50 px-3 py-3 text-center text-sm">
-            <span class="text-left font-medium text-slate-600">总计</span>
-            <span class="font-semibold tabular-nums">{{ overview?.total.requests ?? 0 }}</span>
-            <span class="tabular-nums">{{ overview?.total.input_tokens ?? 0 }}</span>
-            <span class="tabular-nums">{{ overview?.total.output_tokens ?? 0 }}</span>
-            <span class="tabular-nums">
-              {{ (overview?.total.input_tokens ?? 0) + (overview?.total.output_tokens ?? 0) }}
-            </span>
-            <span class="tabular-nums">{{ formatDuration(overview?.total.use_time_ms ?? 0) }}</span>
-            <span>-</span>
-          </div>
-          <!-- 今日行 -->
-          <div class="mt-2 grid min-w-[560px] grid-cols-7 items-center gap-2 rounded-lg px-3 py-3 text-center text-sm">
-            <span class="text-left font-medium text-slate-600">今日</span>
-            <span class="font-semibold tabular-nums">{{ overview?.today.requests ?? 0 }}</span>
-            <span class="tabular-nums">{{ overview?.today.input_tokens ?? 0 }}</span>
-            <span class="tabular-nums">{{ overview?.today.output_tokens ?? 0 }}</span>
-            <span class="tabular-nums">
-              {{ (overview?.today.input_tokens ?? 0) + (overview?.today.output_tokens ?? 0) }}
-            </span>
-            <span class="tabular-nums">{{ formatDuration(overview?.today.use_time_ms ?? 0) }}</span>
-            <span>-</span>
-          </div>
-        </div>
-        <p v-if="overviewError" class="mt-1 text-sm text-rose-600">{{ overviewError }}</p>
-      </CardContent>
-    </Card>
+    <StatsCards :overview="overview" :error="overviewError" :on-refresh="refreshStats" />
 
     <Card class="border border-slate-200 bg-white">
       <CardHeader class="py-3">
