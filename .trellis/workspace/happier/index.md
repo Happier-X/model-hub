@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 41
+- **Total Sessions**: 42
 - **Last Active**: 2026-08-10
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~41 | Active |
+| `journal-2.md` | ~75 | Active |
 | `journal-1.md` | ~1992 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 42 | 2026-08-10 | 首页统计改 octopus 同款四统计卡片（总计/今日切换 + 数值动画） | - | `master` |
 | 41 | 2026-08-10 | 首页统计总览：token/耗时记录 + 聚合（总计+今日） | - | `master` |
 | 40 | 2026-08-06 | 供应商级自动同步模型 | `cbb9558`, `2e971b3`, `7fc70bb` | `master` |
 | 39 | 2026-08-06 | 分组表单页组件化改造 | `6474c77`, `65bcae3` | `master` |
