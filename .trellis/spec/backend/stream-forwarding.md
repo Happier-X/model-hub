@@ -52,6 +52,10 @@
 | 上游读错误 | `on_error` | 502 | `流式中断: …` |
 | 客户端提前断开（`StreamState` Drop 未 finalize） | `on_abort` | 499 | `流式响应未完整结束（客户端断开或中止）` |
 
+**token 用量**：`on_success` 携带旁路观察到的 usage（输入/输出 token，写 `request_logs.input_tokens/output_tokens`）；非流式成功由 `ForwardOutcome.input_tokens/output_tokens` 携带，`server.rs` 写入。失败终态（504/502/499）token 恒 0。
+
+**流式 usage 获取**：转发前对 OpenAI 兼容模型家族（`supports_include_usage`：gpt/o 系、deepseek、moonshot/kimi、glm、qwen、minimax、doubao）注入 `stream_options.include_usage=true`（客户端已带 `stream_options` 不覆盖，未知模型不注入）；透传 chunk 旁路解析顶层 `usage`（后到覆盖，失败静默，不改透传字节与时序）。
+
 `server.rs` 见 `defer_request_log=true` 时**不得**再记成功日志；最终日志一律由 body 终态回调写入，避免 prime 成功即误记 200。
 
 ### 5. 换源边界（不变）

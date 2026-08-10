@@ -7,9 +7,9 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-1.md`
-- **Total Sessions**: 40
-- **Last Active**: 2026-08-06
+- **Active File**: `journal-2.md`
+- **Total Sessions**: 41
+- **Last Active**: 2026-08-10
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,8 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1658 | Active |
+| `journal-2.md` | ~41 | Active |
+| `journal-1.md` | ~1992 | Archived |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 41 | 2026-08-10 | 首页统计总览：token/耗时记录 + 聚合（总计+今日） | - | `master` |
 | 40 | 2026-08-06 | 供应商级自动同步模型 | `cbb9558`, `2e971b3`, `7fc70bb` | `master` |
 | 39 | 2026-08-06 | 分组表单页组件化改造 | `6474c77`, `65bcae3` | `master` |
 | 38 | 2026-08-06 | 更新日志渲染为 Markdown 格式 | `a9a0d01`, `c4f2ee3` | `master` |

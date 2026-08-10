@@ -24,7 +24,7 @@
 | `provider_models` | 每个供应商同步到的上游模型列表（`provider_id` FK ON DELETE CASCADE，UNIQUE(provider_id, model_name)，`sort_order` 顺序）；供分组页离线读取 |
 | `groups` | 对外模型名（**无** `auto_failover`；故障转移始终按队列顺序） |
 | `group_items` | 有序队列；`sort_order` 越小越优先 |
-| `request_logs` | 请求/故障转移摘要；不存 messages/完整密钥；**默认保留最近 7 天内的最新 1000 条**（`LOG_RETENTION_DAYS` + `LOG_MAX_ROWS`），启动/写日志/列表时 best-effort 清理过期或超量 |
+| `request_logs` | 请求/故障转移摘要；含 `input_tokens` / `output_tokens`（转发链路提取的 usage，成功请求才非零）；不存 messages/完整密钥；**默认保留最近 7 天内的最新 10000 条**（`LOG_RETENTION_DAYS` + `LOG_MAX_ROWS`），启动/写日志/列表时 best-effort 清理过期或超量 |
 
 **已移除**：
 
