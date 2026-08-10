@@ -144,13 +144,6 @@ onMounted(async () => {
         </Button>
       </CardHeader>
       <CardContent class="flex min-h-0 flex-1 flex-col gap-3">
-        <p class="shrink-0 text-xs text-slate-500">
-          「配置到 Pi」会将该分组名写入本机
-          <code class="rounded bg-slate-100 px-1">~/.pi/agent/models.json</code>
-          的
-          <code class="rounded bg-slate-100 px-1">model-hub</code>
-          （固定占位 Key，无需客户端密钥）。
-        </p>
         <p v-if="message" class="shrink-0 whitespace-pre-line text-sm text-emerald-700">{{ message }}</p>
         <p v-if="error" class="shrink-0 text-sm text-rose-600">{{ error }}</p>
         <Empty v-if="groups.length === 0" class="app-empty-compact shrink-0" title="暂无分组" />
