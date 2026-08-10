@@ -128,6 +128,8 @@ async fn chat_completions(State(state): State<AppState>, Json(body): Json<Value>
                     upstream_model: outcome.final_model.clone(),
                     status_code: status,
                     use_time_ms: elapsed_ms(start),
+                    input_tokens: outcome.input_tokens,
+                    output_tokens: outcome.output_tokens,
                     error: outcome.error,
                     failover_from: outcome.failover_from,
                     failover_to: outcome.failover_to,
@@ -147,7 +149,9 @@ async fn chat_completions(State(state): State<AppState>, Json(body): Json<Value>
                 failover_from: String::new(),
                 failover_to: String::new(),
                 failover_reason: String::new(),
-            });
+            input_tokens: 0,
+                    output_tokens: 0,
+                });
             (
                 status,
                 Json(json!({"message": message, "error": {"message": message}})),

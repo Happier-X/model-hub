@@ -27,6 +27,8 @@ pub struct NewRequestLog {
     pub upstream_model: String,
     pub status_code: i64,
     pub use_time_ms: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
     pub error: String,
     pub failover_from: String,
     pub failover_to: String,
@@ -84,6 +86,24 @@ pub struct LogPurgeResult {
     pub retention_days: i64,
     pub max_rows: i64,
     pub cutoff_unix: i64,
+}
+
+/// 统计总览单行（总计 / 今日共用）。仅成功请求口径（2xx 且 error 为空）。
+#[derive(Debug, Clone, Serialize)]
+pub struct OverviewRow {
+    pub requests: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub use_time_ms: i64,
+    /// 费用：本期恒 0（单价配置后续任务引入）。
+    pub cost: f64,
+}
+
+/// 首页统计总览：总计 + 今日。
+#[derive(Debug, Clone, Serialize)]
+pub struct RequestOverview {
+    pub total: OverviewRow,
+    pub today: OverviewRow,
 }
 
 fn map_log_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RequestLog> {
@@ -190,13 +210,15 @@ impl Stores {
                     "upstream_model",
                     "status_code",
                     "use_time_ms",
+                    "input_tokens",
+                    "output_tokens",
                     "error",
                     "failover_from",
                     "failover_to",
                     "failover_reason",
                 ];
                 let mut placeholders = vec![
-                    "?1", "?2", "?3", "?4", "?5", "?6", "?7", "?8", "?9", "?10",
+                    "?1", "?2", "?3", "?4", "?5", "?6", "?7", "?8", "?9", "?10", "?11", "?12",
                 ];
                 // 旧列与当前语义映射：
                 // request_model_name ← group_name（客户端 model）
@@ -233,6 +255,8 @@ impl Stores {
                         log.upstream_model,
                         log.status_code,
                         log.use_time_ms,
+                        log.input_tokens,
+                        log.output_tokens,
                         log.error,
                         log.failover_from,
                         log.failover_to,
@@ -243,8 +267,8 @@ impl Stores {
             } else {
                 conn.execute(
                     "INSERT INTO request_logs
-                     (time, group_name, provider_name, upstream_model, status_code, use_time_ms, error, failover_from, failover_to, failover_reason)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                     (time, group_name, provider_name, upstream_model, status_code, use_time_ms, input_tokens, output_tokens, error, failover_from, failover_to, failover_reason)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                     params![
                         time,
                         log.group_name,
@@ -252,6 +276,8 @@ impl Stores {
                         log.upstream_model,
                         log.status_code,
                         log.use_time_ms,
+                        log.input_tokens,
+                        log.output_tokens,
                         log.error,
                         log.failover_from,
                         log.failover_to,
@@ -416,6 +442,46 @@ impl Stores {
     pub fn request_stats_today(&self) -> Result<RequestStats, AppError> {
         let (start_ts, end_ts) = local_day_bounds_unix();
         self.request_stats_between(start_ts, end_ts)
+    }
+
+    /// 首页统计总览：总计 + 今日（仅成功请求：2xx 且 error 为空）。
+    /// 费用字段本期恒 0，单价配置在后续任务引入。
+    pub fn request_overview(&self) -> Result<RequestOverview, AppError> {
+        let (start_ts, end_ts) = local_day_bounds_unix();
+        let total = self.overview_row(None)?;
+        let today = self.overview_row(Some((start_ts, end_ts)))?;
+        Ok(RequestOverview { total, today })
+    }
+
+    fn overview_row(&self, range: Option<(i64, i64)>) -> Result<OverviewRow, AppError> {
+        let mut sql = String::from(
+            "SELECT
+                COUNT(*) AS requests,
+                COALESCE(SUM(input_tokens), 0),
+                COALESCE(SUM(output_tokens), 0),
+                COALESCE(SUM(use_time_ms), 0)
+             FROM request_logs
+             WHERE status_code BETWEEN 200 AND 299
+               AND (error IS NULL OR length(error) = 0)",
+        );
+        let mut params: Vec<rusqlite::types::Value> = Vec::new();
+        if let Some((start_ts, end_ts)) = range {
+            sql.push_str(" AND time >= ?1 AND time < ?2");
+            params.push(rusqlite::types::Value::Integer(start_ts));
+            params.push(rusqlite::types::Value::Integer(end_ts));
+        }
+        self.with_conn(|conn| {
+            conn.query_row(&sql, rusqlite::params_from_iter(params), |row| {
+                Ok(OverviewRow {
+                    requests: row.get(0)?,
+                    input_tokens: row.get(1)?,
+                    output_tokens: row.get(2)?,
+                    use_time_ms: row.get(3)?,
+                    cost: 0.0,
+                })
+            })
+            .map_err(|e| AppError::Database(e.to_string()))
+        })
     }
 
     pub fn request_stats_between(
@@ -634,7 +700,9 @@ mod tests {
                 } else {
                     "5xx".into()
                 },
-            })
+            input_tokens: 0,
+                    output_tokens: 0,
+                })
             .unwrap();
     }
 
@@ -774,7 +842,9 @@ mod tests {
                 failover_from: String::new(),
                 failover_to: String::new(),
                 failover_reason: String::new(),
-            })
+            input_tokens: 0,
+                    output_tokens: 0,
+                })
             .expect("legacy NOT NULL 列应被双写");
 
         let page = stores.list_logs(LogQuery::default()).unwrap();
@@ -1058,5 +1128,83 @@ mod tests {
         let result = stores.request_daily_counts(365).unwrap();
         assert!(result.days.is_empty());
         assert!(result.start_unix < result.end_unix);
+    }
+
+    #[test]
+    fn overview_empty_db_zeros() {
+        let (_dir, stores) = setup();
+        let overview = stores.request_overview().unwrap();
+        assert_eq!(overview.total.requests, 0);
+        assert_eq!(overview.total.input_tokens, 0);
+        assert_eq!(overview.total.output_tokens, 0);
+        assert_eq!(overview.total.use_time_ms, 0);
+        assert_eq!(overview.today.requests, 0);
+    }
+
+    #[test]
+    fn overview_counts_only_success_requests() {
+        let (_dir, stores) = setup();
+        stores
+            .insert_log(NewRequestLog {
+                group_name: "g".into(),
+                provider_name: "p".into(),
+                upstream_model: "m".into(),
+                status_code: 200,
+                use_time_ms: 10,
+                input_tokens: 100,
+                output_tokens: 20,
+                ..Default::default()
+            })
+            .unwrap();
+        stores
+            .insert_log(NewRequestLog {
+                group_name: "g".into(),
+                provider_name: "p".into(),
+                upstream_model: "m".into(),
+                status_code: 200,
+                use_time_ms: 5,
+                input_tokens: 50,
+                output_tokens: 8,
+                error: "bad".into(),
+                ..Default::default()
+            })
+            .unwrap();
+        stores
+            .insert_log(NewRequestLog {
+                group_name: "g".into(),
+                provider_name: "p".into(),
+                upstream_model: "m".into(),
+                status_code: 500,
+                use_time_ms: 3,
+                input_tokens: 999,
+                output_tokens: 999,
+                ..Default::default()
+            })
+            .unwrap();
+
+        let overview = stores.request_overview().unwrap();
+        // 仅成功（2xx 且 error 空）计入：1 条，token/耗时只聚合它。
+        assert_eq!(overview.total.requests, 1);
+        assert_eq!(overview.total.input_tokens, 100);
+        assert_eq!(overview.total.output_tokens, 20);
+        assert_eq!(overview.total.use_time_ms, 10);
+    }
+
+    #[test]
+    fn overview_today_only_includes_local_day() {
+        let (_dir, stores) = setup();
+        let (start, end) = local_day_bounds_unix();
+        let now = chrono::Utc::now().timestamp();
+        // 今天（范围内）
+        insert_at(&stores, start + 60, 200, "", "", "");
+        // 昨天（范围外）
+        insert_at(&stores, start - 1, 200, "", "", "");
+        // 明天（范围外）
+        insert_at(&stores, end + 1, 200, "", "", "");
+        assert!(start <= now && now < end);
+
+        let overview = stores.request_overview().unwrap();
+        assert_eq!(overview.total.requests, 3);
+        assert_eq!(overview.today.requests, 1);
     }
 }

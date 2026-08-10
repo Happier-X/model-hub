@@ -296,14 +296,97 @@ fn chat_url(base_url: &str) -> String {
     }
 }
 
-fn rewrite_model(body: &Value, upstream_model: &str, effort: &str) -> Value {
+fn rewrite_model(body: &Value, upstream_model: &str, effort: &str, stream: bool) -> Value {
     let mut v = body.clone();
     if let Some(obj) = v.as_object_mut() {
         obj.insert("model".into(), Value::String(upstream_model.to_string()));
         strip_tool_strict(obj);
         apply_thinking_effort(obj, upstream_model, effort);
+        if stream {
+            apply_include_usage(obj, upstream_model);
+        }
     }
     v
+}
+
+/// 流式请求注入 `stream_options.include_usage`，让上游在流末尾返回含 usage 的 chunk。
+///
+/// - 客户端已显式声明 `stream_options` → 不覆盖，尊重客户端。
+/// - 仅对已知 OpenAI 兼容模型家族注入（OpenAI 系 + 主流兼容厂商）；未知模型不注入，
+///   避免不兼容上游因未知字段拒绝请求（此时流式 token 记为 0）。
+fn supports_include_usage(upstream_model: &str) -> bool {
+    let m = upstream_model.to_ascii_lowercase();
+    m.contains("gpt-")
+        || m.contains("gpt5")
+        || matches_o_series(&m)
+        || m.contains("deepseek")
+        || m.contains("moonshot")
+        || m.contains("kimi")
+        || m.contains("glm")
+        || m.contains("qwen")
+        || m.contains("minimax")
+        || m.contains("doubao")
+}
+
+fn apply_include_usage(obj: &mut serde_json::Map<String, Value>, upstream_model: &str) {
+    if obj.contains_key("stream_options") {
+        return;
+    }
+    if !supports_include_usage(upstream_model) {
+        return;
+    }
+    obj.insert(
+        "stream_options".into(),
+        serde_json::json!({ "include_usage": true }),
+    );
+}
+
+/// 从 OpenAI 兼容响应体（非流式 JSON）提取 usage：输入/输出 token 数。
+/// 缺失或非法一律返回 (0, 0)，不因解析问题阻断转发。
+pub fn extract_usage_from_json(bytes: &[u8]) -> (i64, i64) {
+    let Ok(v) = serde_json::from_slice::<Value>(bytes) else {
+        return (0, 0);
+    };
+    let Some(usage) = v.get("usage") else {
+        return (0, 0);
+    };
+    let input = usage
+        .get("prompt_tokens")
+        .and_then(|x| x.as_i64())
+        .unwrap_or(0)
+        .max(0);
+    let output = usage
+        .get("completion_tokens")
+        .and_then(|x| x.as_i64())
+        .unwrap_or(0)
+        .max(0);
+    (input, output)
+}
+
+/// 从流式 chunk（可能为 SSE 帧或裸 JSON）提取 usage；无 usage 返回 None。
+/// 仅做旁路观察：解析失败静默跳过，不影响透传。
+pub fn extract_usage_from_chunk(chunk: &[u8]) -> Option<(i64, i64)> {
+    if chunk.is_empty() {
+        return None;
+    }
+    // SSE 帧：取最后一个含 usage 的 data: 行解析；裸 JSON 直接解析。
+    let lines: Vec<&[u8]> = chunk.split(|&b| b == b'\n').collect();
+    let mut last_json: Option<&[u8]> = None;
+    for line in lines {
+        let trimmed = line.trim_ascii();
+        if let Some(rest) = trimmed.strip_prefix(b"data:") {
+            let payload = rest.trim_ascii();
+            if !payload.is_empty() && payload != b"[DONE]" {
+                last_json = Some(payload);
+            }
+        }
+    }
+    let json = last_json.unwrap_or_else(|| chunk.trim_ascii());
+    let (input, output) = extract_usage_from_json(json);
+    if input == 0 && output == 0 {
+        return None;
+    }
+    Some((input, output))
 }
 
 /// 思考强度可注入的模型家族。
@@ -489,9 +572,10 @@ async fn attempt_non_stream(
     candidate: &Candidate,
     body: &Value,
     effort: &str,
+    stream: bool,
 ) -> Result<(StatusCode, HeaderMap, Bytes), AttemptError> {
     let url = chat_url(&candidate.provider.base_url);
-    let payload = rewrite_model(body, &candidate.upstream_model, effort);
+    let payload = rewrite_model(body, &candidate.upstream_model, effort, stream);
     let response = clients
         .non_stream
         .post(&url)
@@ -555,9 +639,10 @@ async fn attempt_stream_prime(
     candidate: &Candidate,
     body: &Value,
     effort: &str,
+    stream: bool,
 ) -> Result<StreamPrimeOk, AttemptError> {
     let url = chat_url(&candidate.provider.base_url);
-    let payload = rewrite_model(body, &candidate.upstream_model, effort);
+    let payload = rewrite_model(body, &candidate.upstream_model, effort, stream);
     let response = clients
         .stream
         .post(&url)
@@ -635,8 +720,10 @@ struct StreamState {
     is_sse: bool,
     /// 已累计的静默时长（单位与 heartbeat 对齐）；每收到真实 chunk 归零。
     idle_acc: Duration,
+    /// 旁路观察到的 usage（输入/输出 token）；每 chunk 覆盖更新（usage 只在末尾 chunk 出现）。
+    usage: (i64, i64),
     on_idle_timeout: Option<Box<dyn FnOnce() + Send>>,
-    on_success: Option<Box<dyn FnOnce() + Send>>,
+    on_success: Option<Box<dyn FnOnce(i64, i64) + Send>>,
     on_error: Option<Box<dyn FnOnce(String) + Send>>,
     /// 客户端提前断开：写日志（不换源）。
     on_abort: Option<Box<dyn FnOnce() + Send>>,
@@ -682,7 +769,7 @@ fn stream_body_from_prime(
     heartbeat: Duration,
     is_sse: bool,
     on_idle_timeout: impl FnOnce() + Send + 'static,
-    on_success: impl FnOnce() + Send + 'static,
+    on_success: impl FnOnce(i64, i64) + Send + 'static,
     on_error: impl FnOnce(String) + Send + 'static,
     on_abort: impl FnOnce() + Send + 'static,
 ) -> Body {
@@ -696,6 +783,7 @@ fn stream_body_from_prime(
             heartbeat,
             is_sse,
             idle_acc: Duration::ZERO,
+            usage: (0, 0),
             on_idle_timeout: Some(Box::new(on_idle_timeout)),
             on_success: Some(Box::new(on_success)),
             on_error: Some(Box::new(on_error)),
@@ -707,6 +795,10 @@ fn stream_body_from_prime(
             }
             if let Some(chunk) = state.first.take() {
                 if !chunk.is_empty() {
+                    // 旁路观察首包 usage（通常无；出错时换源逻辑已在上游处理）。
+                    if let Some((input, output)) = extract_usage_from_chunk(&chunk) {
+                        state.usage = (input, output);
+                    }
                     return Some((Ok::<Bytes, std::io::Error>(chunk), state));
                 }
             }
@@ -715,7 +807,7 @@ fn stream_body_from_prime(
             loop {
                 let Some(resp) = state.response.as_mut() else {
                     if let Some(cb) = state.on_success.take() {
-                        cb();
+                        cb(state.usage.0, state.usage.1);
                     }
                     state.mark_finalized();
                     return None;
@@ -724,11 +816,15 @@ fn stream_body_from_prime(
                 match tokio::time::timeout(heartbeat, resp.chunk()).await {
                     Ok(Ok(Some(bytes))) => {
                         state.idle_acc = Duration::ZERO;
+                        // 旁路观察：提取 usage（不改变透传字节与时序；失败静默）。
+                        if let Some((input, output)) = extract_usage_from_chunk(&bytes) {
+                            state.usage = (input, output);
+                        }
                         return Some((Ok(bytes), state));
                     }
                     Ok(Ok(None)) => {
                         if let Some(cb) = state.on_success.take() {
-                            cb();
+                            cb(state.usage.0, state.usage.1);
                         }
                         state.mark_finalized();
                         return None;
@@ -813,6 +909,9 @@ pub struct ForwardOutcome {
     pub error: String,
     /// 为 true 时最终 request_log 由流式 body 终态回调写入，server 不得再记成功。
     pub defer_request_log: bool,
+    /// 非流式成功响应的 usage（输入/输出 token）。流式走终态回调，此处恒 0。
+    pub input_tokens: i64,
+    pub output_tokens: i64,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -851,7 +950,7 @@ pub async fn forward_with_failover(
         }
 
         let attempt_err: AttemptError = if stream {
-            match attempt_stream_prime(clients, candidate, body, effort).await {
+            match attempt_stream_prime(clients, candidate, body, effort, stream).await {
                 Ok(ok) => {
                     let provider_name = candidate.provider.name.clone();
                     let upstream_model = candidate.upstream_model.clone();
@@ -889,7 +988,9 @@ pub async fn forward_with_failover(
                                 } else {
                                     fo_reason
                                 },
-                            });
+                            input_tokens: 0,
+                    output_tokens: 0,
+                });
                         }
                     };
                     let on_success = {
@@ -900,13 +1001,15 @@ pub async fn forward_with_failover(
                         let fo_from = fo_from.clone();
                         let fo_to = fo_to.clone();
                         let fo_reason = fo_reason.clone();
-                        move || {
+                        move |input_tokens: i64, output_tokens: i64| {
                             stores.insert_log_best_effort(NewRequestLog {
                                 group_name: group,
                                 provider_name: name,
                                 upstream_model: model,
                                 status_code: success_status,
                                 use_time_ms: elapsed_ms(started),
+                                input_tokens,
+                                output_tokens,
                                 error: String::new(),
                                 failover_from: fo_from,
                                 failover_to: fo_to,
@@ -934,7 +1037,9 @@ pub async fn forward_with_failover(
                                 failover_from: fo_from,
                                 failover_to: fo_to,
                                 failover_reason: fo_reason,
-                            });
+                            input_tokens: 0,
+                    output_tokens: 0,
+                });
                         }
                     };
                     let on_abort = {
@@ -950,7 +1055,9 @@ pub async fn forward_with_failover(
                                 failover_from: fo_from,
                                 failover_to: fo_to,
                                 failover_reason: fo_reason,
-                            });
+                            input_tokens: 0,
+                    output_tokens: 0,
+                });
                         }
                     };
 
@@ -981,13 +1088,16 @@ pub async fn forward_with_failover(
                         failover_reason,
                         error: String::new(),
                         defer_request_log: true,
+                        input_tokens: 0,
+                        output_tokens: 0,
                     });
                 }
                 Err(e) => e,
             }
         } else {
-            match attempt_non_stream(clients, candidate, body, effort).await {
+            match attempt_non_stream(clients, candidate, body, effort, stream).await {
                 Ok((status, headers, bytes)) => {
+                    let (input_tokens, output_tokens) = extract_usage_from_json(&bytes);
                     let mut builder = Response::builder().status(status);
                     for (k, v) in headers.iter() {
                         builder = builder.header(k, v);
@@ -1004,6 +1114,8 @@ pub async fn forward_with_failover(
                         failover_reason,
                         error: String::new(),
                         defer_request_log: false,
+                        input_tokens,
+                        output_tokens,
                     });
                 }
                 Err(e) => e,
@@ -1040,6 +1152,8 @@ pub async fn forward_with_failover(
                     failover_from: String::new(),
                     failover_to: String::new(),
                     failover_reason: String::new(),
+                input_tokens: 0,
+                    output_tokens: 0,
                 });
             }
             AttemptError::Transport { gateway_status, .. } => {
@@ -1055,6 +1169,8 @@ pub async fn forward_with_failover(
                     failover_from: String::new(),
                     failover_to: String::new(),
                     failover_reason: String::new(),
+                input_tokens: 0,
+                    output_tokens: 0,
                 });
             }
         }
@@ -1084,6 +1200,8 @@ pub async fn forward_with_failover(
                 failover_reason: last_error.clone(),
                 error: safe_error,
                 defer_request_log: false,
+                input_tokens: 0,
+                output_tokens: 0,
             });
         }
         let response = build_http_response(status, headers, body);
@@ -1096,6 +1214,8 @@ pub async fn forward_with_failover(
             failover_reason: last_error.clone(),
             error: safe_error,
             defer_request_log: false,
+            input_tokens: 0,
+            output_tokens: 0,
         });
     }
 
@@ -1240,7 +1360,7 @@ mod tests {
     #[test]
     fn rewrite_model_replaces_field() {
         let body = serde_json::json!({"model":"group","messages":[]});
-        let out = rewrite_model(&body, "gpt-4o", "off");
+        let out = rewrite_model(&body, "gpt-4o", "off", false);
         assert_eq!(out["model"], "gpt-4o");
     }
 
@@ -1267,7 +1387,7 @@ mod tests {
                 }
             ]
         });
-        let out = rewrite_model(&body, "gpt-4o", "off");
+        let out = rewrite_model(&body, "gpt-4o", "off", false);
         // strict 已剥离，其余字段保留。
         assert!(out["tools"][0]["function"].get("strict").is_none());
         assert_eq!(out["tools"][0]["function"]["name"], "get_weather");
@@ -1279,7 +1399,7 @@ mod tests {
     #[test]
     fn rewrite_model_without_tools_is_noop() {
         let body = serde_json::json!({"model":"group","messages":[]});
-        let out = rewrite_model(&body, "gpt-4o", "off");
+        let out = rewrite_model(&body, "gpt-4o", "off", false);
         assert!(out.get("tools").is_none());
     }
 
@@ -1362,6 +1482,7 @@ mod tests {
                 &serde_json::json!({"model":"g","messages":[]}),
                 model,
                 "off",
+                false,
             );
             let obj = out.as_object().unwrap();
             assert!(obj.get("reasoning_effort").is_none());
@@ -1376,19 +1497,20 @@ mod tests {
             &serde_json::json!({"model":"g","messages":[]}),
             "gpt-5",
             "high",
+            false,
         );
         assert_eq!(out["reasoning_effort"], "high");
         // auto → medium。
-        let out = rewrite_model(&serde_json::json!({"model":"g"}), "gpt-5", "auto");
+        let out = rewrite_model(&serde_json::json!({"model":"g"}), "gpt-5", "auto", false);
         assert_eq!(out["reasoning_effort"], "medium");
     }
 
     #[test]
     fn o_series_minimal_downgrades_to_low() {
-        let out = rewrite_model(&serde_json::json!({"model":"g"}), "o3", "minimal");
+        let out = rewrite_model(&serde_json::json!({"model":"g"}), "o3", "minimal", false);
         assert_eq!(out["reasoning_effort"], "low");
         // gpt-5 保留 minimal。
-        let out = rewrite_model(&serde_json::json!({"model":"g"}), "gpt-5", "minimal");
+        let out = rewrite_model(&serde_json::json!({"model":"g"}), "gpt-5", "minimal", false);
         assert_eq!(out["reasoning_effort"], "minimal");
     }
 
@@ -1398,6 +1520,7 @@ mod tests {
             &serde_json::json!({"model":"g"}),
             "claude-sonnet-4",
             "medium",
+            false,
         );
         assert_eq!(out["thinking"]["type"], "enabled");
         assert_eq!(out["thinking"]["budget_tokens"], 8192);
@@ -1405,7 +1528,7 @@ mod tests {
 
     #[test]
     fn qwen_injects_enable_thinking_true() {
-        let out = rewrite_model(&serde_json::json!({"model":"g"}), "qwen3-32b", "low");
+        let out = rewrite_model(&serde_json::json!({"model":"g"}), "qwen3-32b", "low", false);
         assert_eq!(out["enable_thinking"], true);
     }
 
@@ -1416,6 +1539,7 @@ mod tests {
             &serde_json::json!({"model":"g","reasoning_effort":"low"}),
             "gpt-5",
             "high",
+            false,
         );
         assert_eq!(out["reasoning_effort"], "low");
         // 客户端已带 thinking，保留。
@@ -1423,13 +1547,14 @@ mod tests {
             &serde_json::json!({"model":"g","thinking":{"type":"enabled","budget_tokens":100}}),
             "claude-sonnet-4",
             "high",
+            false,
         );
         assert_eq!(out["thinking"]["budget_tokens"], 100);
     }
 
     #[test]
     fn non_reasoning_family_never_injects() {
-        let out = rewrite_model(&serde_json::json!({"model":"g"}), "gpt-4o", "high");
+        let out = rewrite_model(&serde_json::json!({"model":"g"}), "gpt-4o", "high", false);
         let obj = out.as_object().unwrap();
         assert!(obj.get("reasoning_effort").is_none());
         assert!(obj.get("thinking").is_none());
@@ -1475,5 +1600,73 @@ mod tests {
         assert!(result.is_err());
         flag.store(true, Ordering::SeqCst);
         assert!(fired.load(Ordering::SeqCst));
+    }
+
+    // ---- usage 提取 ----
+
+    #[test]
+    fn extract_usage_from_json_parses_usage() {
+        let body = br#"{"id":"x","usage":{"prompt_tokens":123,"completion_tokens":45}}"#;
+        assert_eq!(extract_usage_from_json(body), (123, 45));
+    }
+
+    #[test]
+    fn extract_usage_from_json_missing_or_invalid_is_zero() {
+        assert_eq!(extract_usage_from_json(br#"{"id":"x"}"#), (0, 0));
+        assert_eq!(extract_usage_from_json(br#"not-json"#), (0, 0));
+        assert_eq!(extract_usage_from_json(b""), (0, 0));
+        // 负值钳制为 0
+        assert_eq!(extract_usage_from_json(br#"{"usage":{"prompt_tokens":-1,"completion_tokens":2}}"#), (0, 2));
+    }
+
+    #[test]
+    fn extract_usage_from_chunk_handles_sse_frames() {
+        let chunk = b"data: {\"choices\":[]}
+
+data: {\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5}}
+
+";
+        assert_eq!(extract_usage_from_chunk(chunk), Some((10, 5)));
+        // 无 usage 的普通 chunk
+        assert_eq!(extract_usage_from_chunk(b"data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}
+
+"), None);
+        // [DONE] 结尾
+        assert_eq!(extract_usage_from_chunk(b"data: [DONE]
+
+"), None);
+        // 裸 JSON
+        assert_eq!(extract_usage_from_chunk(br#"{"usage":{"prompt_tokens":7,"completion_tokens":1}}"#), Some((7, 1)));
+        assert_eq!(extract_usage_from_chunk(b""), None);
+    }
+
+    // ---- 流式 include_usage 注入 ----
+
+    #[test]
+    fn stream_injects_include_usage_for_openai_family() {
+        let body = serde_json::json!({"model":"g","stream":true,"messages":[]});
+        let out = rewrite_model(&body, "gpt-5", "off", true);
+        assert_eq!(out["stream_options"]["include_usage"], true);
+    }
+
+    #[test]
+    fn stream_skips_injection_for_unknown_model() {
+        let body = serde_json::json!({"model":"g","stream":true});
+        let out = rewrite_model(&body, "unknown-model-xyz", "off", true);
+        assert!(out.get("stream_options").is_none());
+    }
+
+    #[test]
+    fn client_stream_options_not_overwritten() {
+        let body = serde_json::json!({"model":"g","stream":true,"stream_options":{"include_usage":false}});
+        let out = rewrite_model(&body, "gpt-5", "off", true);
+        assert_eq!(out["stream_options"]["include_usage"], false);
+    }
+
+    #[test]
+    fn non_stream_never_injects_include_usage() {
+        let body = serde_json::json!({"model":"g","stream":false});
+        let out = rewrite_model(&body, "gpt-5", "off", false);
+        assert!(out.get("stream_options").is_none());
     }
 }

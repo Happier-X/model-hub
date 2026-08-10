@@ -344,6 +344,13 @@ pub fn get_request_stats(
 }
 
 #[tauri::command]
+pub fn get_request_overview(
+    proxy: State<'_, ProxyHandle>,
+) -> Result<crate::domain::log::RequestOverview, InvokeError> {
+    stores(&proxy)?.request_overview().map_err(Into::into)
+}
+
+#[tauri::command]
 pub fn get_last_success_request(
     proxy: State<'_, ProxyHandle>,
 ) -> Result<Option<crate::domain::log::LastSuccessRequest>, InvokeError> {
