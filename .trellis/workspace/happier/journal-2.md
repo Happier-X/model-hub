@@ -171,3 +171,35 @@ model_pricing 单价表 + OpenRouter 自动同步（后台 24h 到期检查 + �
 ### Next Steps
 
 - 无
+
+
+## Session 46: 热力图卡片精简 + 全项目统计统一成功口径
+
+**Date**: 2026-08-10
+**Task**: 热力图卡片精简 + 全项目统计统一成功口径
+**Branch**: `master`
+
+### Summary
+
+热力图卡片去掉标题/说明，直接展示热力图+图例；request_daily_counts（热力图数据源）从统计全部请求改为只统计成功请求（2xx 且 error 空），全项目统计口径统一为成功
+
+### Main Changes
+
+- HomePage：热力图卡片删 CardHeader 标题与说明文字
+- log.rs request_daily_counts SQL 加成功条件；更新注释与旧测试断言（3→2 条），新增成功口径单测
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] cargo test --lib 141 全绿（+1 daily_counts 成功口径，修正 1 旧断言）；typecheck/build 全绿；headless 确认标题/说明 0 残留、371 热力图格完整
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 用户 dev 重启（Rust 改动）查看热力图效果
