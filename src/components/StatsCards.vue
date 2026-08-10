@@ -13,8 +13,7 @@ import {
   Rewind,
 } from "@lucide/vue";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
-import { formatDuration } from "@/utils/formatDuration";
-import { formatCost } from "@/utils/formatCost";
+import { formatCount, formatMoney, formatTime } from "@/utils/formatOctopus";
 import type { OverviewRow, RequestOverview } from "@/api/tauri";
 
 const props = defineProps<{
@@ -44,8 +43,10 @@ interface MetricItem {
   icon: Component;
   color: string;
   bgColor: string;
-  value: number | string;
-  kind: "count" | "token" | "raw";
+  /** 已格式化的数值部分（octopus 风格，如 "12.35"）。 */
+  value: string;
+  /** 单位（K/M/B、$、s/m/h/d 等），空则不渲染。 */
+  unit: string;
 }
 
 interface StatsCard {
@@ -56,6 +57,14 @@ interface StatsCard {
 
 const cards = computed<StatsCard[]>(() => {
   const r = displayRow.value;
+  const requests = formatCount(r.requests);
+  const duration = formatTime(r.use_time_ms);
+  const totalToken = formatCount(r.input_tokens + r.output_tokens);
+  const inputToken = formatCount(r.input_tokens);
+  const outputToken = formatCount(r.output_tokens);
+  const totalCost = formatMoney(r.cost);
+  const inputCost = formatMoney(r.input_cost);
+  const outputCost = formatMoney(r.output_cost);
   return [
     {
       title: "请求统计",
@@ -66,16 +75,16 @@ const cards = computed<StatsCard[]>(() => {
           icon: MessageSquare,
           color: "text-primary",
           bgColor: "bg-primary/10",
-          value: r.requests,
-          kind: "count",
+          value: requests.value,
+          unit: requests.unit,
         },
         {
           label: "消耗时间",
           icon: Clock,
           color: "text-primary",
           bgColor: "bg-primary/10",
-          value: formatDuration(r.use_time_ms),
-          kind: "raw",
+          value: duration.value,
+          unit: duration.unit,
         },
       ],
     },
@@ -88,16 +97,16 @@ const cards = computed<StatsCard[]>(() => {
           icon: Bot,
           color: "text-primary",
           bgColor: "bg-primary/10",
-          value: r.input_tokens + r.output_tokens,
-          kind: "token",
+          value: totalToken.value,
+          unit: totalToken.unit,
         },
         {
           label: "总费用",
           icon: DollarSign,
           color: "text-primary",
           bgColor: "bg-primary/10",
-          value: formatCost(r.cost),
-          kind: "raw",
+          value: totalCost.value,
+          unit: totalCost.unit,
         },
       ],
     },
@@ -110,16 +119,16 @@ const cards = computed<StatsCard[]>(() => {
           icon: Rewind,
           color: "text-primary",
           bgColor: "bg-primary/10",
-          value: r.input_tokens,
-          kind: "token",
+          value: inputToken.value,
+          unit: inputToken.unit,
         },
         {
           label: "输入费用",
           icon: DollarSign,
           color: "text-primary",
           bgColor: "bg-primary/10",
-          value: formatCost(r.input_cost),
-          kind: "raw",
+          value: inputCost.value,
+          unit: inputCost.unit,
         },
       ],
     },
@@ -132,16 +141,16 @@ const cards = computed<StatsCard[]>(() => {
           icon: FastForward,
           color: "text-primary",
           bgColor: "bg-primary/10",
-          value: r.output_tokens,
-          kind: "token",
+          value: outputToken.value,
+          unit: outputToken.unit,
         },
         {
           label: "输出费用",
           icon: DollarSign,
           color: "text-primary",
           bgColor: "bg-primary/10",
-          value: formatCost(r.output_cost),
-          kind: "raw",
+          value: outputCost.value,
+          unit: outputCost.unit,
         },
       ],
     },
@@ -181,8 +190,9 @@ const cards = computed<StatsCard[]>(() => {
               <span class="text-xs text-muted-foreground">{{ item.label }}</span>
               <div class="flex items-baseline gap-1">
                 <span class="text-xl font-semibold">
-                  <AnimatedNumber :value="item.value" :kind="item.kind" />
+                  <AnimatedNumber :value="item.value" />
                 </span>
+                <span v-if="item.unit" class="text-sm text-muted-foreground">{{ item.unit }}</span>
               </div>
             </div>
           </div>

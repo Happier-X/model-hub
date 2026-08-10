@@ -164,7 +164,8 @@
 - 首页顶部统计用 `StatsCards.vue`（octopus 风格）：4 卡片网格（`lg:grid-cols-4`，窄屏降级 1 列），每卡左区竖排标题（`[writing-mode:vertical-lr]`）+ 头部图标，右区 2 个指标项（`w-10 h-10 rounded-xl` 图标块 + 标签 + 数值）。
 - 数据自 `get_request_overview`（total/today 两组，成功口径），**只展示总计**；首页 `HomePage` 用 `setInterval` 每 5s 轮询 `get_request_overview` 实时刷新（组件卸载 `clearInterval`），统计卡片无刷新按钮、无今日 tab。
 - 指标图标块统一用 `bg-primary/10 text-primary`（四卡一致）；图标用 `@lucide/vue`。
-- 数值动画：纯渲染函数组件 `AnimatedNumber.ts`（`.ts` + `defineComponent` + `h`，rAF 600ms easeOutCubic）；number 按 `kind`（`count` 千分位 / `token` 缩写 `x.xk`）滚动，string 直接显示（耗时/费用等已格式化文本）。动画属增强，数值始终由 props 决定。
+- 数值格式化对齐 octopus：`formatOctopus.ts` 提供 `formatCount`/`formatMoney`/`formatTime`，返回 `{ value, unit }` 分离（B/M/K、$、d/h/m/s/ms 单位，全部 toFixed(2)），unit 由调用方单独渲染。
+- 数值动画：纯渲染函数组件 `AnimatedNumber.ts`（`.ts` + `defineComponent` + `h`，rAF 600ms easeOutCubic），入参为已格式化 value 字符串，按是否含小数点显示 0/2 位小数。动画属增强，数值始终由 props 决定。
 - 数值格式工具在 `src/utils/formatTokenCount.ts`（`formatNumber` / `formatTokenCount`）+ `formatDuration.ts`，均可独立单测。
 
 ## 模型单价（设置页）

@@ -1,31 +1,14 @@
-import {
-  defineComponent,
-  h,
-  onMounted,
-  onUnmounted,
-  ref,
-  watch,
-  type PropType,
-} from "vue";
-import { formatNumber, formatTokenCount } from "@/utils/formatTokenCount";
-
-type AnimatedKind = "count" | "token" | "raw";
-
-function formatByKind(value: number, kind: AnimatedKind): string {
-  if (kind === "count") return formatNumber(value);
-  if (kind === "token") return formatTokenCount(value);
-  return String(value);
-}
+import { defineComponent, h, onMounted, onUnmounted, ref, watch } from "vue";
 
 /**
- * 数值滚动动画：number 时用 requestAnimationFrame 从上一值平滑滚动（600ms easeOutCubic）；
- * string 时直接渲染（用于耗时/费用等已格式化文本）。
+ * octopus 同款数值滚动：入参为已格式化的 value 字符串（如 "12.35"、"500.00"），
+ * 内部 parseFloat 后 rAF 滚动（600ms easeOutCubic），按原串是否含小数点显示 0/2 位小数。
+ * 单位（unit）由调用方单独渲染。
  */
 export const AnimatedNumber = defineComponent({
   name: "AnimatedNumber",
   props: {
-    value: { type: [Number, String] as PropType<number | string>, required: true },
-    kind: { type: String as PropType<AnimatedKind>, default: "raw" },
+    value: { type: String, required: true },
   },
   setup(props) {
     const display = ref(0);
@@ -39,30 +22,38 @@ export const AnimatedNumber = defineComponent({
       const step = (now: number) => {
         const progress = Math.min(1, (now - startedAt) / duration);
         const eased = 1 - Math.pow(1 - progress, 3);
-        display.value = Math.round(from + (to - from) * eased);
+        display.value = from + (to - from) * eased;
         if (progress < 1) raf = requestAnimationFrame(step);
       };
       raf = requestAnimationFrame(step);
     };
 
+    const targetOf = (value: string): number => {
+      const parsed = parseFloat(value.replace(/,/g, ""));
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+
     onMounted(() => {
-      if (typeof props.value === "number") animate(0, props.value);
+      animate(0, targetOf(props.value));
     });
     watch(
       () => props.value,
       (value) => {
-        if (typeof value === "number") animate(display.value, value);
+        animate(display.value, targetOf(value));
       },
     );
     onUnmounted(() => cancelAnimationFrame(raf));
 
-    return () =>
-      h(
+    return () => {
+      const decimals = props.value.includes(".") ? 2 : 0;
+      return h(
         "span",
         { class: "tabular-nums" },
-        typeof props.value === "number"
-          ? formatByKind(display.value, props.kind)
-          : props.value,
+        display.value.toLocaleString("en-US", {
+          minimumFractionDigits: decimals,
+          maximumFractionDigits: decimals,
+        }),
       );
+    };
   },
 });
