@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import { X } from "@lucide/vue";
 import { useRoute, useRouter, RouterLink, RouterView } from "vue-router";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sidebar,
   SidebarContent,
@@ -103,9 +104,11 @@ onMounted(checkUpdateOnAppStartup);
         <header class="border-b border-slate-200 bg-white px-6 py-4">
           <h1 class="text-xl font-semibold">{{ title }}</h1>
         </header>
-        <div class="min-h-0 flex-1 overflow-auto p-6">
-          <RouterView />
-        </div>
+        <ScrollArea class="min-h-0 flex-1">
+          <div class="p-6">
+            <RouterView />
+          </div>
+        </ScrollArea>
       </main>
       </div>
     </SidebarProvider>
