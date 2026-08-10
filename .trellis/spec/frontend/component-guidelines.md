@@ -158,3 +158,11 @@
 - 为未规划的多用户功能预埋权限组件。
 - 用空数组或空对象吞掉加载失败。
 - 对用户配置的上游做「测试连接」、定时探测或打开页面自动拉 `/models`。
+
+## 统计卡片（StatsCards）
+
+- 首页顶部统计用 `StatsCards.vue`（octopus 风格）：4 卡片网格（`lg:grid-cols-4`，窄屏降级 1 列），每卡左区竖排标题（`[writing-mode:vertical-lr]`）+ 头部图标，右区 2 个指标项（`w-10 h-10 rounded-xl` 图标块 + 标签 + 数值）。
+- 数据自 `get_request_overview`（total/today 两组，成功口径），组件内「总计/今日」tab 切换，不重复拉数据；刷新按钮放工具条（`onRefresh` prop 由页面传入）。
+- 指标图标块配色用 shadcn token：`bg-primary/10` / `bg-chart-1..4/10` + `text-primary`；图标用 `@lucide/vue`。
+- 数值动画：纯渲染函数组件 `AnimatedNumber.ts`（`.ts` + `defineComponent` + `h`，rAF 600ms easeOutCubic）；number 按 `kind`（`count` 千分位 / `token` 缩写 `x.xk`）滚动，string 直接显示（耗时/费用等已格式化文本）。动画属增强，数值始终由 props 决定。
+- 数值格式工具在 `src/utils/formatTokenCount.ts`（`formatNumber` / `formatTokenCount`）+ `formatDuration.ts`，均可独立单测。
