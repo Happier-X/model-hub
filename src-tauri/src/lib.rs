@@ -141,6 +141,7 @@ pub fn run() {
             commands::clear_logs,
             commands::purge_expired_logs,
             commands::get_request_stats,
+            commands::get_timeseries_stats,
             commands::get_request_overview,
             commands::get_last_success_request,
             commands::get_request_daily_counts,

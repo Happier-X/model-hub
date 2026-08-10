@@ -260,6 +260,30 @@ export interface RequestOverview {
 
 export const getRequestOverview = () => invoke<RequestOverview>("get_request_overview");
 
+/** 时间序列统计行（折线图数据源，成功口径）。 */
+export interface DailyStatRow {
+  day_start_unix: number;
+  requests: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost: number;
+}
+
+export interface HourlyStatRow {
+  hour: number;
+  requests: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost: number;
+}
+
+export interface TimeseriesStats {
+  daily: DailyStatRow[];
+  hourly: HourlyStatRow[];
+}
+
+export const getTimeseriesStats = () => invoke<TimeseriesStats>("get_timeseries_stats");
+
 /** 模型单价（每百万 token 美元，OpenRouter 同步）。 */
 export interface ModelPrice {
   model_name: string;

@@ -428,6 +428,17 @@ pub fn get_request_stats(
     stores(&proxy)?.request_stats_today().map_err(Into::into)
 }
 
+/// 时间序列统计（折线图数据源）：近 30 天按日 + 今日按小时（均为成功口径，含费用）。
+#[tauri::command]
+pub fn get_timeseries_stats(
+    proxy: State<'_, ProxyHandle>,
+) -> Result<crate::domain::log::TimeseriesStats, InvokeError> {
+    let stores = stores(&proxy)?;
+    let daily = stores.request_daily_stats(30)?;
+    let hourly = stores.request_hourly_stats()?;
+    Ok(crate::domain::log::TimeseriesStats { daily, hourly })
+}
+
 #[tauri::command]
 pub fn get_request_overview(
     proxy: State<'_, ProxyHandle>,
