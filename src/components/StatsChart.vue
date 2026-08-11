@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { extractInvokeError, getTimeseriesStats, type DailyStatRow, type HourlyStatRow } from "@/api/tauri";
 import { formatCount, formatMoney } from "@/utils/formatOctopus";
+import { buildSmoothPath } from "@/utils/smoothPath";
 
 type Metric = "count" | "cost" | "tokens";
 type Period = "today" | "7" | "30";
@@ -84,11 +85,9 @@ const geometry = computed(() => {
     const y = PAD.top + h - (s.value / maxValue.value) * h;
     return { x, y };
   });
-  const line = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
-  const area =
-    pts.length === 0
-      ? ""
-      : `${line} L${pts[pts.length - 1].x.toFixed(1)},${(PAD.top + h).toFixed(1)} L${pts[0].x.toFixed(1)},${(PAD.top + h).toFixed(1)} Z`;
+  const line = buildSmoothPath(pts);
+  const base = pts.length === 0 ? "" : ` L${pts[pts.length - 1].x.toFixed(1)},${(PAD.top + h).toFixed(1)} L${pts[0].x.toFixed(1)},${(PAD.top + h).toFixed(1)} Z`;
+  const area = pts.length === 0 ? "" : `${line}${base}`;
   const gridY = [0, 0.25, 0.5, 0.75, 1].map((f) => PAD.top + h - f * h);
   const gridVals = [0, 0.25, 0.5, 0.75, 1].map((f) => maxValue.value * f);
   return { pts, line, area, gridY, gridVals, w, h };
