@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, shallowRef } from "vue";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { renderMarkdown } from "../utils/markdown";
@@ -308,19 +309,19 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="space-y-6">
-    <Card class="border border-slate-200 bg-white">
+  <div class="flex flex-col gap-6">
+    <Card>
       <CardHeader class="py-3">
         <h2 class="text-base font-semibold">代理配置</h2>
       </CardHeader>
       <CardContent class="flex flex-col gap-3">
       <div class="grid gap-3 text-sm md:grid-cols-2">
         <div>
-          <div class="text-slate-500">当前监听</div>
+          <div class="text-muted-foreground">当前监听</div>
           <div class="mt-1 font-mono">{{ status?.host || "-" }}:{{ status?.port ?? "-" }}</div>
         </div>
         <div>
-          <div class="text-slate-500">数据目录</div>
+          <div class="text-muted-foreground">数据目录</div>
           <div class="mt-1 break-all font-mono text-xs">
             {{ paths?.gateway_dir || status?.data_dir || "-" }}
           </div>
@@ -329,15 +330,15 @@ onUnmounted(() => {
 
       <div class="mt-5 flex flex-wrap items-end gap-3">
         <div class="w-28">
-          <label class="block text-sm">
-            <span class="mb-1 block text-slate-600">端口</span>
+          <Field>
+            <FieldLabel>端口</FieldLabel>
             <Input
               :model-value="String(portInput)"
               type="number"
               inputmode="numeric"
               @update:model-value="portInput = Number($event) || 0"
             />
-          </label>
+          </Field>
         </div>
         <Button variant="default" type="button" :disabled="loading" @click="savePort">
           保存端口
@@ -345,86 +346,88 @@ onUnmounted(() => {
         <Button variant="outline" type="button" @click="refresh">刷新</Button>
       </div>
 
-      <p v-if="message" class="mt-3 whitespace-pre-line text-sm text-emerald-700">{{ message }}</p>
+      <p v-if="message" class="mt-3 whitespace-pre-line text-sm text-success">{{ message }}</p>
       <p
         v-if="status?.port_note && status.port_note !== message"
-        class="mt-2 text-sm text-amber-800"
+        class="mt-2 text-sm text-warning"
       >
         {{ status.port_note }}
       </p>
-      <p v-if="error || status?.last_error" class="mt-3 text-sm text-rose-600">
+      <p v-if="error || status?.last_error" class="mt-3 text-sm text-destructive">
         {{ error || status?.last_error }}
       </p>
-      <p class="mt-2 text-xs text-slate-500">
+      <p class="mt-2 text-xs text-muted-foreground">
         若首选端口被占用，会自动向后寻找可用端口并写入配置，不会结束占用进程。改口后若用
         Pi，请到「分组」页重新「配置到 Pi」。
       </p>
     </CardContent>
     </Card>
 
-    <Card class="border border-slate-200 bg-white">
+    <Card>
       <CardHeader class="py-3">
         <h2 class="text-base font-semibold">桌面悬浮条</h2>
       </CardHeader>
       <CardContent class="flex flex-col gap-3">
       <div class="mb-3">
-        <label class="flex items-center gap-2 text-sm">
+        <Field orientation="horizontal">
           <Checkbox
+            id="overlay-enabled"
             :model-value="overlayEnabled"
             :disabled="prefsLoading"
-            @update:model-value="toggleOverlay"
+            @update:model-value="(v) => toggleOverlay(v === true)"
           />
-          <span>显示最近成功模型悬浮条</span>
-        </label>
+          <FieldLabel for="overlay-enabled">显示最近成功模型悬浮条</FieldLabel>
+        </Field>
       </div>
-      <p class="text-sm text-slate-500">
+      <p class="text-sm text-muted-foreground">
         开启后会在主显示器任务栏上方显示无边框状态条；关闭主窗口时代理仍继续运行，托盘「退出」才会停止代理。
       </p>
     </CardContent>
     </Card>
 
-    <Card class="border border-slate-200 bg-white">
+    <Card>
       <CardHeader class="py-3">
         <h2 class="text-base font-semibold">应用更新</h2>
       </CardHeader>
       <CardContent class="flex flex-col gap-3">
-      <p class="mb-3 text-sm text-slate-500">
+      <p class="mb-3 text-sm text-muted-foreground">
         检查 GitHub Release 上的更新清单；发现新版本后须确认才会下载安装并重启。默认不在启动时自动检查。
       </p>
       <div class="mb-3">
-        <label class="flex items-center gap-2 text-sm">
+        <Field orientation="horizontal">
           <Checkbox
+            id="startup-check"
             :model-value="checkUpdateOnStartup"
             :disabled="prefsLoading"
-            @update:model-value="toggleStartupCheck"
+            @update:model-value="(v) => toggleStartupCheck(v === true)"
           />
-          <span>应用启动时自动检查更新（仍需确认后才安装）</span>
-        </label>
+          <FieldLabel for="startup-check">应用启动时自动检查更新（仍需确认后才安装）</FieldLabel>
+        </Field>
       </div>
       <div class="flex flex-wrap items-center gap-3">
         <Button variant="default" type="button" :disabled="updateBusy" @click="checkUpdate()">
           {{ updatePhase === "checking" ? "检查中…" : "检查更新" }}
         </Button>
-        <span v-if="currentVersion" class="text-xs text-slate-500">当前版本 {{ currentVersion }}</span>
+        <span v-if="currentVersion" class="text-xs text-muted-foreground">当前版本 {{ currentVersion }}</span>
       </div>
 
       <div
         v-if="pendingUpdate && (updatePhase === 'available' || updatePhase === 'error')"
-        class="mt-4 rounded-lg border border-cyan-200 bg-cyan-50 p-4 text-sm"
+        class="mt-4 rounded-lg border border-info/20 bg-info/10 p-4 text-sm"
       >
-        <p class="font-medium text-cyan-900">
+        <p class="font-medium text-info">
           发现新版本 {{ pendingUpdate.version }}
-          <span v-if="pendingUpdate.currentVersion" class="font-normal text-cyan-700">
+          <span v-if="pendingUpdate.currentVersion" class="font-normal text-info">
             （当前 {{ pendingUpdate.currentVersion }}）
           </span>
         </p>
         <!-- eslint-disable-next-line vue/no-v-html -- markdown-it html:false 已转义原始 HTML -->
         <div
           v-if="releaseNotesHtml"
-          class="markdown-body mt-2 max-h-40 overflow-auto rounded bg-white/80 p-2 text-xs text-slate-700"
+          class="markdown-body mt-2 max-h-40 overflow-auto rounded bg-card/80 p-2 text-xs text-foreground"
           v-html="releaseNotesHtml"
         ></div>
-        <p class="mt-2 text-xs text-slate-600">
+        <p class="mt-2 text-xs text-muted-foreground">
           确认后将下载安装包、完成安装并自动重启应用。数据目录中的配置与数据库不会被删除。
         </p>
         <div class="mt-3 flex flex-wrap gap-2">
@@ -450,7 +453,7 @@ onUnmounted(() => {
       </div>
 
       <!-- 下载进行中：Progress 进度条 + 辅助文本 -->
-      <div v-if="updatePhase === 'downloading'" class="mt-3 space-y-1">
+      <div v-if="updatePhase === 'downloading'" class="mt-3 flex flex-col gap-1">
         :<Progress
           :value="downloadLoaded"
           :max="downloadTotal ?? 0"
@@ -459,21 +462,21 @@ onUnmounted(() => {
           variant="default"
           rounded
         />
-        <p class="text-sm text-emerald-700">{{ updateMessage }}</p>
+        <p class="text-sm text-success">{{ updateMessage }}</p>
       </div>
       <!-- 其他状态：纯文本 -->
       <p
         v-else-if="updateMessage"
         class="mt-3 text-sm"
-        :class="updatePhase === 'available' ? 'text-cyan-800' : 'text-emerald-700'"
+        :class="updatePhase === 'available' ? 'text-info' : 'text-success'"
       >
         {{ updateMessage }}
       </p>
-      <p v-if="updateError" class="mt-3 text-sm text-rose-600">{{ updateError }}</p>
+      <p v-if="updateError" class="mt-3 text-sm text-destructive">{{ updateError }}</p>
     </CardContent>
     </Card>
 
-    <Card class="border border-slate-200 bg-white">
+    <Card>
       <CardHeader class="py-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h2 class="text-base font-semibold">模型单价</h2>
@@ -489,7 +492,7 @@ onUnmounted(() => {
         </div>
       </CardHeader>
       <CardContent class="flex flex-col gap-3">
-        <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+        <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
           <span>
             已同步 {{ pricingInfo?.count ?? 0 }} 个模型 · 最后同步：
             {{ formatPricingTime(pricingInfo?.updated_at ?? null) }}
@@ -500,18 +503,18 @@ onUnmounted(() => {
             class="h-8 w-56"
           />
         </div>
-        <p class="text-xs text-slate-500">
+        <p class="text-xs text-muted-foreground">
           价格来源 OpenRouter，每百万 token 美元；未覆盖的模型按 $0 计入费用。启动代理后会自动同步（约 24h 检查一次）。
         </p>
-        <p v-if="pricingError" class="text-sm text-rose-600">{{ pricingError }}</p>
-        <div v-if="pricingLoading" class="py-6 text-center text-sm text-slate-500">加载中…</div>
-        <div v-else-if="(pricingFiltered.length === 0 && pricingSearch) || (pricingFiltered.length === 0 && (pricingInfo?.count ?? 0) > 0)" class="py-6 text-center text-sm text-slate-500">
+        <p v-if="pricingError" class="text-sm text-destructive">{{ pricingError }}</p>
+        <div v-if="pricingLoading" class="py-6 text-center text-sm text-muted-foreground">加载中…</div>
+        <div v-else-if="(pricingFiltered.length === 0 && pricingSearch) || (pricingFiltered.length === 0 && (pricingInfo?.count ?? 0) > 0)" class="py-6 text-center text-sm text-muted-foreground">
           无匹配模型
         </div>
-        <div v-else-if="(pricingInfo?.count ?? 0) === 0" class="py-6 text-center text-sm text-slate-500">
+        <div v-else-if="(pricingInfo?.count ?? 0) === 0" class="py-6 text-center text-sm text-muted-foreground">
           尚未同步，点击「立即同步」或等待后台自动同步。
         </div>
-        <div v-else class="max-h-96 overflow-auto rounded-lg border border-slate-200">
+        <div v-else class="max-h-96 overflow-auto rounded-lg border border-border">
           <Table>
             <TableHeader>
               <TableRow>

@@ -113,13 +113,13 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="flex flex-col gap-6">
     <StatsCards :overview="overview" :error="overviewError" />
 
-    <Card class="border border-slate-200 bg-white">
+    <Card>
       <CardContent class="flex flex-col gap-3">
       <Heatmap :values="heatmapData" />
-      <p v-if="dailyError" class="mt-3 text-sm text-rose-600">{{ dailyError }}</p>
+      <p v-if="dailyError" class="mt-3 text-sm text-destructive">{{ dailyError }}</p>
     </CardContent>
     </Card>
 

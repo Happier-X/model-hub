@@ -129,7 +129,7 @@ onMounted(async () => {
 
 <template>
   <div class="h-full flex flex-col overflow-hidden">
-    <Card class="min-h-0 flex-1 flex flex-col border border-slate-200 bg-white">
+    <Card class="min-h-0 flex-1 flex flex-col">
       <CardHeader class="flex shrink-0 flex-row items-center justify-between gap-2 py-3">
         <h2 class="text-base font-semibold">分组</h2>
         <Button
@@ -140,12 +140,12 @@ onMounted(async () => {
           type="button"
           @click="openCreate"
         >
-          <Plus :size="18" aria-hidden="true" />
+          <Plus aria-hidden="true" />
         </Button>
       </CardHeader>
       <CardContent class="flex min-h-0 flex-1 flex-col gap-3">
-        <p v-if="message" class="shrink-0 whitespace-pre-line text-sm text-emerald-700">{{ message }}</p>
-        <p v-if="error" class="shrink-0 text-sm text-rose-600">{{ error }}</p>
+        <p v-if="message" class="shrink-0 whitespace-pre-line text-sm text-success">{{ message }}</p>
+        <p v-if="error" class="shrink-0 text-sm text-destructive">{{ error }}</p>
         <Empty v-if="groups.length === 0" class="app-empty-compact shrink-0" title="暂无分组" />
         <div v-if="groups.length > 0" class="min-h-0 flex-1 overflow-y-auto pr-1">
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">

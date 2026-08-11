@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { X } from "@lucide/vue";
-import { useRoute, useRouter, RouterLink, RouterView } from "vue-router";
+import { useRoute, RouterLink, RouterView } from "vue-router";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -18,7 +18,6 @@ import { checkForUpdate, getShellPrefs } from "../api/tauri";
 import AppTitleBar from "./AppTitleBar.vue";
 
 const route = useRoute();
-const router = useRouter();
 const title = computed(() => (route.meta.title as string) || "Model Hub");
 const availableVersion = ref("");
 
@@ -58,14 +57,14 @@ onMounted(checkUpdateOnAppStartup);
 </script>
 
 <template>
-  <div class="flex h-screen flex-col overflow-hidden bg-slate-100 text-slate-900">
+  <div class="flex h-screen flex-col overflow-hidden bg-muted text-foreground">
     <AppTitleBar />
     <SidebarProvider class="flex min-h-0 flex-1">
       <div class="flex min-h-0 flex-1 overflow-hidden">
-        <Sidebar collapsible="none" class="border-r border-slate-200 bg-white">
+        <Sidebar collapsible="none" class="border-r border-border bg-card">
           <SidebarHeader class="flex flex-col items-start gap-1 px-4 py-3">
             <div class="text-lg font-semibold tracking-wide">Model Hub</div>
-            <div class="text-xs text-slate-400">Vue3 · 内嵌代理</div>
+            <div class="text-xs text-muted-foreground">Vue3 · 内嵌代理</div>
           </SidebarHeader>
           <SidebarContent>
             <SidebarGroup>
@@ -85,10 +84,10 @@ onMounted(checkUpdateOnAppStartup);
         <main class="flex min-w-0 flex-1 flex-col">
         <div
           v-if="availableVersion"
-          class="flex min-h-11 items-center gap-3 border-b border-cyan-200 bg-cyan-50 px-6 py-2 text-sm text-cyan-950"
+          class="flex min-h-11 items-center gap-3 border-b border-info/20 bg-info/10 px-6 py-2 text-sm text-info"
         >
           <span class="min-w-0 flex-1">发现新版本 {{ availableVersion }}</span>
-          <RouterLink class="shrink-0 font-medium text-cyan-800 hover:text-cyan-950" to="/settings">
+          <RouterLink class="shrink-0 font-medium text-info hover:text-info" to="/settings">
             前往设置
           </RouterLink>
           <Button
@@ -98,10 +97,10 @@ onMounted(checkUpdateOnAppStartup);
             title="关闭更新提示"
             @click="availableVersion = ''"
           >
-            <X :size="16" aria-hidden="true" />
+            <X aria-hidden="true" />
           </Button>
         </div>
-        <header class="border-b border-slate-200 bg-white px-6 py-4">
+        <header class="border-b border-border bg-card px-6 py-4">
           <h1 class="text-xl font-semibold">{{ title }}</h1>
         </header>
         <ScrollArea class="min-h-0 flex-1">

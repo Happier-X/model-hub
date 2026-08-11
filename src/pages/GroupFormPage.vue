@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Empty } from "@/components/ui/empty";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Item, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
 import {
@@ -486,8 +487,8 @@ async function autoSaveAfterSort(): Promise<boolean> {
   <div class="flex h-full min-h-0 flex-col gap-4 overflow-hidden">
     <!-- 顶部：说明 + 返回列表 -->
     <div class="flex flex-wrap items-center justify-between gap-2">
-      <p class="text-sm text-slate-500">
-        <span v-if="isEditing" class="mr-1 font-medium text-cyan-800">
+      <p class="text-sm text-muted-foreground">
+        <span v-if="isEditing" class="mr-1 font-medium text-info">
           正在编辑：{{ editingGroupName || `分组 #${editingGroupId}` }}
         </span>
         分组名 = 客户端 model；队列顺序即故障转移优先级。
@@ -504,15 +505,15 @@ async function autoSaveAfterSort(): Promise<boolean> {
     </div>
 
     <!-- 编辑态加载中 -->
-    <div v-if="loading" class="flex items-center gap-2 py-6 text-sm text-slate-500">
+    <div v-if="loading" class="flex items-center gap-2 py-6 text-sm text-muted-foreground">
       <Spinner class="size-4" />
       正在加载分组…
     </div>
 
     <!-- 编辑态加载失败：分组不存在 / 加载失败 -->
-    <Card v-else-if="loadFailed" class="border border-rose-200 bg-rose-50">
+    <Card v-else-if="loadFailed" class="border-destructive/20 bg-destructive/10">
       <CardContent class="py-4">
-        <p class="text-sm text-rose-700">{{ error }}</p>
+        <p class="text-sm text-destructive">{{ error }}</p>
         <Button
           variant="outline"
           size="sm"
@@ -530,19 +531,19 @@ async function autoSaveAfterSort(): Promise<boolean> {
         <div class="grid gap-3 md:grid-cols-2">
           <form.Field name="name">
             <template #default="{ field }">
-              <label class="block text-sm">
-                <span class="mb-1 block text-slate-600">分组名（对外 model）</span>
+              <Field>
+                <FieldLabel>分组名（对外 model）</FieldLabel>
                 <Input
                   :model-value="field.state.value"
-                  @update:model-value="field.handleChange"
+                  @update:model-value="(v) => field.handleChange(v as string)"
                 />
-              </label>
+              </Field>
             </template>
           </form.Field>
           <form.Field name="thinking_effort">
             <template #default="{ field }">
-              <label class="block text-sm">
-                <span class="mb-1 block text-slate-600">思考强度</span>
+              <Field>
+                <FieldLabel>思考强度</FieldLabel>
                 <Select
                   :model-value="field.state.value"
                   @update:model-value="(v) => field.handleChange(v as ThinkingEffort)"
@@ -556,40 +557,39 @@ async function autoSaveAfterSort(): Promise<boolean> {
                     </SelectItem>
                   </SelectContent>
                 </Select>
-                <span class="mt-1 block text-xs text-slate-500">
+                <FieldDescription>
                   代理转发时按上游模型家族翻译为对应字段；客户端自带则不覆盖。
-                </span>
-              </label>
+                </FieldDescription>
+              </Field>
             </template>
           </form.Field>
         </div>
 
-        <p v-if="formMessage" class="text-sm text-emerald-700">{{ formMessage }}</p>
+        <p v-if="formMessage" class="text-sm text-success">{{ formMessage }}</p>
 
         <!-- 双栏：左可选模型 / 右已选队列（flex 而非 grid：grid item 上 flex-1 不生效，会回退到内容高度导致整页滚动） -->
         <div class="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
           <!-- 左：按供应商手风琴选模 -->
-          <Card class="flex min-h-0 flex-1 flex-col border border-slate-200 bg-white">
+          <Card class="flex min-h-0 flex-1 flex-col">
             <CardHeader class="shrink-0 py-0">
               <div class="flex items-center justify-between px-3 py-2">
                 <h3 class="text-sm font-medium">可选模型</h3>
-                <span class="text-xs text-slate-400">展开供应商以加载其模型</span>
+                <span class="text-xs text-muted-foreground">展开供应商以加载其模型</span>
               </div>
             </CardHeader>
             <CardContent class="flex min-h-0 flex-1 flex-col p-0">
-            <div class="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+            <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
               <div
                 v-for="p in providers"
                 :key="p.id"
-                class="rounded-lg border border-slate-200"
+                class="rounded-lg border border-border"
               >
                 <Item
-                  class="w-full cursor-pointer rounded-lg border border-transparent hover:bg-slate-50"
+                  class="w-full cursor-pointer rounded-lg border border-transparent hover:bg-muted"
                   @click="toggleProvider(p.id)"
                 >
                   <ChevronDown
-                    :size="14"
-                    class="shrink-0 text-slate-400 transition-transform"
+                    class="shrink-0 size-3.5 text-muted-foreground transition-transform"
                     :class="{ '-rotate-90': !expandedProviders.has(p.id) }"
                   />
                   <ItemContent class="min-w-0 flex-1">
@@ -605,10 +605,10 @@ async function autoSaveAfterSort(): Promise<boolean> {
                           @update:model-value="toggleProviderAutoSync(p, $event)"
                         />
                         <!-- 模型已加载显示数量；未加载显示同步状态（数据来自 list_providers 返回的 last_sync_at） -->
-                        <span v-if="modelCache.getStatus(p.id) === 'ready'" class="text-xs text-slate-400">
+                        <span v-if="modelCache.getStatus(p.id) === 'ready'" class="text-xs text-muted-foreground">
                           {{ modelCache.getModels(p.id).length }} 个模型
                         </span>
-                        <span v-else class="text-xs text-slate-400">
+                        <span v-else class="text-xs text-muted-foreground">
                           {{ p.last_sync_at ? `已同步 ${formatUnix(p.last_sync_at)}` : "未同步" }}
                         </span>
                       </div>
@@ -616,13 +616,13 @@ async function autoSaveAfterSort(): Promise<boolean> {
                   </ItemContent>
                 </Item>
 
-                <div v-if="expandedProviders.has(p.id)" class="border-t border-slate-100 px-3 py-2">
-                  <div v-if="modelCache.getStatus(p.id) === 'loading'" class="flex items-center gap-2 py-2 text-xs text-slate-500">
+                <div v-if="expandedProviders.has(p.id)" class="border-t border-border px-3 py-2">
+                  <div v-if="modelCache.getStatus(p.id) === 'loading'" class="flex items-center gap-2 py-2 text-xs text-muted-foreground">
                     <Spinner class="size-3" />
                     正在拉取模型…
                   </div>
                   <div v-else-if="modelCache.getStatus(p.id) === 'error'" class="py-2">
-                    <p class="text-xs text-rose-600">{{ modelCache.getError(p.id) }}</p>
+                    <p class="text-xs text-destructive">{{ modelCache.getError(p.id) }}</p>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -648,13 +648,13 @@ async function autoSaveAfterSort(): Promise<boolean> {
                         v-for="m in filteredProviderModels(p.id)"
                         :key="m"
                         type="button"
-                        class="rounded bg-slate-100 px-2 py-1 text-left font-mono text-xs text-slate-700 hover:bg-cyan-100 disabled:opacity-50"
+                        class="rounded bg-muted px-2 py-1 text-left font-mono text-xs text-foreground hover:bg-info/15 disabled:opacity-50"
                         :title="m"
                         @click="addModelFromLeft(p.id, m)"
                       >
                         {{ m }}
                       </button>
-                      <p v-if="filteredProviderModels(p.id).length === 0" class="py-1 text-xs text-slate-400">
+                      <p v-if="filteredProviderModels(p.id).length === 0" class="py-1 text-xs text-muted-foreground">
                         无匹配（已选或关键词过滤）
                       </p>
                     </div>
@@ -677,7 +677,7 @@ async function autoSaveAfterSort(): Promise<boolean> {
           </Card>
 
           <!-- 右：已选故障转移队列 -->
-          <Card class="flex min-h-0 flex-1 flex-col border border-slate-200 bg-white">
+          <Card class="flex min-h-0 flex-1 flex-col">
             <CardHeader class="shrink-0 py-0">
               <div class="flex items-center justify-between px-3 py-2">
                 <h3 class="text-sm font-medium">故障转移队列</h3>
@@ -704,24 +704,24 @@ async function autoSaveAfterSort(): Promise<boolean> {
               </div>
             </CardHeader>
             <CardContent class="flex min-h-0 flex-1 flex-col p-0">
-            <div class="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
+            <div class="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3">
               <div
                 v-for="(item, index) in formValues.items"
                 :key="item.uid"
-                class="flex items-center gap-1.5 rounded-md border border-slate-200 px-2 py-1.5"
+                class="flex items-center gap-1.5 rounded-md border border-border px-2 py-1.5"
                 :class="
                   dragOverIndex === index
-                    ? 'border-cyan-400 bg-cyan-50'
+                    ? 'border-info/40 bg-info/10'
                     : dragFromIndex === index
-                      ? 'border-slate-300 bg-slate-50 opacity-80'
-                      : 'bg-white'
+                      ? 'border-border bg-muted opacity-80'
+                      : 'bg-card'
                 "
                 @dragover="onDragOver(index, $event)"
                 @drop="onDrop(index, $event)"
               >
                 <button
                   type="button"
-                  class="cursor-grab select-none rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[10px] text-slate-500 active:cursor-grabbing"
+                  class="cursor-grab select-none rounded border border-border bg-muted px-1 py-0.5 text-[10px] text-muted-foreground active:cursor-grabbing"
                   title="拖动排序"
                   :draggable="!saving"
                   @dragstart="onDragStart(index, $event)"
@@ -729,16 +729,16 @@ async function autoSaveAfterSort(): Promise<boolean> {
                 >
                   ⋮⋮
                 </button>
-                <span class="w-5 shrink-0 text-xs tabular-nums text-slate-400">{{ index + 1 }}.</span>
+                <span class="w-5 shrink-0 text-xs tabular-nums text-muted-foreground">{{ index + 1 }}.</span>
                 <div class="min-w-0 flex-1">
-                  <span class="block truncate text-xs text-slate-600">
+                  <span class="block truncate text-xs text-muted-foreground">
                     {{ providerName(item.provider_id) }}
                   </span>
-                  <span class="block truncate font-mono text-xs text-slate-500">{{ item.upstream_model }}</span>
+                  <span class="block truncate font-mono text-xs text-muted-foreground">{{ item.upstream_model }}</span>
                 </div>
                 <Badge
                   variant="outline"
-                  :class="queueDisplayScores[index] ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : ''"
+                  :class="queueDisplayScores[index] ? 'border-success/20 bg-success/15 text-success' : ''"
                   :title="
                     queueDisplayScores[index]
                       ? `llm_benchmark 分数 ${queueDisplayScores[index]?.score}（匹配层级：${queueDisplayScores[index]?.tier}）`
@@ -754,7 +754,7 @@ async function autoSaveAfterSort(): Promise<boolean> {
                   variant="ghost"
                   size="sm"
                   type="button"
-                  class="shrink-0 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                  class="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
                   title="删除成员"
                   @click="removeQueueItem(index)"
                 >
@@ -779,7 +779,7 @@ async function autoSaveAfterSort(): Promise<boolean> {
             取消
           </Button>
         </div>
-        <p v-if="error" class="text-sm text-rose-600">{{ error }}</p>
+        <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
       </form>
     </div>
   </div>

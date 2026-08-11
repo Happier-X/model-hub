@@ -165,7 +165,7 @@ const cards = computed<StatsCard[]>(() => {
       <section
         v-for="(card, index) in cards"
         :key="card.title"
-        class="flex flex-row items-center gap-4 rounded-2xl border border-slate-200 bg-card p-5 text-card-foreground transition-all duration-500"
+        class="flex flex-row items-center gap-4 rounded-2xl border border-border bg-card p-5 text-card-foreground transition-all duration-500"
         :style="{
           transitionDelay: `${index * 80}ms`,
           opacity: entered ? 1 : 0,
@@ -200,6 +200,6 @@ const cards = computed<StatsCard[]>(() => {
       </section>
     </div>
 
-    <p v-if="error" class="mt-3 text-sm text-rose-600">{{ error }}</p>
+    <p v-if="error" class="mt-3 text-sm text-destructive">{{ error }}</p>
   </div>
 </template>

@@ -407,3 +407,49 @@ model_pricing 单价表 + OpenRouter 自动同步（后台 24h 到期检查 + �
 
 - 用户重启应用（Rust 改动需重编译）后 GUI 验收：请求实时跳动、托盘恢复数据最新
 - 若后续在意 token/耗时卡单次增量可见（M 级舍入），另立任务（本期 Out of Scope）
+
+---
+
+## session — shadcn 规范偏差清理（08-11-shadcn-violations-cleanup）
+
+### 冲突恢复（2026-08-11）
+- git 工作区出现 `UU`/`AA` 冲突：`.trellis/spec/frontend/component-guidelines.md`（stash pop 与我的 P0 编辑冲突）、task 目录 3 个 jsonl/task.json（OURS=真实内容，THEIRS=旧占位）。
+- 解决：spec 保留 OURS（Field 体系/语义 token/图标尺寸章节），task jsonl 全部保留 OURS（in_progress）。已 `git add` 标 resolved。
+- 并行任务 `08-11-stats-realtime-update` 的 `src-tauri/*` + HomePage.vue 改动（事件驱动刷新）已单独提交 `8205d8a`，未混入本任务。
+
+### P2 Field 化完成（9 处）
+- **根因**：`shadcn-vue@2.8.2 add field` 拷入 9 个 .vue 但**没生成 index.ts**（CLI 缺陷）；`Field.vue`/`FieldSet.vue` 引 `fieldVariants`/`FieldVariants` from '.' → typecheck `Cannot find module '.'`。官方 registry 无 field index 定义（当前 bundle 按需远程拉取），已按官方 new-york-v4 形态手写 `src/components/ui/field/index.ts`（cva fieldVariants vertical/horizontal + 9 组件 re-export）。
+- 9 处裸 `<label>` → Field：GroupFormPage 分组名/思考强度（Select 场景用 FieldDescription 替代 span 说明），ProvidersPage 名称/Base URL/上游 API Key（密码 Input）/启用 Checkbox，SettingsPage 端口/overlay 悬浮条/启动检查 Checkbox。
+- 横向 Checkbox 用 `Field orientation="horizontal"` + `id`/`for` 关联（原裸 label 包裹天然关联，FieldLabel 并排后需显式）。
+- 顺带修复同块 TS2322：`field.handleChange`（Updater<string>）与 Input emit（string | number）不兼容 → 箭头函数 `(v) => field.handleChange(v as string)`；Checkbox 场景 `(v) => field.handleChange(v === true)`。删除 ProvidersPage 未使用的 Badge import。
+- 验证：`grep "<label class"`（排除 ui/）→ 0 处；`pnpm typecheck`（solution-style）通过。
+
+### ⚠️ 真实 typecheck 历史错误清单（非本任务引入，被 solution-style tsconfig 掩盖）
+`vue-tsc --noEmit -p tsconfig.app.json --ignoreDeprecations 6.0`（真实检查）暴露以下**既有**错误，本任务不修（边界外），留待专项：
+1. `ui/chart/ChartLegendContent.vue(19,72)` TS6133 value unused — ui/ 内禁止改（shadcn 生成）
+2. `AppShell.vue(21,7)` TS6133 router unused — 属本任务文件，P3 时顺手删
+3. `LogsPage.vue(164,12)` + `ProvidersPage.vue(452,14)` TS2345：Pagination 传 `pageSize` 但组件要求 `itemsPerPage`（reka-ui 新 prop 名）
+4. `LogsPage.vue(174,74)` + `ProvidersPage.vue(461,76)` TS2339：`item` 联合类型（ellipsis 分支无 value）需收窄
+5. 全部 `src/utils/*.test.ts` TS2591：缺 node 类型（tsconfig.app types 无 node）——测试经 `node --experimental-strip-types` 运行不受影响
+- 决策：本任务"不引入新错误"为准；上述作为 project debt 记录，建议另开任务修 tsconfig + Node 类型 + Pagination prop。
+
+### 待办
+- P3 颜色批量替换（statusCode.ts 已完成；GroupCard 25 → AppShell/AppTitleBar → StatsCards/HomePage/GroupsPage/LogsPage/ProvidersPage/GroupFormPage/SettingsPage）
+- GroupCard.vue:136 violet 徽章需读上下文决策
+- P4 Card 覆盖 / P5 图标 / P6 space→gap / P7 全量验证 + 提交
+
+### P2–P7 执行完成（2026-08-11 续）
+- P2 Field 化 9 处全部完成（垂直输入 + 横向 Checkbox，`id`/`for` 关联补齐），`grep "<label class"`（排除 ui/）→ 0。
+- P3 颜色批量替换按序完成：statusCode.ts（10 处）、GroupCard（25 处）、AppShell（10 处）+AppTitleBar（2 处，颜色仅；`:size` 4 处保留）、StatsCards（2 处）、HomePage、GroupsPage、LogsPage、ProvidersPage（15 处）、GroupFormPage（43 处）、SettingsPage（31 处）。
+  - **violet 特例 A.1 决策**：GroupCard 思考强度徽章 → `bg-info/10 text-info`（信息徽章语义，非中性 secondary），已按 design 二选一写入 spec §语义 token 惯例（`bg-info/10` 即提示/强调用途）。
+  - AppShell 根容器 `bg-slate-100` → `bg-muted`、Sidebar/header `bg-white` → `bg-card`（与 spec AppShell 示例一致，`--card`=白视觉零差异）。
+  - GroupFormPage 加载失败卡 `border-rose-200 bg-rose-50` → `border-destructive/20 bg-destructive/10`（B 类特例）。
+- P4 Card 覆盖全部删除（10 处 slate + 1 处 rose 卡）；HomePage/Settings 空覆盖整删 class。
+- P5 图标 `:size`：AppShell X、GroupsPage Plus、ProvidersPage Plus 删除（Button 规则接管）；GroupFormPage ChevronDown `:size=14` → `class="size-3.5"`（Item 上下文无 svg 规则）；OverlayApp ExternalLink 保留（非 shadcn 上下文）。
+- P6 space-* → gap 7 处全部完成。
+- **AC 复跑全绿**：4 个 grep 归零（颜色类/bg-white/space-*/裸 label，全部排除 ui/）；token :root 6 + .dark 6 + @theme 9；build ✓（824KB/gzip 267KB，10.83s）；test:unit 44/44 pass。
+- 真实 typecheck（`-p tsconfig.app.json --ignoreDeprecations 6.0`）相对历史基线**零新增**，且顺手修了 4 类既有错误：AppShell router unused、SettingsPage toggleOverlay/toggleStartupCheck TS2322、GroupFormPage/ProvidersPage Updater TS2322（Field 化箭头收窄）、ProvidersPage Badge unused。
+- 剩余 5 个历史错误（`ui/chart/ChartLegendContent` value unused、LogsPage/ProvidersPage Pagination `itemsPerPage` prop 缺失 + `item.value` 联合类型收窄）——与本任务无关，建议另开任务修 Pagination prop 名与 node types tsconfig。
+
+### 待提交
+- 全量 git add + commit（`refactor(frontend): shadcn 规范偏差清理——语义 token/Field/space/图标`）。

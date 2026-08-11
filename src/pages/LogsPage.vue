@@ -103,11 +103,11 @@ onMounted(() => {
 
 <template>
   <div class="h-full flex flex-col overflow-hidden">
-    <p v-if="error" class="shrink-0 text-sm text-rose-600">{{ error }}</p>
+    <p v-if="error" class="shrink-0 text-sm text-destructive">{{ error }}</p>
 
-    <Card class="min-h-0 flex-1 flex flex-col border border-slate-200 bg-white">
+    <Card class="min-h-0 flex-1 flex flex-col">
       <CardHeader class="shrink-0 py-3">
-        <p class="text-sm text-slate-600">
+        <p class="text-sm text-muted-foreground">
           共 {{ total }} 条 · 库内 {{ storedTotal }} 条 · 第 {{ page }} / {{ totalPages }} 页
         </p>
       </CardHeader>
@@ -135,7 +135,7 @@ onMounted(() => {
                     </Badge>
                   </template>
                   <template v-else-if="col.key === 'error'">
-                    <span class="block max-w-[200px] break-words text-rose-600">{{
+                    <span class="block max-w-[200px] break-words text-destructive">{{
                       row.error || "-"
                     }}</span>
                   </template>
@@ -143,7 +143,7 @@ onMounted(() => {
                     <div class="max-w-[220px] break-words">
                       <template v-if="row.failover_from || row.failover_to">
                         {{ row.failover_from }} → {{ row.failover_to }}
-                        <div class="text-slate-500">{{ row.failover_reason }}</div>
+                        <div class="text-muted-foreground">{{ row.failover_reason }}</div>
                       </template>
                       <template v-else>-</template>
                     </div>
@@ -152,7 +152,7 @@ onMounted(() => {
                 </TableCell>
               </TableRow>
               <TableRow v-if="items.length === 0">
-                <TableCell :colspan="logColumns.length" class="py-8 text-center text-slate-400">
+                <TableCell :colspan="logColumns.length" class="py-8 text-center text-muted-foreground">
                   {{ loading ? "加载中…" : "暂无日志" }}
                 </TableCell>
               </TableRow>

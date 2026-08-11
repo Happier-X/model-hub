@@ -60,9 +60,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex h-11 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-2 select-none">
+  <div class="flex h-11 shrink-0 items-center justify-between border-b border-border bg-card px-2 select-none">
     <div
-      class="flex h-full flex-1 items-center px-2 text-sm font-semibold tracking-wide text-slate-800"
+      class="flex h-full flex-1 items-center px-2 text-sm font-semibold tracking-wide text-foreground"
       data-tauri-drag-region
     >
       Model Hub

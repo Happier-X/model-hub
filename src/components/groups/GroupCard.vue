@@ -108,16 +108,16 @@ function onDragEnd() {
 
 <template>
   <article
-    class="group-card relative flex flex-col rounded-xl border border-slate-200 bg-white p-4 transition hover:border-cyan-300 hover:bg-cyan-50/30"
+    class="group-card relative flex flex-col rounded-xl border border-border bg-card p-4 transition hover:border-info/30 hover:bg-info/5"
     :class="{ 'opacity-70': saving }"
   >
     <!-- 删组二次确认覆盖层 -->
     <div
       v-if="showDeleteConfirm"
-      class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-xl bg-white/95 p-4 backdrop-blur-sm"
+      class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-xl bg-card/95 p-4 backdrop-blur-sm"
     >
-      <p class="text-sm font-medium text-slate-800">确认删除分组「{{ group.name }}」？</p>
-      <p class="text-xs text-slate-500">此操作不可恢复。</p>
+      <p class="text-sm font-medium text-foreground">确认删除分组「{{ group.name }}」？</p>
+      <p class="text-xs text-muted-foreground">此操作不可恢复。</p>
       <div class="flex gap-2">
         <Button variant="outline" size="sm" type="button" :disabled="saving" @click="cancelDelete">
           取消
@@ -130,40 +130,40 @@ function onDragEnd() {
 
     <!-- 头部：分组名 + 思考强度 + 自动同步标签 -->
     <div class="flex flex-wrap items-center gap-2">
-      <span class="break-all text-base font-semibold text-slate-800">{{ group.name }}</span>
+      <span class="break-all text-base font-semibold text-foreground">{{ group.name }}</span>
       <span
         v-if="group.thinking_effort && group.thinking_effort !== 'off'"
-        class="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] text-violet-700"
+        class="rounded-full bg-info/10 px-2 py-0.5 text-[11px] text-info"
         title="思考强度档位"
       >
         思考 · {{ thinkingEffortLabels[group.thinking_effort] ?? group.thinking_effort }}
       </span>
-      <span v-if="saving" class="text-[11px] text-cyan-700">保存中…</span>
+      <span v-if="saving" class="text-[11px] text-info">保存中…</span>
     </div>
 
-    <p class="mt-1 text-xs text-slate-500">
+    <p class="mt-1 text-xs text-muted-foreground">
       {{ localItems.length }} 个模型 · 队列顺序即故障转移优先级
     </p>
 
     <!-- 模型队列 -->
-    <ol class="mt-3 max-h-44 space-y-1 overflow-y-auto pr-1 text-sm">
+    <ol class="mt-3 flex max-h-44 flex-col gap-1 overflow-y-auto pr-1 text-sm">
       <li
         v-for="(item, idx) in localItems"
         :key="item.id"
-        class="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-slate-700 transition"
+        class="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-foreground transition"
         :class="
           dragOverIndex === idx
-            ? 'bg-cyan-50 ring-1 ring-cyan-300'
+            ? 'bg-info/10 ring-1 ring-info/30'
             : dragFromIndex === idx
-              ? 'bg-slate-50 opacity-70'
-              : 'hover:bg-slate-50'
+              ? 'bg-muted opacity-70'
+              : 'hover:bg-muted'
         "
         @dragover="onDragOver(idx, $event)"
         @drop="onDrop(idx, $event)"
       >
         <button
           type="button"
-          class="cursor-grab select-none rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[10px] text-slate-500 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-50"
+          class="cursor-grab select-none rounded border border-border bg-muted px-1 py-0.5 text-[10px] text-muted-foreground active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-50"
           title="拖动排序"
           :draggable="!saving"
           :disabled="saving"
@@ -172,16 +172,16 @@ function onDragEnd() {
         >
           ⋮⋮
         </button>
-        <span class="w-5 shrink-0 text-xs tabular-nums text-slate-400">{{ idx + 1 }}.</span>
+        <span class="w-5 shrink-0 text-xs tabular-nums text-muted-foreground">{{ idx + 1 }}.</span>
         <div class="min-w-0 flex-1">
-          <span class="block truncate text-slate-600">
+          <span class="block truncate text-muted-foreground">
             {{ providerName(item.provider_id, item.provider_name) }}
           </span>
-          <span class="block truncate font-mono text-xs text-slate-500">{{ item.upstream_model }}</span>
+          <span class="block truncate font-mono text-xs text-muted-foreground">{{ item.upstream_model }}</span>
         </div>
         <button
           type="button"
-          class="shrink-0 rounded px-1.5 py-0.5 text-xs text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+          class="shrink-0 rounded px-1.5 py-0.5 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
           title="删除成员"
           :disabled="saving"
           @click="removeMember(idx)"
@@ -189,11 +189,11 @@ function onDragEnd() {
           ×
         </button>
       </li>
-      <li v-if="localItems.length === 0" class="px-1.5 py-2 text-xs text-slate-400">暂无模型</li>
+      <li v-if="localItems.length === 0" class="px-1.5 py-2 text-xs text-muted-foreground">暂无模型</li>
     </ol>
 
     <!-- 操作区 -->
-    <div class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-slate-100 pt-3">
+    <div class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border pt-3">
       <Button
         variant="outline"
         size="sm"

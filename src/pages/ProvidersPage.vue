@@ -2,11 +2,11 @@
 import { computed, onMounted, ref } from "vue";
 import { Plus } from "@lucide/vue";
 import { useForm } from "@tanstack/vue-form";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Empty } from "@/components/ui/empty";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   Pagination,
@@ -270,12 +270,12 @@ onMounted(refresh);
       @close="closeDialog"
     >
       <section>
-        <p v-if="editingProviderId !== null" class="mb-4 text-sm text-cyan-800">正在编辑供应商</p>
-        <div class="mb-4 rounded-lg border border-dashed border-cyan-300 bg-cyan-50/40 p-3">
-          <div class="mb-2 text-sm font-medium text-slate-700">粘贴快速添加</div>
-          <p class="mb-2 text-xs text-slate-500">
+        <p v-if="editingProviderId !== null" class="mb-4 text-sm text-info">正在编辑供应商</p>
+        <div class="mb-4 rounded-lg border border-dashed border-info/30 bg-info/5 p-3">
+          <div class="mb-2 text-sm font-medium text-foreground">粘贴快速添加</div>
+          <p class="mb-2 text-xs text-muted-foreground">
             支持 NewAPI 分享 JSON（含
-            <code class="rounded bg-white px-1">newapi_channel_conn</code>）、环境变量、curl 与普通文本。仅本地解析，不会上传。
+            <code class="rounded bg-card px-1">newapi_channel_conn</code>）、环境变量、curl 与普通文本。仅本地解析，不会上传。
           </p>
           <!-- Textarea 支持 class 透传，可直接加 font-mono -->
           <Textarea
@@ -300,50 +300,51 @@ onMounted(refresh);
         >
           <form.Field name="name">
             <template #default="{ field }">
-              <label class="block text-sm">
-                <span class="mb-1 block text-slate-600">名称</span>
+              <Field>
+                <FieldLabel>名称</FieldLabel>
                 <Input
                   :model-value="field.state.value"
-                  @update:model-value="field.handleChange"
+                  @update:model-value="(v) => field.handleChange(v as string)"
                 />
-              </label>
+              </Field>
             </template>
           </form.Field>
           <form.Field name="base_url">
             <template #default="{ field }">
-              <label class="block text-sm">
-                <span class="mb-1 block text-slate-600">Base URL</span>
+              <Field>
+                <FieldLabel>Base URL</FieldLabel>
                 <Input
                   :model-value="field.state.value"
-                  @update:model-value="field.handleChange"
+                  @update:model-value="(v) => field.handleChange(v as string)"
                 />
-              </label>
+              </Field>
             </template>
           </form.Field>
           <div class="md:col-span-2">
             <form.Field name="api_key">
               <template #default="{ field }">
-                <label class="block text-sm">
-                  <span class="mb-1 block text-slate-600">上游 API Key</span>
+                <Field>
+                  <FieldLabel>上游 API Key</FieldLabel>
                   <Input
                     :model-value="field.state.value"
                     type="password"
                     autocomplete="off"
-                    @update:model-value="field.handleChange"
+                    @update:model-value="(v) => field.handleChange(v as string)"
                   />
-                </label>
+                </Field>
               </template>
             </form.Field>
           </div>
           <form.Field name="enabled">
             <template #default="{ field }">
-              <label class="flex items-center gap-2 text-sm">
+              <Field orientation="horizontal">
                 <Checkbox
+                  id="provider-enabled"
                   :model-value="field.state.value"
-                  @update:model-value="field.handleChange"
+                  @update:model-value="(v) => field.handleChange(v === true)"
                 />
-                <span>启用</span>
-              </label>
+                <FieldLabel for="provider-enabled">启用</FieldLabel>
+              </Field>
             </template>
           </form.Field>
           <div class="mt-1 flex flex-wrap gap-2 md:col-span-2">
@@ -355,12 +356,12 @@ onMounted(refresh);
             </Button>
           </div>
         </form>
-        <p v-if="message" class="mt-3 text-sm text-emerald-700">{{ message }}</p>
-        <p v-if="error" class="mt-3 text-sm text-rose-600">{{ error }}</p>
+        <p v-if="message" class="mt-3 text-sm text-success">{{ message }}</p>
+        <p v-if="error" class="mt-3 text-sm text-destructive">{{ error }}</p>
       </section>
     </AppDialog>
 
-    <Card class="min-h-0 flex-1 flex flex-col border border-slate-200 bg-white">
+    <Card class="min-h-0 flex-1 flex flex-col">
       <CardHeader class="shrink-0 py-3">
         <div class="flex items-center justify-between gap-2">
           <h2 class="text-base font-semibold">供应商</h2>
@@ -372,13 +373,13 @@ onMounted(refresh);
             type="button"
             @click="openCreate"
           >
-            <Plus :size="18" aria-hidden="true" />
+            <Plus aria-hidden="true" />
           </Button>
         </div>
       </CardHeader>
       <CardContent class="flex min-h-0 flex-1 flex-col gap-3">
-        <p v-if="error && !dialogOpen" class="text-sm text-rose-600">{{ error }}</p>
-        <p v-if="items.length > 0" class="text-sm text-slate-600">共 {{ items.length }} 个供应商</p>
+        <p v-if="error && !dialogOpen" class="text-sm text-destructive">{{ error }}</p>
+        <p v-if="items.length > 0" class="text-sm text-muted-foreground">共 {{ items.length }} 个供应商</p>
         <Empty v-if="items.length === 0" class="app-empty-compact" title="暂无供应商" />
         <template v-else>
           <!-- 表格滚动区：flex-1 撑满，min-h-0 overflow-y-auto 仅表格 body 滚动 -->
@@ -407,12 +408,12 @@ onMounted(refresh);
                       />
                     </template>
                     <template v-else-if="col.key === 'last_sync_at'">
-                      <span class="text-xs text-slate-500">
+                      <span class="text-xs text-muted-foreground">
                         {{ formatSyncTime(row.last_sync_at) }}
                       </span>
                     </template>
                     <template v-else-if="col.key === 'actions'">
-                      <span class="space-x-2">
+                      <span class="inline-flex items-center gap-2">
                         <Button
                           variant="outline"
                           size="sm"
@@ -439,7 +440,7 @@ onMounted(refresh);
                   </TableCell>
                 </TableRow>
                 <TableRow v-if="pagedItems.length === 0">
-                  <TableCell :colspan="providerColumns.length" class="py-8 text-center text-slate-400">
+                  <TableCell :colspan="providerColumns.length" class="py-8 text-center text-muted-foreground">
                     暂无数据
                   </TableCell>
                 </TableRow>

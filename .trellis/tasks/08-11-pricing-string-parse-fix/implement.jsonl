@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端最低质量门禁：cargo test、cargo build，以及不依赖外网的单元测试要求"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "model_pricing 表契约：每百万 token 单价、全量替换、费用按请求日志 token 动态重算"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "外部价格同步失败与非法数据的安全降级边界；不阻断代理主路径"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "OpenRouter JSON 字段类型到 Rust 价格计算再到 SQLite/首页费用的跨层契约"}
