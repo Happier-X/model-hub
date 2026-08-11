@@ -566,20 +566,25 @@ fn supports_strict_tools(upstream_model: &str) -> bool {
     false
 }
 
-/// 从 `tools[].function` 上剥离 `strict` 字段，但仅在 `upstream_model` 不在
-/// `supports_strict_tools` 名单时执行。对依赖 strict 保证 tool calling 可靠性
-/// 的上游（grok-4 等）保留 strict，其余不支持该字段的旧/小众上游仍剥离以兜底
-/// 兼容（避免 400 错误）。
+/// 从 `tools[].function` 上清理 `strict` 字段。
+///
+/// 白名单内上游（grok-4 / gpt-4o+ / o 系 / claude 4 / qwen3）：保留 `strict: true`
+/// （它们依赖 strict schemas 保证 tool calling 可靠），但剥离无意义的 `strict: false`
+/// （pi 等客户端因 `supportsStrictMode` 认为网关支持 strict 而注入 `strict: false`，
+/// 对 grok-4 这类将 strict 视为可靠性约束的模型会使其 tool calling 退化）。
+/// 白名单外上游：全部剥离（不识别该字段的旧/小众上游会 400）。
 fn strip_tool_strict(obj: &mut serde_json::Map<String, Value>, upstream_model: &str) {
-    if supports_strict_tools(upstream_model) {
-        return;
-    }
+    let whitelisted = supports_strict_tools(upstream_model);
     let Some(tools) = obj.get_mut("tools").and_then(|t| t.as_array_mut()) else {
         return;
     };
     for tool in tools.iter_mut() {
         if let Some(function) = tool.get_mut("function").and_then(|f| f.as_object_mut()) {
-            function.remove("strict");
+            if !whitelisted {
+                function.remove("strict");
+            } else if function.get("strict") == Some(&Value::Bool(false)) {
+                function.remove("strict");
+            }
         }
     }
 }
@@ -1457,9 +1462,31 @@ mod tests {
                 }
             ]
         });
-        // grok-4 系：依赖 strict 保证 tool calling 可靠性，必须保留。
+        // grok-4 系：依赖 strict 保证 tool calling 可靠性，strict: true 必须保留。
         let out = rewrite_model(&body, "grok-4-fast", "off", false);
         assert_eq!(out["tools"][0]["function"]["strict"], true);
+        assert_eq!(out["tools"][0]["function"]["name"], "get_weather");
+    }
+
+    #[test]
+    fn rewrite_model_strips_strict_false_for_whitelist() {
+        let body = serde_json::json!({
+            "model": "group",
+            "messages": [],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "strict": false,
+                        "parameters": {"type": "object"}
+                    }
+                }
+            ]
+        });
+        // pi 等客户端注入的 strict: false 无意义且会干扰 grok 的 tool calling，应剥离。
+        let out = rewrite_model(&body, "grok-4.5", "off", false);
+        assert!(out["tools"][0]["function"].get("strict").is_none());
         assert_eq!(out["tools"][0]["function"]["name"], "get_weather");
     }
 

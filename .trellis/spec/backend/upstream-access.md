@@ -29,7 +29,7 @@
 1. 真实用户 Chat → 代理按分组队列顺序故障转移转发上游（响应提交前任意失败换下一启用候选项；无熔断跳过）。
 2. 用户在分组页点击「拉取模型」或「批量添加供应商模型」→ `GET {base}/models`（或兼容路径）。
 3. llm_benchmark 公共榜单（raw GitHub：datasets.json 定位 + code_v3 Agentic 月榜 CSV；无用户 Key）。
-4. 转发前清洗请求体：`rewrite_model` 重写顶层 `model` 为上游模型名；`tools[].function.strict` 仅对**不在 `supports_strict_tools` 白名单内**的上游剥离（旧/小众上游不识别该字段会报 `tool.function.strict is not supported`；而 grok-4 / gpt-4o+ / o 系 / claude 4 / qwen3 等白名单上游依赖 strict 保证 tool calling 可靠，必须保留——剥离会使其退化为跳过工具直接编文字）。流式与非流式路径共用该清洗。
+4. 转发前清洗请求体：`rewrite_model` 重写顶层 `model` 为上游模型名；`tools[].function.strict` 按模型白名单差异化处理：白名单内上游（grok-4 / gpt-4o+ / o 系 / claude 4 / qwen3）保留 `strict: true`（它们依赖 strict 保证 tool calling 可靠），但剥离无意义的 `strict: false`（pi 等客户端因 `supportsStrictMode` 认为网关支持 strict 而注入 `strict: false`，对 grok-4 这类将 strict 视为可靠性约束的模型会使 tool calling 退化）；白名单外上游全部剥离（不识别该字段会报 `tool.function.strict is not supported`）。流式与非流式路径共用该清洗。
 
 **禁止**
 
@@ -47,7 +47,7 @@
 | 代码路径为启动/定时/测活 | **不得**发起上游 HTTP（例外：开自动同步的供应商背景 24h 过期同步允许，但启动后至少静默 5 分钟） |
 | 用户未点击拉取模型 | 不得调用 `fetch_provider_models`（例外：开自动同步的供应商过期自动同步；分组页展开时本地 `provider_models` 为空才允许实时拉取一次） |
 | 真实 Chat 候选失败 | 可按队列换源；仍属该次业务请求，不算后台测活 |
-| 转发前 body 含 `tools[].function.strict` | 白名单外上游（deepseek-chat 等）剥离该字段；白名单上游（grok-4/gpt-4o/o 系/claude 4/qwen3）保留，保证其 tool calling 可靠 |
+| 转发前 body 含 `tools[].function.strict` | 白名单外上游（deepseek-chat 等）全部剥离；白名单上游（grok-4/gpt-4o/o 系/claude 4/qwen3）保留 `strict: true`、剥离 `strict: false`，保证其 tool calling 可靠 |
 | 错误日志 | 不得打印完整上游 Key |
 
 ### 5. Good / Base / Bad Cases
