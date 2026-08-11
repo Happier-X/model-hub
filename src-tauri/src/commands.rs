@@ -5,7 +5,7 @@ use tauri::{AppHandle, State};
 
 use crate::domain::group::{CreateGroupPayload, Group, UpdateGroupPayload};
 use crate::domain::leaderboard::ModelLeaderboardSnapshot;
-use crate::domain::pricing::{ModelPrice, PricingInfo, PricingSyncInfo};
+use crate::domain::pricing::ModelPrice;
 use crate::domain::provider::{CreateProviderPayload, Provider, UpdateProviderPayload};
 use crate::domain::upstream_models::{fetch_upstream_model_ids, FetchProviderModelsPayload};
 use crate::domain::Stores;
@@ -372,31 +372,6 @@ pub async fn perform_due_price_syncs(stores: &Stores) {
         }
         Err(e) => tracing::warn!(error = %e, "后台同步 OpenRouter 单价失败"),
     }
-}
-
-/// 设置页「模型单价」只读列表 + 同步状态。
-#[tauri::command]
-pub fn get_model_pricing(
-    proxy: State<'_, ProxyHandle>,
-) -> Result<PricingInfo, InvokeError> {
-    stores(&proxy)?.pricing_info().map_err(Into::into)
-}
-
-/// 设置页「立即同步」：强制从 OpenRouter 拉取并替换单价表。
-#[tauri::command]
-pub async fn sync_pricing_now(
-    proxy: State<'_, ProxyHandle>,
-) -> Result<PricingSyncInfo, InvokeError> {
-    let s = stores(&proxy)?;
-    let prices = fetch_openrouter_pricing().await?;
-    s.replace_pricing(&prices)?;
-    let updated_at = s
-        .last_pricing_sync_at()?
-        .ok_or_else(|| AppError::Business("同步后读取更新时间失败".into()))?;
-    Ok(PricingSyncInfo {
-        count: prices.len() as i64,
-        updated_at,
-    })
 }
 
 #[tauri::command]

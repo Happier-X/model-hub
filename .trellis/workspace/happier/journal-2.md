@@ -474,3 +474,20 @@ model_pricing 单价表 + OpenRouter 自动同步（后台 24h 到期检查 + �
 
 ### 注意
 - 工作区暂存了本任务 6 个 artifacts + pricing.rs（+39/-2），提交前确认不含 shadcn 前端改动（已确认纯净）。
+
+## session — 自动同步模型单价并移除设置页模块（08-11-pricing-auto-sync-remove-settings）
+
+### 需求与决策
+- 用户要求：模型单价完全自动同步，设置页不再需要「模型单价」模块。
+- 决策（用户确认）：同步策略维持现状（启动 5 分钟后 + 每小时检查 + 超 24h 才拉取，失败仅 warning）；整个模块（按钮/状态/搜索/列表）移除；后端死代码（`get_model_pricing`/`sync_pricing_now`/`PricingInfo`/`PricingSyncInfo`/`pricing_info()`）与 tauri.ts 封装一并删除；移除后无任何同步状态展示。
+
+### 实施
+- 前端：SettingsPage.vue 删除「模型单价」Card 与相关 script/import（保留 computed/Input/Button/Card 等共用 import）；tauri.ts 删除 3 个接口与 2 个封装。
+- 后端：commands.rs 删 2 命令（import 只留 ModelPrice）；pricing.rs 删 2 结构与 pricing_info()；lib.rs 删 2 行注册。
+- 保留：`perform_due_price_syncs`/`fetch_openrouter_pricing`/`replace_pricing`/`last_pricing_sync_at`/`parse_openrouter_pricing`/SYNC_* 常量/runtime.rs 定时任务/request_overview 费用 SQL/model_pricing 表。
+
+### 验证
+- cargo build ✓；cargo test 本任务范围全绿；pnpm typecheck ✓；lint 仅 chart/utils.ts 4 个既有错误（shadcn 遗留）。
+- ⚠️ 全量 cargo test 有 6 个失败全在 `domain::log::tests`（daily_counts/overview_costs），属**并发任务 stats-daily-aggregate**（聚合表改动未适配既有测试），与本任务无关，由该任务跟进。
+- 交叉引用 0 残留；工作区隔离确认（migrate.rs/log.rs/mod.rs 属并发任务，未混入）。
+- spec：database-guidelines.md model_pricing 行补充「无手动同步入口，仅自动同步，禁止重新引入手动命令/界面」。

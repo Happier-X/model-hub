@@ -284,28 +284,6 @@ export interface TimeseriesStats {
 
 export const getTimeseriesStats = () => invoke<TimeseriesStats>("get_timeseries_stats");
 
-/** 模型单价（每百万 token 美元，OpenRouter 同步）。 */
-export interface ModelPrice {
-  model_name: string;
-  prompt_price_per_mtok: number;
-  completion_price_per_mtok: number;
-}
-
-/** 设置页「模型单价」列表 + 同步状态。 */
-export interface PricingInfo {
-  items: ModelPrice[];
-  count: number;
-  updated_at: number | null;
-}
-
-/** 立即同步结果。 */
-export interface PricingSyncInfo {
-  count: number;
-  updated_at: number;
-}
-
-export const getModelPricing = () => invoke<PricingInfo>("get_model_pricing");
-export const syncPricingNow = () => invoke<PricingSyncInfo>("sync_pricing_now");
 export const getLastSuccessRequest = () =>
   invoke<LastSuccessRequest | null>("get_last_success_request");
 export const getRequestDailyCounts = (days?: number) =>

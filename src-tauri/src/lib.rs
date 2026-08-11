@@ -136,8 +136,6 @@ pub fn run() {
             commands::delete_provider,
             commands::set_provider_auto_sync,
             commands::sync_provider_now,
-            commands::get_model_pricing,
-            commands::sync_pricing_now,
             commands::get_provider_models,
             commands::fetch_provider_models,
             commands::list_groups,

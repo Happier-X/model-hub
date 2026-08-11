@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "检查 model_pricing 契约是否被误删、自动同步与全量 replace 行为是否保持"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "验证门禁：cargo test / cargo build 最低要求；删代码后无编译残留"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "检查同步失败降级路径未被移除、IPC 删除后无引用残留"}

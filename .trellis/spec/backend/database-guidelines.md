@@ -25,7 +25,7 @@
 | `groups` | 对外模型名（**无** `auto_failover`；故障转移始终按队列顺序） |
 | `group_items` | 有序队列；`sort_order` 越小越优先 |
 | `request_logs` | 请求/故障转移摘要；含 `input_tokens` / `output_tokens`（转发链路提取的 usage，成功请求才非零）；**不存费用**——费用在统计时按 `model_pricing` 单价现算（改价可重算历史）；不存 messages/完整密钥；**默认保留最近 7 天内的最新 10000 条**（`LOG_RETENTION_DAYS` + `LOG_MAX_ROWS`），启动/写日志/列表时 best-effort 清理过期或超量 |
-| `model_pricing` | OpenRouter 同步的模型单价（`model_name` 主键、`prompt_price_per_mtok`/`completion_price_per_mtok` 每百万 token 美元、`updated_at`）；未覆盖模型无行（视为 0 价）；同步为全量 replace（upsert + 清理过期）。**解析契约**：`parse_openrouter_pricing`（`src-tauri/src/domain/pricing.rs`）的 `parse_price_value` 必须同时接受 JSON number 与 JSON string（OpenRouter 实际返回字符串如 `"0.00000125"`），字符串先 `trim` 再 `parse::<f64>()`，仅接受有限数；缺失/空串/非法值回退 `0.0` 且**单字段失败不影响同模型另一字段**；每 token 价 ×1e6 后 `round6` 存为每百万 token 美元。禁止改回只读 `as_f64()`——曾因只读 number 导致全库价格为 0、历史费用统计恒为 0 |
+| `model_pricing` | OpenRouter 同步的模型单价（`model_name` 主键、`prompt_price_per_mtok`/`completion_price_per_mtok` 每百万 token 美元、`updated_at`）；未覆盖模型无行（视为 0 价）；同步为全量 replace（upsert + 清理过期）。**无手动同步入口**：手动 IPC（`sync_pricing_now`/`get_model_pricing`）与设置页模块已移除，同步仅由 `perform_due_price_syncs`（启动 5 分钟后 + 每小时检查，从未同步或超过 `SYNC_STALE_AFTER_SECS`=24h 才拉取，失败仅 warning）自动驱动；不得重新引入手动同步命令或界面。**解析契约**：`parse_openrouter_pricing`（`src-tauri/src/domain/pricing.rs`）的 `parse_price_value` 必须同时接受 JSON number 与 JSON string（OpenRouter 实际返回字符串如 `"0.00000125"`），字符串先 `trim` 再 `parse::<f64>()`，仅接受有限数；缺失/空串/非法值回退 `0.0` 且**单字段失败不影响同模型另一字段**；每 token 价 ×1e6 后 `round6` 存为每百万 token 美元。禁止改回只读 `as_f64()`——曾因只读 number 导致全库价格为 0、历史费用统计恒为 0 |
 
 **已移除**：
 

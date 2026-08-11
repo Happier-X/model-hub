@@ -13,22 +13,6 @@ pub struct ModelPrice {
     pub completion_price_per_mtok: f64,
 }
 
-/// 设置页展示用：全部单价 + 同步信息。
-#[derive(Debug, Clone, Serialize)]
-pub struct PricingInfo {
-    pub items: Vec<ModelPrice>,
-    pub count: i64,
-    /// 最后同步 unix 秒；NULL = 从未同步。
-    pub updated_at: Option<i64>,
-}
-
-/// 立即同步结果。
-#[derive(Debug, Clone, Serialize)]
-pub struct PricingSyncInfo {
-    pub count: i64,
-    pub updated_at: i64,
-}
-
 /// 解析 OpenRouter `/api/v1/models` 响应（`data[].{id, pricing.{prompt,completion}}`，
 /// pricing 为每 token 美元）。非法行跳过；每 token → 每百万（×1e6）并取整到 6 位小数。
 pub fn parse_openrouter_pricing(body: &[u8]) -> Vec<ModelPrice> {
@@ -143,24 +127,6 @@ impl Stores {
                 items.push(row.map_err(|e| AppError::Database(e.to_string()))?);
             }
             Ok(items)
-        })
-    }
-
-    pub fn pricing_info(&self) -> Result<PricingInfo, AppError> {
-        let items = self.list_pricing()?;
-        let count = items.len() as i64;
-        let updated_at = self.with_conn(|conn| {
-            conn.query_row(
-                "SELECT MAX(updated_at) FROM model_pricing",
-                [],
-                |row| row.get::<_, Option<i64>>(0),
-            )
-            .map_err(|e| AppError::Database(e.to_string()))
-        })?;
-        Ok(PricingInfo {
-            items,
-            count,
-            updated_at,
         })
     }
 
