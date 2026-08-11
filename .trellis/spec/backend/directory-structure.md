@@ -51,6 +51,9 @@
 2. **管理 vs 客户端**：管理走 IPC；外部客户端只走本机 HTTP `/v1/*`。
 3. **Windows 路径**：用 Tauri `path` / `get_paths`，禁止写死用户家目录。
 4. **密钥**：上游 Provider Key 本机可明文；不存不校验客户端 Key；日志禁打完整 Key。
+5. **domain/proxy 层禁止直接依赖 tauri 类型**（`AppHandle`/`Emitter`/`Window`）：cargo test 的 test harness 无 manifest（无 `.rsrc`），若链接 wry/tao 导入的 comctl32 v6 专属符号（`SetWindowSubclass`/`TaskDialogIndirect` 等），加载器绑定到 comctl32 v5 → `STATUS_ENTRYPOINT_NOT_FOUND (0xc0000139)` 直接崩（表现为「cargo test 编译成功但 test exe 无法启动」）。
+   - 正确姿势：领域/代理层定义回调契约（`Box<dyn Fn() + Send + Sync>` + `Option`），壳层 `lib.rs` 在 setup 里注入闭包转 tauri 事件（`app.emit(EVENT, ())`）；test 编译时该闭包被 DCE 裁剪，不污染 test 链接。
+   - 先例：`Stores::subscribe_change` + `ProxyHandle::set_change_callback` → `lib.rs` 注入 emit `stats-changed`（首页统计实时刷新）。
 
 ---
 

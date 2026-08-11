@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "验证门禁：cargo test 全量（含新增 subscribe 测试）、cargo build、无密钥进日志等 checklist"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量底线：pnpm typecheck / lint；事件监听清理、防重入约定"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "生命周期审查：unlisten/removeEventListener 与 mounted/unmounted 配对"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨层验证：事件 payload 契约（空 payload + 前端自行 invoke）与回滚边界"}

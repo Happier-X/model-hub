@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import Heatmap from "@/components/Heatmap.vue";
 import StatsCards from "@/components/StatsCards.vue";
 import StatsChart from "@/components/StatsChart.vue";
@@ -65,22 +66,48 @@ async function refreshStats() {
 }
 
 /** 仅轮询刷新统计总览（5s），避免频繁刷新每日热力图。 */
+let refreshingOverview = false;
 async function refreshOverviewOnly() {
+  // 防重入：事件驱动、恢复可见、5s 轮询可能并发触发，同一时刻只发一次 invoke。
+  if (refreshingOverview) return;
+  refreshingOverview = true;
   try {
     overview.value = await getRequestOverview();
     overviewError.value = "";
   } catch (e) {
     overviewError.value = extractInvokeError(e);
+  } finally {
+    refreshingOverview = false;
   }
 }
 
+/** 事件常量需与 Rust 侧 STATS_CHANGED_EVENT 保持一致。 */
+const STATS_CHANGED_EVENT = "stats-changed";
+
+/** 窗口从托盘/后台恢复可见时立即拉最新数据（WebView2 隐藏时定时器会被冻结）。 */
+function onWindowVisible() {
+  if (document.visibilityState === "visible") void refreshOverviewOnly();
+}
+
 let overviewTimer: ReturnType<typeof setInterval> | undefined;
-onMounted(() => {
+let unlistenStats: UnlistenFn | undefined;
+onMounted(async () => {
   refreshStats();
   overviewTimer = setInterval(refreshOverviewOnly, 5000);
+  // 请求日志写入后由 Rust 侧推送 stats-changed，立即刷新统计（不等轮询）。
+  try {
+    unlistenStats = await listen(STATS_CHANGED_EVENT, () => void refreshOverviewOnly());
+  } catch {
+    /* 事件监听失败不影响 5s 轮询兜底 */
+  }
+  document.addEventListener("visibilitychange", onWindowVisible);
+  window.addEventListener("focus", onWindowVisible);
 });
 onUnmounted(() => {
   if (overviewTimer !== undefined) clearInterval(overviewTimer);
+  unlistenStats?.();
+  document.removeEventListener("visibilitychange", onWindowVisible);
+  window.removeEventListener("focus", onWindowVisible);
 });
 
 </script>

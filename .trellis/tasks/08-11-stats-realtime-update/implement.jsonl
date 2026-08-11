@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "模块分层 contract：domain 层不得依赖 tauri（事件推送需经代理层/壳层回调注入）"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Result/InvokeError 约定；变更订阅锁异常静默降级符合业务主路径不阻断原则"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "质量门禁：cargo test/cargo build 最低要求；Windows MVP 验收"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Vue 组合式函数与生命周期规范；HomePage onMounted/onUnmounted 监听注册与清理要求"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨层数据流 contract：Rust emit → 前端 listen → invoke 回查的职责边界"}

@@ -5,17 +5,42 @@ pub mod pricing;
 pub mod provider;
 pub mod upstream_models;
 
+use std::sync::{Arc, Mutex};
+
 use crate::db::DbConn;
 use crate::error::AppError;
 
 #[derive(Clone)]
 pub struct Stores {
     pub db: DbConn,
+    /// 变更订阅回调：insert_log 写入成功后触发（领域层不依赖 tauri，由外层转成事件推送）。
+    change_listeners: Arc<Mutex<Vec<Arc<dyn Fn() + Send + Sync>>>>,
 }
 
 impl Stores {
     pub fn new(db: DbConn) -> Self {
-        Self { db }
+        Self {
+            db,
+            change_listeners: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    /// 注册变更回调，监听请求日志写入。锁异常时静默跳过，不影响业务主路径。
+    pub fn subscribe_change(&self, listener: impl Fn() + Send + Sync + 'static) {
+        if let Ok(mut listeners) = self.change_listeners.lock() {
+            listeners.push(Arc::new(listener));
+        }
+    }
+
+    /// 通知全部订阅者：克隆监听列表后**锁外**调用，避免回调重入（回调内再写库/加锁）死锁。
+    fn notify_changed(&self) {
+        let listeners = match self.change_listeners.lock() {
+            Ok(l) => l.clone(),
+            Err(_) => return,
+        };
+        for f in &listeners {
+            f();
+        }
     }
 
     pub fn with_conn<T>(

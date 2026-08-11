@@ -335,7 +335,10 @@ impl Stores {
                 .map_err(|e| AppError::Database(e.to_string()))?;
             }
             Ok(())
-        })
+        })?;
+        // 写入成功后通知变更订阅（用于实时刷新统计）；失败则不通知。
+        self.notify_changed();
+        Ok(())
     }
 
     /// 写库失败只记 tracing，避免吞掉错误后 UI 完全无日志却无法排查。
@@ -839,6 +842,8 @@ fn daily_window_bounds(days: u32) -> (i64, i64) {
 mod tests {
     use super::*;
     use crate::db::open_db;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
     use tempfile::tempdir;
 
     fn setup() -> (tempfile::TempDir, Stores) {
@@ -954,6 +959,20 @@ mod tests {
             .unwrap();
         assert_eq!(page.total, 1);
         assert_eq!(page.items[0].failover_from, "a");
+    }
+
+    #[test]
+    fn insert_log_notifies_change_subscribers() {
+        let (_dir, stores) = setup();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let c = calls.clone();
+        stores.subscribe_change(move || {
+            c.fetch_add(1, Ordering::Relaxed);
+        });
+        // 无订阅时写入正常（现有测试已覆盖）；订阅后每次写入成功触发一次回调。
+        seed(&stores, "g", 200, "", "", "");
+        seed(&stores, "g", 404, "no", "", "");
+        assert_eq!(calls.load(Ordering::Relaxed), 2);
     }
 
     fn insert_at(stores: &Stores, time: i64, status: i64, err: &str, fo_from: &str, fo_to: &str) {

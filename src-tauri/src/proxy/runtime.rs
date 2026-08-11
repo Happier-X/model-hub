@@ -2,7 +2,7 @@
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde::Serialize;
@@ -24,6 +24,8 @@ pub const PROXY_STOP_GRACE: Duration = Duration::from_secs(3);
 pub const SYNC_STARTUP_DELAY: Duration = Duration::from_secs(5 * 60);
 /// 后台同步检查间隔：每小时检查一次到期（24h）的自动同步供应商。
 pub const SYNC_CHECK_INTERVAL: Duration = Duration::from_secs(3600);
+/// 请求日志写入后推送的全局事件名（前端 listen 后立即刷新首页统计）。
+pub const STATS_CHANGED_EVENT: &str = "stats-changed";
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -65,12 +67,27 @@ struct RuntimeInner {
     live: Option<LiveProxy>,
     stores: Option<Stores>,
     clients: UpstreamClients,
+    /// 请求日志变更回调（由壳层注入，把领域变更转成 tauri 全局事件；测试/未注入为 None）。
+    /// 用 Arc 共享：listener 在 stores 创建时注册一次，之后可随时替换回调。
+    change_callback: Arc<Mutex<Option<Box<dyn Fn() + Send + Sync>>>>,
 }
 
 pub struct ProxyHandle {
     inner: Mutex<RuntimeInner>,
     /// 独立 tokio runtime，承载 axum
     tokio_rt: tokio::runtime::Runtime,
+}
+
+/// 给 Stores 注册一个变更回调：写日志后调用壳层注入的 change_callback（一般为 app.emit 事件）。
+fn register_change_emitter(stores: &Stores, callback: &Arc<Mutex<Option<Box<dyn Fn() + Send + Sync>>>>) {
+    let cb = callback.clone();
+    stores.subscribe_change(move || {
+        if let Ok(guard) = cb.lock() {
+            if let Some(f) = guard.as_ref() {
+                f();
+            }
+        }
+    });
 }
 
 impl ProxyHandle {
@@ -100,6 +117,7 @@ impl ProxyHandle {
                 live: None,
                 stores: None,
                 clients: UpstreamClients::new(),
+                change_callback: Arc::new(Mutex::new(None)),
             }),
             tokio_rt,
         })
@@ -121,11 +139,25 @@ impl ProxyHandle {
             let path = default_db_path(&inner.data_dir);
             let db = open_db(&path)?;
             let stores = Stores::new(db);
+            // 注册变更回调：惰性读取 change_callback，壳层何时注入均可生效（实时刷新统计用）。
+            register_change_emitter(&stores, &inner.change_callback);
             // 启动打开库时清理过期请求日志，控制体积。
             stores.purge_expired_logs_best_effort();
             inner.stores = Some(stores.clone());
             Ok(stores)
         })
+    }
+
+    /// 注入请求日志变更回调（壳层用它 emit `stats-changed` 事件；传 None 可取消）。
+    /// 回调为 `Fn`（非 `FnMut`）：同一时刻可能被多个线程触发，内部需线程安全。
+    pub fn set_change_callback(&self, callback: Option<Box<dyn Fn() + Send + Sync>>) {
+        let _ = self.with_inner(|inner| {
+            *inner
+                .change_callback
+                .lock()
+                .map_err(|_| AppError::LockPoisoned)? = callback;
+            Ok(())
+        });
     }
 
     pub fn status_snapshot(&self) -> Result<ProxyStatus, AppError> {

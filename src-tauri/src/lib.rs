@@ -9,7 +9,7 @@ pub mod proxy;
 mod settings;
 mod tray;
 
-use tauri::{Manager, WindowEvent};
+use tauri::{Emitter, Manager, WindowEvent};
 
 use crate::proxy::ProxyHandle;
 use crate::tray::AppExitState;
@@ -49,6 +49,13 @@ pub fn run() {
             if let Err(err) = proxy.start() {
                 tracing::warn!(error = %err, "自动启动代理失败");
             }
+
+            // 挂载变更回调：请求日志写入后向前端 push stats-changed，驱动首页统计实时刷新。
+            // 回调经 Box<dyn Fn> 注入，代理层不直接依赖 tauri（保持 test 链接干净）。
+            let app_handle = app.handle().clone();
+            proxy.set_change_callback(Some(Box::new(move || {
+                let _ = app_handle.emit(crate::proxy::runtime::STATS_CHANGED_EVENT, ());
+            })));
 
             app.manage(proxy);
             app.manage(AppExitState::new());
