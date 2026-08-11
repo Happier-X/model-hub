@@ -362,3 +362,48 @@ model_pricing 单价表 + OpenRouter 自动同步（后台 24h 到期检查 + �
 ### Next Steps
 
 - 用户重启 dev（Rust 改动）后重测 grok 分组接入
+
+## Session 52: 首页统计实时更新（事件驱动 + 恢复可见刷新）
+
+**Date**: 2026-08-11
+**Task**: 08-11-stats-realtime-update
+**Branch**: `master`
+
+### Summary
+
+用户反馈首页四张统计卡片"不实时更新"。实测定位：后端链路完全实时（日志即时写 SQLite），前端 5s 轮询也在跑——真实原因有两层：① 卡片显示全量总计（成功口径 482 次 → "482.00"，+1 可见；但 token 1682 万 → "16.82M"、耗时 1.06h 等 M 级数值单次增量被 toFixed(2) 舍入吞掉）；② 5s 轮询有延迟，且窗口 hide 到托盘时 WebView2 冻结 JS 定时器，恢复后数据旧。
+
+修复：事件驱动刷新（Rust 写日志成功 → emit stats-changed → 前端立即 invoke 拉最新）+ 恢复可见即刷新（visibilitychange/focus）+ 保留 5s 轮询兜底 + 刷新防重入。用户明确不做"今日增量行"展示。
+
+### Main Changes
+
+- domain/mod.rs：Stores 增 change_listeners 订阅机制（Arc<Mutex<Vec<Arc<dyn Fn>>>>），subscribe_change / notify_changed（锁外调回调防重入）
+- domain/log.rs：insert_log 成功后 notify_changed；新增订阅触发单测
+- proxy/runtime.rs：change_callback 回调注入（set_change_callback），STATS_CHANGED_EVENT 常量；**保持代理层 tauri 无关**
+- lib.rs：setup 注入 emit 闭包（app_handle.emit("stats-changed", ())）
+- HomePage.vue：listen 事件 + visibilitychange/focus 刷新 + 5s 轮询兜底 + in-flight 防重
+- spec：directory-structure 新增"domain/proxy 层禁止直接依赖 tauri 类型"规则
+
+### 关键坑：comctl32 v6 manifest（0xC0000139）
+
+直接让 runtime.rs `use tauri::{AppHandle, Emitter}` 后，cargo test 编译成功但 test exe 启动崩溃 `STATUS_ENTRYPOINT_NOT_FOUND`。定位：test harness 无 manifest（无 .rsrc section），链接 wry/tao 后导入 comctl32 v6 专属符号（SetWindowSubclass/TaskDialogIndirect 等），加载器绑定 comctl32 v5 → 符号找不到。应用 exe 有 manifest 所以能跑。解决：回调注入（Box<dyn Fn>），tauri emit 闭包放 lib.rs，test 编译时被 DCE 裁剪。
+
+### Git Commits
+
+- 8205d8a feat(stats): 首页统计实时更新——事件驱动刷新 + 恢复可见即刷新
+
+### Testing
+
+- [OK] cargo test 147（lib，含新增订阅测试）+ 13（集成）+ 9
+- [OK] cargo build
+- [OK] pnpm typecheck
+- [OK] 端到端（vite dev + debug exe + WebView2 CDP）：发代理请求 → 首页请求次数 480.00 → 1.2s 内 481.00（事件驱动立即刷新）
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 用户重启应用（Rust 改动需重编译）后 GUI 验收：请求实时跳动、托盘恢复数据最新
+- 若后续在意 token/耗时卡单次增量可见（M 级舍入），另立任务（本期 Out of Scope）
