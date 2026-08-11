@@ -1,7 +1,7 @@
 {
-  "id": "stats-realtime-update",
-  "name": "stats-realtime-update",
-  "title": "首页统计实时更新：事件驱动刷新 + 今日增量展示",
+  "id": "shadcn-violations-cleanup",
+  "name": "shadcn-violations-cleanup",
+  "title": "shadcn-vue 规范偏差清理",
   "description": "",
   "status": "in_progress",
   "dev_type": null,

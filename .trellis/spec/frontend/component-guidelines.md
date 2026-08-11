@@ -7,7 +7,7 @@
 1. 使用 Vue 单文件组件与 `<script setup lang="ts">`。
 2. Props 使用 `defineProps` 声明明确类型；事件使用 `defineEmits` 声明名称和参数。
 3. 页面负责加载与提交，通用组件负责展示和用户交互；复杂领域操作下沉到 `src/api/tauri.ts` 或组合式函数。
-3.1 **shadcn-vue（reka-ui 底层，源码入仓）**：组件源码位于 `src/components/ui/*`（`shadcn-vue add` 拷入，`components.json` 管理别名）；`cn` 工具在 `src/lib/utils.ts`（clsx + tailwind-merge）。**依赖**：`reka-ui`、`clsx`、`tailwind-merge`、`class-variance-authority`、`tw-animate-css`（index.css 已 `@import`）、图标 `@lucide/vue`。样式变量（oklch `--background` 等）在 `src/index.css`，风格 `reka-nova`、baseColor `neutral`。**不再使用 happier-ui**（已移除依赖与 `tokens.css`/`styles.css` 导入）。映射：按钮 → `Button`（variant：default/outline/secondary/ghost/destructive/link；尺寸含 `size="icon"`；旧 `isIconOnly`/`shape="circle"` 无此概念，图标按钮用 `size="icon"`）；单行输入 → `Input`（无 `label` prop，用 `<label>` 包裹 + `span` 文本，或 `:model-value` + `@update:model-value`）；布尔 → `Switch`/`Checkbox`（均 v-model，`label` 文本由外层 `<label class="flex items-center gap-2">` 承载）；空列表 → `Empty`；**分区卡片 → `Card`**（`CardHeader`/`CardContent` 子组件，`class` 直接透传可写 `flex flex-col min-h-0 flex-1`，不再需要 `.h-card__body` 深选择器 hack）；**侧栏壳 → `Sidebar` 全家桶**（`SidebarProvider > Sidebar collapsible="none" > SidebarHeader + SidebarContent + SidebarMenu + SidebarMenuItem + SidebarMenuButton(as-child → RouterLink)`，`:is-active` 高亮当前项；**必须 `collapsible="none"`**——`icon` 折叠态纯文字导航（无图标）会整体消失，`offcanvas` 则 <768px 时隐藏且需 SidebarTrigger 才能唤出；尺寸变量 `--sidebar-width: 16rem` 等必须在 index.css 的 `:root` 定义（shadcn-vue init 若中断不会写入，缺失时 `w-(--sidebar-width)` 塌缩为 0，导航全部消失——见下方代码示例）；`none` 模式是普通文档流 div（无 fixed/Sheet），后续 `main` 自然占位，无需 `SidebarInset` padding 补偿）；**下拉选择 → `Select` 全家桶**（`Select > SelectTrigger > SelectValue + SelectContent > SelectItem`；`:model-value` + `@update:model-value`；string 联合类型需 `v as XxxType` 断言、数字选项需 `String(v)`/`Number(v)` 转换——reka-ui SelectItem 的 value 是 string）；**状态徽章 → `Badge`**（variant：default/secondary/destructive/outline/ghost/link；旧 success/warning/danger 映射：success→secondary（或 outline+emerald class）、warning→outline、danger→destructive）；**多行输入 → `Textarea`**（`v-model` + `:rows`，class 透传到 `<textarea>` 本体，`font-mono` 可直接加）；**分页 → `Pagination` 全家桶**（reka-ui 分页：`Pagination(:page :total :page-size @update:page) > PaginationContent v-slot="{ items }" > PaginationFirst/Previous + v-for PaginationItem(点击传 `item.value`) + Ellipsis + Next/Last`；「筛选 N 条」等统计文本不属分页职责，保留独立 span）；**数据表格 → `Table` 结构**（`Table > TableHeader(TableRow>TableHead v-for) + TableBody(TableRow v-for > TableCell v-for)`；`columns` 数组 `{ key, title }[]` 驱动表头与单元格 v-for，复杂/条件渲染按 `column.key` 分支，`row` 已是泛型对象无需断言（`(row as Record<string, unknown>)[col.key]`）；空态用 `<TableRow v-if="items.length===0"><TableCell :colspan>` 或外层 `Empty`；loading 用文本/`Spinner`）。**额外组件**：`Spinner`（替代旧 `HLoading`）、`Item` 全家桶（`Item + ItemContent + ItemTitle + ItemDescription`，替代旧 `HCell`，供应商手风琴行用：Item 默认 slot 放展开箭头、ItemTitle 放名称、ItemDescription 放自动同步开关行）、`Badge` 兼作状态标签（替代旧 `HTag`，用 `variant="outline"` + 自定义 class 表达成功/默认）、`Dialog`（见对话框合同）、`Tooltip`、`Progress`（替代旧 HProgress：`:model-value` + `:max` + `:indeterminate` + class 调高度）。热力图用 **vue3-calendar-heatmap**（`CalendarHeatmap`，props `:values="{ date:'YYYY-MM-DD', count }[]"`、`:end-date="new Date(...)"`、`:range-color="string[]"`、`:tooltip="false"` 可关提示）；首页 `HHeatmapData {timestamp,value}` 需 computed 转为 `{date,count}`。**因 shadcn 无 `label` 概念，所有带 label 的控件统一 `<label class="block text-sm"><span class="mb-1 block text-slate-600">…</span><Input/></label>` 模式**。
+3.1 **shadcn-vue（reka-ui 底层，源码入仓）**：组件源码位于 `src/components/ui/*`（`shadcn-vue add` 拷入，`components.json` 管理别名）；`cn` 工具在 `src/lib/utils.ts`（clsx + tailwind-merge）。**依赖**：`reka-ui`、`clsx`、`tailwind-merge`、`class-variance-authority`、`tw-animate-css`（index.css 已 `@import`）、图标 `@lucide/vue`。样式变量（oklch `--background` 等）在 `src/index.css`，风格 `reka-nova`、baseColor `neutral`。**不再使用 happier-ui**（已移除依赖与 `tokens.css`/`styles.css` 导入）。映射：按钮 → `Button`（variant：default/outline/secondary/ghost/destructive/link；尺寸含 `size="icon"`；旧 `isIconOnly`/`shape="circle"` 无此概念，图标按钮用 `size="icon"`）；单行输入 → `Input`（配 `Field` 体系：`Field > FieldLabel + Input`，见 §3.3；或 `:model-value` + `@update:model-value`）；布尔 → `Switch`/`Checkbox`（均 v-model，配 `Field orientation="horizontal"` + `FieldLabel for` 承载文案，见 §3.3）；空列表 → `Empty`；**分区卡片 → `Card`**（`CardHeader`/`CardContent` 子组件，`class` 直接透传可写 `flex flex-col min-h-0 flex-1`，不再需要 `.h-card__body` 深选择器 hack）；**侧栏壳 → `Sidebar` 全家桶**（`SidebarProvider > Sidebar collapsible="none" > SidebarHeader + SidebarContent + SidebarMenu + SidebarMenuItem + SidebarMenuButton(as-child → RouterLink)`，`:is-active` 高亮当前项；**必须 `collapsible="none"`**——`icon` 折叠态纯文字导航（无图标）会整体消失，`offcanvas` 则 <768px 时隐藏且需 SidebarTrigger 才能唤出；尺寸变量 `--sidebar-width: 16rem` 等必须在 index.css 的 `:root` 定义（shadcn-vue init 若中断不会写入，缺失时 `w-(--sidebar-width)` 塌缩为 0，导航全部消失——见下方代码示例）；`none` 模式是普通文档流 div（无 fixed/Sheet），后续 `main` 自然占位，无需 `SidebarInset` padding 补偿）；**下拉选择 → `Select` 全家桶**（`Select > SelectTrigger > SelectValue + SelectContent > SelectItem`；`:model-value` + `@update:model-value`；string 联合类型需 `v as XxxType` 断言、数字选项需 `String(v)`/`Number(v)` 转换——reka-ui SelectItem 的 value 是 string）；**状态徽章 → `Badge`**（variant：default/secondary/destructive/outline/ghost/link；旧 success/warning/danger 映射：success→secondary（或 outline+emerald class）、warning→outline、danger→destructive）；**多行输入 → `Textarea`**（`v-model` + `:rows`，class 透传到 `<textarea>` 本体，`font-mono` 可直接加）；**分页 → `Pagination` 全家桶**（reka-ui 分页：`Pagination(:page :total :page-size @update:page) > PaginationContent v-slot="{ items }" > PaginationFirst/Previous + v-for PaginationItem(点击传 `item.value`) + Ellipsis + Next/Last`；「筛选 N 条」等统计文本不属分页职责，保留独立 span）；**数据表格 → `Table` 结构**（`Table > TableHeader(TableRow>TableHead v-for) + TableBody(TableRow v-for > TableCell v-for)`；`columns` 数组 `{ key, title }[]` 驱动表头与单元格 v-for，复杂/条件渲染按 `column.key` 分支，`row` 已是泛型对象无需断言（`(row as Record<string, unknown>)[col.key]`）；空态用 `<TableRow v-if="items.length===0"><TableCell :colspan>` 或外层 `Empty`；loading 用文本/`Spinner`）。**额外组件**：`Spinner`（替代旧 `HLoading`）、`Item` 全家桶（`Item + ItemContent + ItemTitle + ItemDescription`，替代旧 `HCell`，供应商手风琴行用：Item 默认 slot 放展开箭头、ItemTitle 放名称、ItemDescription 放自动同步开关行）、`Badge` 兼作状态标签（替代旧 `HTag`，用 `variant="outline"` + 自定义 class 表达成功/默认）、`Dialog`（见对话框合同）、`Tooltip`、`Progress`（替代旧 HProgress：`:model-value` + `:max` + `:indeterminate` + class 调高度）。热力图用 **vue3-calendar-heatmap**（`CalendarHeatmap`，props `:values="{ date:'YYYY-MM-DD', count }[]"`、`:end-date="new Date(...)"`、`:range-color="string[]"`、`:tooltip="false"` 可关提示）；首页 `HHeatmapData {timestamp,value}` 需 computed 转为 `{date,count}`。**禁用裸 `<label class="...">` 手工包裹控件**——统一用 `Field` 体系（§3.3），文案样式由 `FieldLabel` 承担，不再出现 `text-slate-*` 手工色值（§3.4）。
 3.2 **业务表单（TanStack Form）**：供应商对话框表单与分组表单页（`GroupFormPage`）用 `@tanstack/vue-form` 的 `useForm` + `form.Field` 管理字段与提交；控件用 `Input`/`Checkbox`/`Select` 等，绑定 `field.state.value` + `field.handleChange`（或 `:model-value` + `@update:model-value`），**禁止**再用独立 `reactive` 作为提交字段真源。粘贴识别、拖拽排序、批量添加等通过 `form.setFieldValue` / 整体替换数组写回。保存走 `form.handleSubmit` / `onSubmit`；打开新建 `form.reset(defaults)`，打开编辑 `form.reset(entityFields)`；保存失败保留 values 与 `editing*Id`。日志筛选、设置页端口/偏好等非对话框表单可用 `ref`，不强制迁 Form。不强制 Zod。
 4. 代理运行状态、Base URL 和最后错误必须使用清晰、可行动的中文文案。
 5. 列表必须覆盖加载、空数据和错误状态。
@@ -43,7 +43,7 @@
   <AppTitleBar />
   <div class="flex min-h-0 flex-1 overflow-hidden">
     <SidebarProvider>
-      <Sidebar collapsible="none" class="border-r border-slate-200 bg-white">
+      <Sidebar collapsible="none" class="border-r border-border bg-card">
         <SidebarHeader><!-- 品牌区 --></SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
@@ -86,7 +86,7 @@
   <!-- 1. 页面根节点：h-full 撑满 + overflow-hidden 防整页滚动 -->
   <div class="h-full flex flex-col overflow-hidden">
     <!-- 2. Card：flex-1 min-h-0 吃掉页高；class 透传落到 Card 根（自身即 flex flex-col） -->
-    <Card class="min-h-0 flex-1 flex flex-col border border-slate-200 bg-white">
+    <Card class="min-h-0 flex-1 flex flex-col">
       <CardHeader class="shrink-0 py-3"><!-- 标题 + 新建按钮（固定不滚） --></CardHeader>
       <CardContent class="flex min-h-0 flex-1 flex-col gap-3">
         <Empty v-if="items.length === 0" ... />
@@ -173,3 +173,45 @@
 - 设置页「模型单价」卡片为**只读**：OpenRouter 自动同步（后台 24h 到期检查 + 启动静默 5 分钟，复用 provider auto_sync 模式），「立即同步」按钮手动触发（`sync_pricing_now`）；无手动编辑价格表单。
 - 展示：同步状态行（模型数 + 最后同步时间）+ 搜索过滤 + shadcn Table（模型名/输入价/输出价，`$`/百万 token）；空态提示尚未同步。
 - 费用计算在统计时（`request_overview` LEFT JOIN `model_pricing`，别名匹配 `xxx/model` ↔ `model`）；首页 StatsCards 三项费用用 `formatCost`（`$0` / `$x.xxxx` 去尾 0）。
+
+## 图表（Chart / Unovis）
+
+- **禁止手写 `<svg>` 折线/面积图**（曾在 `StatsChart.vue` 手写 path + 自研 `buildSmoothPath` 贝塞尔平滑，已废弃删除）。统一用 shadcn-vue 官方 `Chart`：`src/components/ui/chart/*`（`shadcn-vue add chart` 拷入），底层依赖 `@unovis/vue` + `@unovis/ts`。
+- shadcn **不包装** Unovis，只提供 `ChartContainer`（注入 `--color-<key>` CSS 变量与 `--vis-*` 主题变量）、`ChartCrosshair`（= `VisCrosshair`）、`ChartTooltip`（= `VisTooltip`）、`ChartTooltipContent`、`ChartLegendContent`、`componentToString`；图形本体直接用 `@unovis/vue` 的 `VisXYContainer` / `VisLine` / `VisArea` / `VisAxis`。
+- 结构：`ChartContainer(:config :cursor class="h-[Npx] w-full") > VisXYContainer(:data :margin) > VisArea + VisLine + VisAxis(type="x"/"y") + ChartCrosshair(:template) + ChartTooltip`。
+- **平滑曲线是内置能力**：`VisLine`/`VisArea` 默认 `curveType: CurveType.MonotoneX`，无需自研平滑算法；需其他曲线时传 `curve-type`（枚举含 `catmullRom`/`natural`/`step` 等）。
+- 颜色走 `ChartConfig`：`{ <key>: { label, color: 'var(--chart-N)' } }` → `ChartContainer` 生成作用域内 `--color-<key>`，图形传 `color="var(--color-<key>)"`。`--chart-1..5` 在 `index.css` 已定义。
+- 两个易错点：① `ChartContainer` 不传 `:cursor="true"` 时 `--vis-crosshair-line-stroke-width` 为 `0px`，竖直指示线不可见；② Unovis **不自动为轴标签预留空间**，必须显式给 `:margin`（左侧容纳 Y 轴数值、底部容纳 X 轴标签，如 `{ top: 14, right: 10, bottom: 20, left: 36 }`）。
+- 轴用 `:tick-format` 把序号映射回业务标签（x 用索引 accessor 时），并关掉多余装饰：`:grid-line="false" :tick-line="false" :domain-line="false"`。
+- Crosshair 提示用 `:template`（返回 HTML 字符串，可写 tailwind class）；`componentToString(config, ChartTooltipContent)` 有 Map 缓存且需 setup 上下文，格式化随指标动态变化时直接写 `template` 更可控。
+- 热力图仍用 **vue3-calendar-heatmap**（`CalendarHeatmap`），不属 Unovis 范畴。
+
+## 分段切换（ToggleGroup）
+
+- **2–7 个互斥选项的 segment 切换禁止手写 `v-for` + `Button` + 三元 `:class`**（旧写法：`rounded-full bg-slate-100 p-1` 容器 + `metric === m.key ? 'bg-white shadow-sm' : ...`）。统一用 `ToggleGroup` + `ToggleGroupItem`（`shadcn-vue add toggle-group`，附带 `toggle`）。
+- 用法：`ToggleGroup(type="single" variant="outline" size="sm" :model-value @update:model-value aria-label)` > `ToggleGroupItem(:value)`。`spacing` 默认 `0` 即连体 segment 外观。
+- `type="single"` 在取消选中时会抛出 `undefined`，回调必须做类型收窄守卫（`typeof v === 'string' && KEYS.some(...)`）后再赋值，避免选中态被清空。
+- 每组必须给 `aria-label` 说明这组切换的语义。
+
+## 表单字段（Field 体系）
+
+- **禁用裸 `<label class="...">` 手工包裹控件**（旧写法：`<label class="block text-sm"><span class="mb-1 block text-slate-600">…</span><Input/></label>`，已废止）。带文案的输入/开关统一用 `Field` 全家桶（`shadcn-vue add field` 拷入 `src/components/ui/field/*`）。
+- **垂直输入**：`Field > FieldLabel + Input`（`FieldLabel` 自带 `text-sm font-medium text-foreground` 样式，替代旧 `text-slate-600` 次要文字）。
+- **横向开关/勾选**（设置页、行内开关）：`Field orientation="horizontal"` + `Switch`/`Checkbox` + `FieldLabel for="xxx"`（`for` 与控件 `id` 一致；reka-ui Field 也会自动关联）。保留控件原有 v-model 绑定逻辑（`field.state.value` + `handleChange` 等）。
+- 需要说明文字时用 `FieldDescription`；校验错误用 `FieldError` + `aria-invalid`；禁用态 `Field data-disabled` + 控件 `disabled`。
+- 相关字段分组可用 `FieldGroup`；标题分组用 `FieldSet > FieldLegend`。
+
+## 语义 token（颜色）
+
+- **禁止直接写原始色阶类**（`text-slate-*`/`bg-cyan-*`/`text-rose-*`/`text-emerald-*`/`text-amber-*` 等，见验收 grep）。统一用语义 token：
+  - 文本层级：`text-foreground`（标题/主体）、`text-muted-foreground`（次要/说明）——替代 `text-slate-*` 各档。
+  - 边框：`border-border`；浅底：`bg-muted`（≈slate-100）；卡片/背景：`bg-card` / `bg-background`（白底不再写 `bg-white`）。
+  - 状态色：成功 `--success`（`text-success`/`bg-success/10`）、警告 `--warning`（`text-warning`/`bg-warning/15`）、错误 `--destructive`（`text-destructive`/`bg-destructive/10`）、提示/强调 `--info`（`text-info`/`bg-info/10`/`border-info/20`）——替代 `text-emerald-*`/`text-amber-*`/`text-rose-*`/`text-cyan-*`。
+- `--info/--success/--warning` 在 `src/index.css` 的 `:root` 与 `.dark` 均有定义，`@theme inline` 已暴露为 `color-info/-success/-warning`；`.dark` 用更亮的 400 档值保证深色下对比度。浅底一律用主色透明度变体（`/10` `/15` `/20`），不用深浅色阶堆砌。
+- 暗色模式：token 已就绪但**未实现切换开关**（后续另开任务），当前 `.dark` 不可达。
+
+## 图标尺寸
+
+- **Button/组件内图标不设尺寸**：shadcn 组件自带 `[&_svg:not([class*=size-])]:size-4` 等 CSS 规则接管，`<Plus />` 不写 `:size` 或 `size-*` 类。
+- **非 Button 上下文**（`Item` 内箭头等，组件无 svg 规则）必须显式 `class="size-*"`（如 `size-3.5` = 14px），否则 SVG 默认 24px。
+- **定制场景豁免**：窗口控制按钮（`AppTitleBar`）与 overlay 原生 `<button>` 可保留 `:size`（`desktop-titlebar.md` 契约）。

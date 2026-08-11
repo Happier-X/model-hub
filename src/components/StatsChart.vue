@@ -1,13 +1,23 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { Card, CardContent } from "@/components/ui/card";
+import { VisArea, VisAxis, VisLine, VisXYContainer } from "@unovis/vue";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  ChartContainer,
+  ChartCrosshair,
+  ChartTooltip,
+  type ChartConfig,
+} from "@/components/ui/chart";
+import { Separator } from "@/components/ui/separator";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { extractInvokeError, getTimeseriesStats, type DailyStatRow, type HourlyStatRow } from "@/api/tauri";
 import { formatCount, formatMoney } from "@/utils/formatOctopus";
-import { buildSmoothPath } from "@/utils/smoothPath";
 
 type Metric = "count" | "cost" | "tokens";
 type Period = "today" | "7" | "30";
+/** 图表数据点：x 用序号，y 用当前指标值，label 供轴与 tooltip 显示。 */
+type Point = { index: number; label: string; value: number };
 
 const METRICS: { key: Metric; label: string }[] = [
   { key: "count", label: "请求数" },
@@ -25,14 +35,10 @@ const hourly = ref<HourlyStatRow[]>([]);
 const error = ref("");
 const metric = ref<Metric>("count");
 const period = ref<Period>("today");
-const chartEl = ref<HTMLDivElement | null>(null);
-const chartW = ref(0);
-const hoverIdx = ref<number | null>(null);
 let timer: ReturnType<typeof setInterval> | undefined;
-let ro: ResizeObserver | undefined;
 
-const CHART_H = 150;
-const PAD = { top: 14, right: 10, bottom: 24, left: 46 };
+/** 图表边距：Unovis 不自动为轴标签预留空间，需手动留白（左=Y 轴数值，下=X 轴时间）。 */
+const MARGIN = { top: 14, right: 12, bottom: 20, left: 40 };
 
 /** 当前周期选中的序列（label + 值），升序。 */
 const series = computed<{ label: string; value: number }[]>(() => {
@@ -65,51 +71,38 @@ const totals = computed(() => {
   return { requests, cost, tokens };
 });
 
-const maxValue = computed(() => Math.max(1, ...series.value.map((s) => s.value)));
 const valueLabel = (v: number): string => {
-  if (metric.value === "cost") {
-    const f = formatMoney(v);
-    return `${f.value}${f.unit}`;
-  }
-  const f = formatCount(v);
+  const f = metric.value === "cost" ? formatMoney(v) : formatCount(v);
   return `${f.value}${f.unit}`;
 };
 
-/** 面积图几何（随容器宽度自适应）。 */
-const geometry = computed(() => {
-  const w = Math.max(0, chartW.value - PAD.left - PAD.right);
-  const h = CHART_H - PAD.top - PAD.bottom;
-  const n = series.value.length;
-  const pts = series.value.map((s, i) => {
-    const x = n <= 1 ? PAD.left + w / 2 : PAD.left + (i * w) / (n - 1);
-    const y = PAD.top + h - (s.value / maxValue.value) * h;
-    return { x, y };
-  });
-  const line = buildSmoothPath(pts);
-  const base = pts.length === 0 ? "" : ` L${pts[pts.length - 1].x.toFixed(1)},${(PAD.top + h).toFixed(1)} L${pts[0].x.toFixed(1)},${(PAD.top + h).toFixed(1)} Z`;
-  const area = pts.length === 0 ? "" : `${line}${base}`;
-  const gridY = [0, 0.25, 0.5, 0.75, 1].map((f) => PAD.top + h - f * h);
-  const gridVals = [0, 0.25, 0.5, 0.75, 1].map((f) => maxValue.value * f);
-  return { pts, line, area, gridY, gridVals, w, h };
-});
+const points = computed<Point[]>(() =>
+  series.value.map((s, i) => ({ index: i, label: s.label, value: s.value })),
+);
 
-const metricColor = computed(() => {
-  if (metric.value === "cost") return "var(--chart-1)";
-  if (metric.value === "count") return "var(--chart-2)";
-  return "var(--chart-3)";
-});
+/** ChartConfig 驱动 --color-value CSS 变量与图例文案。 */
+const chartConfig = computed<ChartConfig>(() => ({
+  value: {
+    label: METRICS.find((m) => m.key === metric.value)?.label ?? "数值",
+    color: metric.value === "cost" ? "var(--chart-1)" : metric.value === "count" ? "var(--chart-2)" : "var(--chart-3)",
+  },
+}));
 
-function onChartMove(e: MouseEvent) {
-  const rect = (e.currentTarget as SVGElement).getBoundingClientRect();
-  const relX = e.clientX - rect.left - PAD.left;
-  const n = series.value.length;
-  if (n === 0) {
-    hoverIdx.value = null;
-    return;
-  }
-  const w = Math.max(1, geometry.value.w);
-  const idx = Math.round((relX / w) * (n - 1));
-  hoverIdx.value = Math.max(0, Math.min(n - 1, idx));
+const xAccessor = (d: Point) => d.index;
+const yAccessor = (d: Point) => d.value;
+const xTickFormat = (tick: number) => series.value[Math.round(tick)]?.label ?? "";
+const yTickFormat = (tick: number) => valueLabel(tick);
+/** Crosshair 提示内容（Unovis template 返回 HTML 字符串）。 */
+const tooltipTemplate = (d: Point) =>
+  `<div class="rounded-lg border bg-background px-2.5 py-1.5 text-xs shadow-sm">` +
+  `<div class="font-medium text-foreground">${d.label}</div>` +
+  `<div class="text-muted-foreground">${valueLabel(d.value)}</div></div>`;
+
+function onMetricChange(v: unknown) {
+  if (typeof v === "string" && METRICS.some((m) => m.key === v)) metric.value = v as Metric;
+}
+function onPeriodChange(v: unknown) {
+  if (typeof v === "string" && PERIODS.some((p) => p.key === v)) period.value = v as Period;
 }
 
 async function refresh() {
@@ -126,40 +119,31 @@ async function refresh() {
 onMounted(() => {
   refresh();
   timer = setInterval(refresh, 30000);
-  if (chartEl.value) {
-    chartW.value = chartEl.value.clientWidth;
-    ro = new ResizeObserver(() => {
-      if (chartEl.value) chartW.value = chartEl.value.clientWidth;
-    });
-    ro.observe(chartEl.value);
-  }
 });
 onUnmounted(() => {
   if (timer !== undefined) clearInterval(timer);
-  ro?.disconnect();
 });
 </script>
 
 <template>
-  <Card class="border border-slate-200 bg-white">
-    <CardContent class="flex flex-col gap-4 pt-4">
-      <!-- 标题 + 指标切换 -->
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <h3 class="text-base font-semibold">使用统计</h3>
-        <div class="flex gap-1 rounded-full bg-slate-100 p-1">
-          <button
-            v-for="m in METRICS"
-            :key="m.key"
-            type="button"
-            class="rounded-full px-3 py-1 text-xs transition-colors"
-            :class="metric === m.key ? 'bg-white font-medium shadow-sm' : 'text-muted-foreground hover:text-foreground'"
-            @click="metric = m.key"
-          >
-            {{ m.label }}
-          </button>
-        </div>
-      </div>
+  <Card>
+    <CardHeader class="flex flex-wrap items-center justify-between gap-3">
+      <CardTitle class="text-base">使用统计</CardTitle>
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        size="sm"
+        :model-value="metric"
+        aria-label="切换统计指标"
+        @update:model-value="onMetricChange"
+      >
+        <ToggleGroupItem v-for="m in METRICS" :key="m.key" :value="m.key">
+          {{ m.label }}
+        </ToggleGroupItem>
+      </ToggleGroup>
+    </CardHeader>
 
+    <CardContent class="flex flex-col gap-4">
       <!-- 汇总行 + 周期切换 -->
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="flex items-center gap-4 text-sm">
@@ -170,7 +154,7 @@ onUnmounted(() => {
               <span class="text-xs font-normal text-muted-foreground">{{ formatCount(totals.requests).unit }}</span>
             </div>
           </div>
-          <div class="h-7 w-px bg-slate-100" />
+          <Separator orientation="vertical" class="h-7" />
           <div>
             <div class="text-xs text-muted-foreground">总费用</div>
             <div class="flex items-baseline gap-0.5 text-lg font-semibold">
@@ -178,7 +162,7 @@ onUnmounted(() => {
               <span class="text-xs font-normal text-muted-foreground">{{ formatMoney(totals.cost).unit }}</span>
             </div>
           </div>
-          <div class="h-7 w-px bg-slate-100" />
+          <Separator orientation="vertical" class="h-7" />
           <div>
             <div class="text-xs text-muted-foreground">总 Token</div>
             <div class="flex items-baseline gap-0.5 text-lg font-semibold">
@@ -187,72 +171,47 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
-        <div class="flex gap-1 rounded-full bg-slate-100 p-1">
-          <button
-            v-for="p in PERIODS"
-            :key="p.key"
-            type="button"
-            class="rounded-full px-3 py-1 text-xs transition-colors"
-            :class="period === p.key ? 'bg-white font-medium shadow-sm' : 'text-muted-foreground hover:text-foreground'"
-            @click="period = p.key"
-          >
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          :model-value="period"
+          aria-label="切换统计周期"
+          @update:model-value="onPeriodChange"
+        >
+          <ToggleGroupItem v-for="p in PERIODS" :key="p.key" :value="p.key">
             {{ p.label }}
-          </button>
-        </div>
+          </ToggleGroupItem>
+        </ToggleGroup>
       </div>
 
-      <p v-if="error" class="text-sm text-rose-600">{{ error }}</p>
+      <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
 
-      <!-- 面积图 -->
-      <div ref="chartEl" class="relative w-full">
-        <svg
-          v-if="series.length > 0"
-          :width="chartW"
-          :height="CHART_H"
-          class="block"
-          @mousemove="onChartMove"
-          @mouseleave="hoverIdx = null"
-        >
-          <defs>
-            <linearGradient :id="`grad-${metric}`" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" :stop-color="metricColor" stop-opacity="0.35" />
-              <stop offset="95%" :stop-color="metricColor" stop-opacity="0.02" />
-            </linearGradient>
-          </defs>
-          <!-- 网格 + Y 轴标签 -->
-          <template v-for="(gy, i) in geometry.gridY" :key="i">
-            <line :x1="PAD.left" :x2="chartW - PAD.right" :y1="gy" :y2="gy" stroke="var(--border)" stroke-dasharray="3 3" />
-            <text :x="PAD.left - 6" :y="gy + 3" text-anchor="end" class="fill-muted-foreground" font-size="10">
-              {{ valueLabel(geometry.gridVals[i]) }}
-            </text>
-          </template>
-          <!-- 面积 + 折线 -->
-          <path v-if="geometry.area" :d="geometry.area" :fill="`url(#grad-${metric})`" />
-          <path :d="geometry.line" fill="none" :stroke="metricColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
-          <!-- hover 十字线 + 圆点 -->
-          <template v-if="hoverIdx !== null && geometry.pts[hoverIdx]">
-            <line :x1="geometry.pts[hoverIdx].x" :x2="geometry.pts[hoverIdx].x" :y1="PAD.top" :y2="CHART_H - PAD.bottom" stroke="var(--border)" stroke-dasharray="2 2" />
-            <circle :cx="geometry.pts[hoverIdx].x" :cy="geometry.pts[hoverIdx].y" r="4" :fill="metricColor" stroke="white" stroke-width="1.5" />
-          </template>
-          <!-- X 轴标签（首/中/末） -->
-          <template v-if="geometry.pts.length > 1">
-            <text :x="geometry.pts[0].x" :y="CHART_H - 6" text-anchor="start" class="fill-muted-foreground" font-size="10">{{ series[0].label }}</text>
-            <text :x="geometry.pts[Math.floor((geometry.pts.length - 1) / 2)].x" :y="CHART_H - 6" text-anchor="middle" class="fill-muted-foreground" font-size="10">{{ series[Math.floor((series.length - 1) / 2)].label }}</text>
-            <text :x="geometry.pts[geometry.pts.length - 1].x" :y="CHART_H - 6" text-anchor="end" class="fill-muted-foreground" font-size="10">{{ series[series.length - 1].label }}</text>
-          </template>
-        </svg>
-        <p v-else class="py-10 text-center text-sm text-muted-foreground">暂无数据</p>
-
-        <!-- tooltip -->
-        <div
-          v-if="hoverIdx !== null && series[hoverIdx]"
-          class="pointer-events-none absolute z-10 -translate-x-1/2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs shadow-sm"
-          :style="{ left: `${geometry.pts[hoverIdx]?.x ?? 0}px`, top: `${Math.max(0, (geometry.pts[hoverIdx]?.y ?? 0) - 46)}px` }"
-        >
-          <div class="font-medium text-slate-700">{{ series[hoverIdx].label }}</div>
-          <div class="text-muted-foreground">{{ valueLabel(series[hoverIdx].value) }}</div>
-        </div>
-      </div>
+      <!-- 面积 + 平滑折线（Unovis 默认 curveType=monotoneX 即平滑曲线） -->
+      <ChartContainer v-if="points.length > 0" :config="chartConfig" cursor class="h-[150px] w-full">
+        <VisXYContainer :data="points" :margin="MARGIN">
+          <VisArea :x="xAccessor" :y="yAccessor" color="var(--color-value)" :opacity="0.2" />
+          <VisLine :x="xAccessor" :y="yAccessor" color="var(--color-value)" :line-width="2" />
+          <VisAxis
+            type="x"
+            :num-ticks="3"
+            :tick-format="xTickFormat"
+            :grid-line="false"
+            :tick-line="false"
+            :domain-line="false"
+          />
+          <VisAxis
+            type="y"
+            :num-ticks="5"
+            :tick-format="yTickFormat"
+            :tick-line="false"
+            :domain-line="false"
+          />
+          <ChartCrosshair :x="xAccessor" :y="yAccessor" :template="tooltipTemplate" color="var(--color-value)" />
+          <ChartTooltip />
+        </VisXYContainer>
+      </ChartContainer>
+      <p v-else class="py-10 text-center text-sm text-muted-foreground">暂无数据</p>
     </CardContent>
   </Card>
 </template>

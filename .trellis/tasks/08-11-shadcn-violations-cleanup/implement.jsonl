@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "项目组件规约：需在 P0 对齐 Field 体系、语义 token、图标约定；改代码前先改此处"}
+{"file": ".agents/skills/shadcn-vue/rules/styling.md", "reason": "官方规范：语义 token 使用、禁用原始色阶、cn() 条件类"}
+{"file": ".agents/skills/shadcn-vue/rules/forms.md", "reason": "官方规范：Field/FieldGroup/FieldLabel 用法与 orientation=horizontal"}
+{"file": ".agents/skills/shadcn-vue/rules/icons.md", "reason": "官方规范：图标尺寸由组件上下文接管，:size 反模式"}
+{"file": ".agents/skills/shadcn-vue/rules/composition.md", "reason": "官方规范：组件组合、Button/Item 内图标处理"}
+{"file": ".trellis/spec/frontend/desktop-titlebar.md", "reason": "AppTitleBar 窗口控制按钮定制约定——图标 :size 保留的豁免依据"}

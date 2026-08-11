@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "check 依据：确认 spec 已无 text-slate-* / 裸 label 约定，Field 与语义 token 已有记载"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "layer 索引：前端层 spec 总纲，确认无其他冲突约定"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "质量门槛：typecheck/build/test 要求、验收命令风格"}
+{"file": ".trellis/tasks/08-11-shadcn-violations-cleanup/prd.md", "reason": "验收标准（AC）唯一来源：4 个 grep 归零 + token 三处 + 6 页观感"}
