@@ -50,12 +50,12 @@ pub fn parse_openrouter_pricing(body: &[u8]) -> Vec<ModelPrice> {
         let prompt_per_token = item
             .get("pricing")
             .and_then(|p| p.get("prompt"))
-            .and_then(|v| v.as_f64())
+            .and_then(parse_price_value)
             .unwrap_or(0.0);
         let completion_per_token = item
             .get("pricing")
             .and_then(|p| p.get("completion"))
-            .and_then(|v| v.as_f64())
+            .and_then(parse_price_value)
             .unwrap_or(0.0);
         out.push(ModelPrice {
             model_name: id.to_string(),
@@ -64,6 +64,13 @@ pub fn parse_openrouter_pricing(body: &[u8]) -> Vec<ModelPrice> {
         });
     }
     out
+}
+
+fn parse_price_value(value: &serde_json::Value) -> Option<f64> {
+    let price = value
+        .as_f64()
+        .or_else(|| value.as_str().and_then(|s| s.trim().parse::<f64>().ok()))?;
+    price.is_finite().then_some(price)
 }
 
 fn round6(v: f64) -> f64 {
@@ -173,6 +180,34 @@ impl Stores {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_openrouter_pricing_supports_string_prices() {
+        let body = br#"{"data":[
+            {"id":"deepseek/deepseek-chat","pricing":{"prompt":"0.00000125","completion":" 0.00000425 "}}
+        ]}"#;
+        let prices = parse_openrouter_pricing(body);
+        assert_eq!(prices.len(), 1);
+        assert_eq!(prices[0].prompt_price_per_mtok, 1.25);
+        assert_eq!(prices[0].completion_price_per_mtok, 4.25);
+    }
+
+    #[test]
+    fn parse_openrouter_pricing_invalid_string_falls_back_individually() {
+        let body = br#"{"data":[
+            {"id":"invalid-prompt","pricing":{"prompt":"not-a-number","completion":"0.00000425"}},
+            {"id":"empty-prompt","pricing":{"prompt":"  ","completion":""}},
+            {"id":"valid-completion","pricing":{"prompt":"0.00000125","completion":"invalid"}}
+        ]}"#;
+        let prices = parse_openrouter_pricing(body);
+        assert_eq!(prices.len(), 3);
+        assert_eq!(prices[0].prompt_price_per_mtok, 0.0);
+        assert_eq!(prices[0].completion_price_per_mtok, 4.25);
+        assert_eq!(prices[1].prompt_price_per_mtok, 0.0);
+        assert_eq!(prices[1].completion_price_per_mtok, 0.0);
+        assert_eq!(prices[2].prompt_price_per_mtok, 1.25);
+        assert_eq!(prices[2].completion_price_per_mtok, 0.0);
+    }
 
     #[test]
     fn parse_openrouter_pricing_converts_per_token_to_per_mtok() {

@@ -453,3 +453,24 @@ model_pricing 单价表 + OpenRouter 自动同步（后台 24h 到期检查 + �
 
 ### 待提交
 - 全量 git add + commit（`refactor(frontend): shadcn 规范偏差清理——语义 token/Field/space/图标`）。
+
+---
+
+## session — OpenRouter 价格字符串解析修复（08-11-pricing-string-parse-fix）
+
+### 背景与根因
+- 首页费用统计恒为 0：OpenRouter `/api/v1/models` 的 `pricing.prompt/completion` 实际返回**字符串**（如 `"0.00000125"`），原解析仅 `serde_json::Value::as_f64()` → 全部回退 0.0，`model_pricing` 约 400 行全是 0 价。
+- 费用不落库，统计时按 `request_logs` token × `model_pricing` 现算，故修复 + 重新同步可补算历史。
+
+### 实施（上个会话已完成，本会话验证）
+- `parse_price_value`：先 `as_f64()`，再 `as_str().trim().parse::<f64>()`，`is_finite()` 过滤；调用方 `unwrap_or(0.0)`；单字段失败不影响同模型另一字段；保持 ×1e6 + round6。
+- 新增 2 个回归测试（真实字符串格式 + 非法/空串单字段回退），保留全部既有测试。
+
+### 验证结果
+- `cargo test --lib` 149/149 全绿（连续 4 次含单线程；首次 148+1 为 leaderboard 网络条件 flaky，与本次改动无关）。
+- `cargo check` ✓；`cargo build` 因**运行中的应用锁住 model-hub.exe** 无法重链（OS error 5）——代码编译已验证通过，完整链接留待用户重启应用。
+- AC1–AC4 通过；**AC5 待运行时验收**：需用户重启应用 → 设置页「立即同步价格」→ `SELECT COUNT(*) FROM model_pricing WHERE prompt_price_per_mtok>0 OR completion_price_per_mtok>0` 非零 → 首页费用不再恒 0（免费模型除外）。
+- spec 更新：database-guidelines.md 的 model_pricing 行补充解析契约（双格式 + trim + is_finite + 单字段独立回退 + 禁止回归只读 as_f64）。
+
+### 注意
+- 工作区暂存了本任务 6 个 artifacts + pricing.rs（+39/-2），提交前确认不含 shadcn 前端改动（已确认纯净）。
