@@ -29,7 +29,7 @@
 1. 真实用户 Chat → 代理按分组队列顺序故障转移转发上游（响应提交前任意失败换下一启用候选项；无熔断跳过）。
 2. 用户在分组页点击「拉取模型」或「批量添加供应商模型」→ `GET {base}/models`（或兼容路径）。
 3. llm_benchmark 公共榜单（raw GitHub：datasets.json 定位 + code_v3 Agentic 月榜 CSV；无用户 Key）。
-4. 转发前清洗请求体：`rewrite_model` 重写顶层 `model` 为上游模型名，并剥离 `tools[].function.strict`（OpenAI Structured Outputs 字段，部分兼容上游不支持，原样透传会报 `tool.function.strict is not supported`）。流式与非流式路径共用该清洗。
+4. 转发前清洗请求体：`rewrite_model` 重写顶层 `model` 为上游模型名；`tools[].function.strict` 仅对**不在 `supports_strict_tools` 白名单内**的上游剥离（旧/小众上游不识别该字段会报 `tool.function.strict is not supported`；而 grok-4 / gpt-4o+ / o 系 / claude 4 / qwen3 等白名单上游依赖 strict 保证 tool calling 可靠，必须保留——剥离会使其退化为跳过工具直接编文字）。流式与非流式路径共用该清洗。
 
 **禁止**
 
@@ -47,7 +47,7 @@
 | 代码路径为启动/定时/测活 | **不得**发起上游 HTTP（例外：开自动同步的供应商背景 24h 过期同步允许，但启动后至少静默 5 分钟） |
 | 用户未点击拉取模型 | 不得调用 `fetch_provider_models`（例外：开自动同步的供应商过期自动同步；分组页展开时本地 `provider_models` 为空才允许实时拉取一次） |
 | 真实 Chat 候选失败 | 可按队列换源；仍属该次业务请求，不算后台测活 |
-| 转发前 body 含 `tools[].function.strict` | 剥离该字段后再转发；不改工具语义 |
+| 转发前 body 含 `tools[].function.strict` | 白名单外上游（deepseek-chat 等）剥离该字段；白名单上游（grok-4/gpt-4o/o 系/claude 4/qwen3）保留，保证其 tool calling 可靠 |
 | 错误日志 | 不得打印完整上游 Key |
 
 ### 5. Good / Base / Bad Cases

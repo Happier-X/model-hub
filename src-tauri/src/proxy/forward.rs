@@ -300,7 +300,7 @@ fn rewrite_model(body: &Value, upstream_model: &str, effort: &str, stream: bool)
     let mut v = body.clone();
     if let Some(obj) = v.as_object_mut() {
         obj.insert("model".into(), Value::String(upstream_model.to_string()));
-        strip_tool_strict(obj);
+        strip_tool_strict(obj, upstream_model);
         apply_thinking_effort(obj, upstream_model, effort);
         if stream {
             apply_include_usage(obj, upstream_model);
@@ -529,7 +529,51 @@ fn apply_thinking_effort(
 /// 该字段是 OpenAI Structured Outputs 特性，部分兼容上游不支持，原样透传会报
 /// `tool.function.strict is not supported`。移除仅关闭上游侧严格 schema 校验，
 /// 不改变工具定义与调用语义（下游仍返回 JSON 字符串 arguments，客户端照常解析）。
-fn strip_tool_strict(obj: &mut serde_json::Map<String, Value>) {
+/// 已知支持 `tools[].function.strict`（Structured Outputs）的上游模型保留名单。
+///
+/// 剥离 strict 对「不支持 strict 的旧/小众上游」是兼容必需（避免 400
+/// `tool.function.strict is not supported`）；但对依赖 strict 保证 tool calling
+/// 可靠性的上游（如 grok-4：xAI 官方文档要求 strict schemas 让模型可靠调用）
+/// 剥离会使其退化为「跳过工具直接编文字回答」。故仅对白名单外的上游剥离。
+fn supports_strict_tools(upstream_model: &str) -> bool {
+    let m = upstream_model.to_ascii_lowercase();
+    // OpenAI 实现严格结构化输出的模型：gpt-4o+ / gpt-5 / o 系推理模型。
+    if m.contains("gpt-4o") || m.contains("gpt-5") || m.contains("gpt5") || m.contains("gpt-4.1") {
+        return true;
+    }
+    if matches_o_series(&m) {
+        return true;
+    }
+    // xAI grok-4 系：依赖 strict schemas 让 function calling 可靠。
+    if m.contains("grok-4") || m.contains("grok4") {
+        return true;
+    }
+    // Anthropic claude：支持 strict 的推理档型号。
+    if m.contains("claude")
+        && (m.contains("sonnet-4")
+            || m.contains("sonnet4")
+            || m.contains("opus-4")
+            || m.contains("opus4")
+            || m.contains("3-7")
+            || m.contains("3.7"))
+    {
+        return true;
+    }
+    // Qwen3：支持 strict function calling。
+    if m.contains("qwen3") || (m.contains("qwen") && m.contains('3')) {
+        return true;
+    }
+    false
+}
+
+/// 从 `tools[].function` 上剥离 `strict` 字段，但仅在 `upstream_model` 不在
+/// `supports_strict_tools` 名单时执行。对依赖 strict 保证 tool calling 可靠性
+/// 的上游（grok-4 等）保留 strict，其余不支持该字段的旧/小众上游仍剥离以兜底
+/// 兼容（避免 400 错误）。
+fn strip_tool_strict(obj: &mut serde_json::Map<String, Value>, upstream_model: &str) {
+    if supports_strict_tools(upstream_model) {
+        return;
+    }
     let Some(tools) = obj.get_mut("tools").and_then(|t| t.as_array_mut()) else {
         return;
     };
@@ -1387,13 +1431,48 @@ mod tests {
                 }
             ]
         });
-        let out = rewrite_model(&body, "gpt-4o", "off", false);
+        // 非白名单上游（deepseek-chat 不在 supports_strict_tools 名单）：仍剥离 strict。
+        let out = rewrite_model(&body, "deepseek-chat", "off", false);
         // strict 已剥离，其余字段保留。
         assert!(out["tools"][0]["function"].get("strict").is_none());
         assert_eq!(out["tools"][0]["function"]["name"], "get_weather");
         assert_eq!(out["tools"][0]["function"]["parameters"]["type"], "object");
         assert!(out["tools"][1]["function"].get("strict").is_none());
         assert_eq!(out["tools"][1]["function"]["name"], "no_strict");
+    }
+
+    #[test]
+    fn rewrite_model_keeps_tool_strict_for_whitelist() {
+        let body = serde_json::json!({
+            "model": "group",
+            "messages": [],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "strict": true,
+                        "parameters": {"type": "object"}
+                    }
+                }
+            ]
+        });
+        // grok-4 系：依赖 strict 保证 tool calling 可靠性，必须保留。
+        let out = rewrite_model(&body, "grok-4-fast", "off", false);
+        assert_eq!(out["tools"][0]["function"]["strict"], true);
+        assert_eq!(out["tools"][0]["function"]["name"], "get_weather");
+    }
+
+    #[test]
+    fn supports_strict_tools_whitelist() {
+        // 白名单内：保留 strict。
+        for m in ["grok-4", "grok-4-fast", "gpt-4o", "gpt-4.1", "gpt-5", "o3", "claude-sonnet-4", "qwen3-max"] {
+            assert!(supports_strict_tools(m), "{m} 应在保留名单内");
+        }
+        // 白名单外：剥离 strict。
+        for m in ["deepseek-chat", "grok-2", "gpt-3.5-turbo", "glm-4", "kimi-k2", "moonshot-v1"] {
+            assert!(!supports_strict_tools(m), "{m} 不应在保留名单内");
+        }
     }
 
     #[test]
