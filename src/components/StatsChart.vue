@@ -188,15 +188,18 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          class="flex items-center gap-2 rounded-lg px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-slate-100 hover:text-foreground"
-          title="点击切换周期"
-          @click="period = PERIODS[(PERIODS.findIndex((p) => p.key === period) + 1) % PERIODS.length].key"
-        >
-          <span class="text-xs">周期</span>
-          <span class="font-medium text-foreground">{{ PERIODS.find((p) => p.key === period)?.label }}</span>
-        </button>
+        <div class="flex gap-1 rounded-full bg-slate-100 p-1">
+          <button
+            v-for="p in PERIODS"
+            :key="p.key"
+            type="button"
+            class="rounded-full px-3 py-1 text-xs transition-colors"
+            :class="period === p.key ? 'bg-white font-medium shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+            @click="period = p.key"
+          >
+            {{ p.label }}
+          </button>
+        </div>
       </div>
 
       <p v-if="error" class="text-sm text-rose-600">{{ error }}</p>
