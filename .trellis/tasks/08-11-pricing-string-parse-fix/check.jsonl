@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查 cargo test/cargo build 与测试范围，确认修复不引入外部网络依赖"}
-{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "检查 model_pricing 非零价格写入、历史费用动态重算与全量替换行为未改变"}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "检查 OpenRouter 字符串/数字输入、Rust 解析、SQLite 单价和前端费用结果的完整数据流"}
