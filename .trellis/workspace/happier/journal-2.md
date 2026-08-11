@@ -330,3 +330,35 @@ model_pricing 单价表 + OpenRouter 自动同步（后台 24h 到期检查 + �
 ### Next Steps
 
 - 无
+
+
+## Session 51: 修复 grok 不调用工具：strict 白名单保留
+
+**Date**: 2026-08-11
+**Task**: 修复 grok 不调用工具：strict 白名单保留
+**Branch**: `master`
+
+### Summary
+
+用户接 grok 时 AI 从不调用工具直接编文字。定位根因：7-25 任务统一剥离 tools[].function.strict 兼容旧上游，但 grok-4 依赖 strict 保证 tool calling 可靠，剥离后退化为跳过工具。新增 supports_strict_tools 白名单（grok-4/gpt-4o+/gpt-5/o 系/claude-4/qwen3），白名单内保留 strict，其余仍剥离兜底兼容
+
+### Main Changes
+
+- forward.rs：strip_tool_strict 加 upstream_model 参数，白名单内直接 return；新增 supports_strict_tools
+- upstream-access.md：清洗约定改为白名单保留
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] cargo test --lib 145 全绿（+2：grok-4 保留 strict、白名单判定）
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 用户重启 dev（Rust 改动）后重测 grok 分组接入
