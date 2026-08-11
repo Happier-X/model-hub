@@ -25,6 +25,7 @@
 | `groups` | 对外模型名（**无** `auto_failover`；故障转移始终按队列顺序） |
 | `group_items` | 有序队列；`sort_order` 越小越优先 |
 | `request_logs` | 请求/故障转移摘要；含 `input_tokens` / `output_tokens`（转发链路提取的 usage，成功请求才非零）；**不存费用**——费用在统计时按 `model_pricing` 单价现算（改价可重算历史）；不存 messages/完整密钥；**默认保留最近 7 天内的最新 10000 条**（`LOG_RETENTION_DAYS` + `LOG_MAX_ROWS`），启动/写日志/列表时 best-effort 清理过期或超量 |
+| `daily_request_stats` | **按天聚合统计表**（`day_start_unix` + `model_name` 复合主键，`requests`/`input_tokens`/`output_tokens`/`use_time_ms`，仅成功口径 2xx 且 error 空）；`insert_log` 同事务 upsert（同日累加、跨日新建）；**不存费用**（统计时按 `model_pricing` 现算，改价可重算）；**永不清洗**——统计读此表，不随 `request_logs` 保留策略裁剪；旧库升级由 `Stores::new` 幂等回填（表空时锁内清空+从明细重建，失败仅 warn 下次重试） |
 | `model_pricing` | OpenRouter 同步的模型单价（`model_name` 主键、`prompt_price_per_mtok`/`completion_price_per_mtok` 每百万 token 美元、`updated_at`）；未覆盖模型无行（视为 0 价）；同步为全量 replace（upsert + 清理过期）。**无手动同步入口**：手动 IPC（`sync_pricing_now`/`get_model_pricing`）与设置页模块已移除，同步仅由 `perform_due_price_syncs`（启动 5 分钟后 + 每小时检查，从未同步或超过 `SYNC_STALE_AFTER_SECS`=24h 才拉取，失败仅 warning）自动驱动；不得重新引入手动同步命令或界面。**解析契约**：`parse_openrouter_pricing`（`src-tauri/src/domain/pricing.rs`）的 `parse_price_value` 必须同时接受 JSON number 与 JSON string（OpenRouter 实际返回字符串如 `"0.00000125"`），字符串先 `trim` 再 `parse::<f64>()`，仅接受有限数；缺失/空串/非法值回退 `0.0` 且**单字段失败不影响同模型另一字段**；每 token 价 ×1e6 后 `round6` 存为每百万 token 美元。禁止改回只读 `as_f64()`——曾因只读 number 导致全库价格为 0、历史费用统计恒为 0 |
 
 **已移除**：
@@ -131,6 +132,14 @@ stores.purge_logs(LOG_RETENTION_DAYS, LOG_MAX_ROWS)?;
 ```
 
 默认路径同时应用时间窗口和最新条数上限，UI 从 IPC 响应展示当前策略。
+
+### 统计语义：统计读聚合表，不随明细裁剪
+
+- 首页总计 / 热力图 / 折线图（`request_overview`、`request_daily_counts`、`request_daily_stats`）**只读 `daily_request_stats`**，不再从 `request_logs` 明细现算——明细保留策略（7 天/1 万条）只裁剪明细，**不得让统计数字回退**（曾因明细触顶导致首页总计 +1/-1 相抵不涨、数字不涨反降）。
+- `insert_log` 与聚合 upsert 同锁同闭包：明细写入成功且属成功口径（2xx 且 error 空）才累加当日聚合，失败/带 error 请求不累计；`notify_changed()` 仍在闭包外。
+- `request_hourly_stats`（今日 24 小时）与 `request_stats_between`（日志页分类统计）**保持从今日明细现算**：purge 按 `id DESC` 保留最新，今日明细恒完整；聚合表只有天粒度，不承载小时/失败分类。
+- `clear_logs` 只清明细，保留聚合历史（清空日志列表不应抹掉累计统计）。
+- 旧库升级回填：`Stores::new` 在锁内幂等回填（表空才执行：DELETE 后从现存明细成功行重建，事务包裹，失败整体回滚仅 warn）。回填只能覆盖现存明细，已被 purge 的历史不可恢复，从回填时刻起只增不减。
 
 ---
 

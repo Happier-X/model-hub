@@ -88,7 +88,7 @@ pub struct LogPurgeResult {
     pub cutoff_unix: i64,
 }
 
-    /// 按日时间序列统计行（成功口径，含费用）。
+/// 按日时间序列统计行（成功口径，含费用）。
 #[derive(Debug, Clone, serde::Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct DailyStatRow {
@@ -130,7 +130,6 @@ struct SuccessCostRow {
     input_cost: f64,
     output_cost: f64,
 }
-
 
 /// 统计总览单行（总计 / 今日共用）。仅成功请求口径（2xx 且 error 为空）。
 #[derive(Debug, Clone, Serialize)]
@@ -238,6 +237,11 @@ fn request_logs_has_column(conn: &rusqlite::Connection, name: &str) -> Result<bo
     .map_err(|e| AppError::Database(format!("检查 request_logs.{name} 失败: {e}")))
 }
 
+/// 成功口径：2xx 且 error 为空（与所有统计查询的 WHERE 判定逐字等价）。
+fn is_success_log(log: &NewRequestLog) -> bool {
+    (200..=299).contains(&log.status_code) && log.error.is_empty()
+}
+
 impl Stores {
     pub fn insert_log(&self, log: NewRequestLog) -> Result<(), AppError> {
         let time = chrono::Utc::now().timestamp();
@@ -330,6 +334,28 @@ impl Stores {
                         log.failover_from,
                         log.failover_to,
                         log.failover_reason
+                    ],
+                )
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            }
+            // 按天聚合（仅成功口径）：统计不再从可裁剪的明细现算；明细与聚合同事务写入，天然一致。
+            if is_success_log(&log) {
+                let day = local_day_start_unix(time);
+                conn.execute(
+                    "INSERT INTO daily_request_stats
+                     (day_start_unix, model_name, requests, input_tokens, output_tokens, use_time_ms)
+                     VALUES (?1, ?2, 1, ?3, ?4, ?5)
+                     ON CONFLICT(day_start_unix, model_name) DO UPDATE SET
+                       requests = requests + 1,
+                       input_tokens = input_tokens + excluded.input_tokens,
+                       output_tokens = output_tokens + excluded.output_tokens,
+                       use_time_ms = use_time_ms + excluded.use_time_ms",
+                    params![
+                        day,
+                        log.upstream_model,
+                        log.input_tokens,
+                        log.output_tokens,
+                        log.use_time_ms
                     ],
                 )
                 .map_err(|e| AppError::Database(e.to_string()))?;
@@ -489,6 +515,71 @@ impl Stores {
         }
     }
 
+    /// 幂等回填聚合表：仅当 `daily_request_stats` 为空时执行（锁内：清空 → 扫描
+    /// `request_logs` 成功口径行重建）。失败整体回滚，表保持空，下次启动重试。
+    /// 旧库升级后首次启动由 `Stores::new` 调用。
+    pub fn backfill_daily_stats(&self) -> Result<(), AppError> {
+        self.with_conn(|conn| {
+            let count: i64 = conn
+                .query_row("SELECT COUNT(*) FROM daily_request_stats", [], |row| row.get(0))
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            if count > 0 {
+                return Ok(());
+            }
+            // 先在锁内把明细（成功口径）聚合到内存，再开短事务写入，失败整体回滚。
+            let mut acc: std::collections::HashMap<(i64, String), (i64, i64, i64, i64)> =
+                std::collections::HashMap::new();
+            {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT time, upstream_model, input_tokens, output_tokens, use_time_ms
+                         FROM request_logs
+                         WHERE status_code BETWEEN 200 AND 299
+                           AND (error IS NULL OR length(error) = 0)",
+                    )
+                    .map_err(|e| AppError::Database(e.to_string()))?;
+                let rows = stmt
+                    .query_map([], |row| {
+                        Ok((
+                            row.get::<_, i64>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, i64>(2)?,
+                            row.get::<_, i64>(3)?,
+                            row.get::<_, i64>(4)?,
+                        ))
+                    })
+                    .map_err(|e| AppError::Database(e.to_string()))?;
+                for r in rows {
+                    let (time, model, input, output, use_time) =
+                        r.map_err(|e| AppError::Database(e.to_string()))?;
+                    let day = local_day_start_unix(time);
+                    let entry = acc.entry((day, model)).or_insert((0, 0, 0, 0));
+                    entry.0 += 1;
+                    entry.1 += input;
+                    entry.2 += output;
+                    entry.3 += use_time;
+                }
+            }
+            let tx = conn
+                .unchecked_transaction()
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            // 清掉极端并发下已写入的行，保证重建干净（表空检查与重建在同一把锁内）。
+            tx.execute("DELETE FROM daily_request_stats", [])
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            for ((day, model), (requests, input, output, use_time)) in acc {
+                tx.execute(
+                    "INSERT OR REPLACE INTO daily_request_stats
+                     (day_start_unix, model_name, requests, input_tokens, output_tokens, use_time_ms)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![day, model, requests, input, output, use_time],
+                )
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            }
+            tx.commit()
+                .map_err(|e| AppError::Database(e.to_string()))
+        })
+    }
+
     /// 本地自然日 00:00（含）至次日 00:00（不含）的请求聚合。
     pub fn request_stats_today(&self) -> Result<RequestStats, AppError> {
         let (start_ts, end_ts) = local_day_bounds_unix();
@@ -505,24 +596,24 @@ impl Stores {
     }
 
     fn overview_row(&self, range: Option<(i64, i64)>) -> Result<OverviewRow, AppError> {
+        // 从按天聚合表读取：不再受 request_logs 保留策略（7 天/1 万条）裁剪影响，
+        // 费用按模型单价现算（与既有口径一致：token × 单价 / 1e6）。
         let mut sql = String::from(
             "SELECT
-                COUNT(*) AS requests,
-                COALESCE(SUM(l.input_tokens), 0),
-                COALESCE(SUM(l.output_tokens), 0),
-                COALESCE(SUM(l.use_time_ms), 0),
-                COALESCE(SUM(CAST(l.input_tokens AS REAL) * COALESCE(p.prompt_price_per_mtok, 0) / 1000000.0), 0),
-                COALESCE(SUM(CAST(l.output_tokens AS REAL) * COALESCE(p.completion_price_per_mtok, 0) / 1000000.0), 0)
-             FROM request_logs l
+                COALESCE(SUM(s.requests), 0),
+                COALESCE(SUM(s.input_tokens), 0),
+                COALESCE(SUM(s.output_tokens), 0),
+                COALESCE(SUM(s.use_time_ms), 0),
+                COALESCE(SUM(CAST(s.input_tokens AS REAL) * COALESCE(p.prompt_price_per_mtok, 0) / 1000000.0), 0),
+                COALESCE(SUM(CAST(s.output_tokens AS REAL) * COALESCE(p.completion_price_per_mtok, 0) / 1000000.0), 0)
+             FROM daily_request_stats s
              LEFT JOIN model_pricing p
-               ON l.upstream_model = p.model_name
-               OR p.model_name LIKE '%/' || l.upstream_model
-             WHERE l.status_code BETWEEN 200 AND 299
-               AND (l.error IS NULL OR length(l.error) = 0)",
+               ON s.model_name = p.model_name
+               OR p.model_name LIKE '%/' || s.model_name",
         );
         let mut params: Vec<rusqlite::types::Value> = Vec::new();
         if let Some((start_ts, end_ts)) = range {
-            sql.push_str(" AND l.time >= ?1 AND l.time < ?2");
+            sql.push_str(" WHERE s.day_start_unix >= ?1 AND s.day_start_unix < ?2");
             params.push(rusqlite::types::Value::Integer(start_ts));
             params.push(rusqlite::types::Value::Integer(end_ts));
         }
@@ -602,37 +693,34 @@ impl Stores {
         })
     }
 
-/// 按本地自然日聚合过去 `days` 天（含今日）的**成功请求**（2xx 且 error 为空）总量。
+    /// 按本地自然日聚合过去 `days` 天（含今日）的**成功请求**（2xx 且 error 为空）总量。
     /// 仅返回 `count > 0` 的日期，按 `day_start_unix` 升序。全项目统计统一按成功口径。
     pub fn request_daily_counts(&self, days: u32) -> Result<RequestDailyCounts, AppError> {
         let days = days.clamp(1, DAILY_COUNTS_MAX_DAYS);
         let (start_unix, end_unix) = daily_window_bounds(days);
+        // 读聚合表：窗口即本地日边界，直接与 day_start_unix 比较；不受明细保留策略裁剪影响。
         self.with_conn(|conn| {
             let mut stmt = conn
                 .prepare(
-                    "SELECT time FROM request_logs
-                     WHERE time >= ?1 AND time < ?2
-                       AND status_code BETWEEN 200 AND 299
-                       AND (error IS NULL OR length(error) = 0)",
+                    "SELECT day_start_unix, SUM(requests) AS requests
+                     FROM daily_request_stats
+                     WHERE day_start_unix >= ?1 AND day_start_unix < ?2
+                     GROUP BY day_start_unix
+                     ORDER BY day_start_unix",
                 )
                 .map_err(|e| AppError::Database(e.to_string()))?;
-            let mut buckets: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
             let rows = stmt
-                .query_map(params![start_unix, end_unix], |row| row.get::<_, i64>(0))
-                .map_err(|e| AppError::Database(e.to_string()))?;
-            for time in rows {
-                let time = time.map_err(|e| AppError::Database(e.to_string()))?;
-                let bucket = local_day_start_unix(time);
-                *buckets.entry(bucket).or_insert(0) += 1;
-            }
-            let mut days_out: Vec<DailyCount> = buckets
-                .into_iter()
-                .map(|(day_start_unix, count)| DailyCount {
-                    day_start_unix,
-                    count,
+                .query_map(params![start_unix, end_unix], |row| {
+                    Ok(DailyCount {
+                        day_start_unix: row.get(0)?,
+                        count: row.get(1)?,
+                    })
                 })
-                .collect();
-            days_out.sort_by_key(|d| d.day_start_unix);
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            let mut days_out: Vec<DailyCount> = Vec::new();
+            for r in rows {
+                days_out.push(r.map_err(|e| AppError::Database(e.to_string()))?);
+            }
             Ok(RequestDailyCounts {
                 days: days_out,
                 start_unix,
@@ -646,11 +734,13 @@ impl Stores {
     pub fn request_daily_stats(&self, days: u32) -> Result<Vec<DailyStatRow>, AppError> {
         let days = days.clamp(1, DAILY_COUNTS_MAX_DAYS);
         let (start_unix, end_unix) = daily_window_bounds(days);
-        let rows = self.success_rows_in_range(start_unix, end_unix)?;
+        // 读聚合表（已按日+模型聚合），费用按当前单价现算；不受明细保留策略裁剪影响。
+        let rows = self.daily_stats_in_range(start_unix, end_unix)?;
+        // 同一天可能有多模型行，合并累加。
         let mut buckets: std::collections::HashMap<i64, DailyStatRow> =
             std::collections::HashMap::new();
         for r in rows {
-            let bucket = local_day_start_unix(r.time);
+            let bucket = r.day_start_unix;
             let entry = buckets.entry(bucket).or_insert(DailyStatRow {
                 day_start_unix: bucket,
                 requests: 0,
@@ -658,29 +748,63 @@ impl Stores {
                 output_tokens: 0,
                 cost: 0.0,
             });
-            entry.requests += 1;
+            entry.requests += r.requests;
             entry.input_tokens += r.input_tokens;
             entry.output_tokens += r.output_tokens;
-            entry.cost += r.input_cost + r.output_cost;
+            entry.cost += r.cost;
         }
         // 补全空日（含今日），按日升序。
         let mut out: Vec<DailyStatRow> = Vec::with_capacity(days as usize);
         let mut day = start_unix;
         while day < end_unix {
-            out.push(
-                buckets
-                    .remove(&day)
-                    .unwrap_or(DailyStatRow {
-                        day_start_unix: day,
-                        requests: 0,
-                        input_tokens: 0,
-                        output_tokens: 0,
-                        cost: 0.0,
-                    }),
-            );
+            out.push(buckets.remove(&day).unwrap_or(DailyStatRow {
+                day_start_unix: day,
+                requests: 0,
+                input_tokens: 0,
+                output_tokens: 0,
+                cost: 0.0,
+            }));
             day += 86_400;
         }
         Ok(out)
+    }
+
+    /// 按日聚合行（含费用，按模型单价现算），升序。
+    fn daily_stats_in_range(
+        &self,
+        start_unix: i64,
+        end_unix: i64,
+    ) -> Result<Vec<DailyStatRow>, AppError> {
+        self.with_conn(|conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT s.day_start_unix, s.requests, s.input_tokens, s.output_tokens,
+                            CAST(s.input_tokens AS REAL) * COALESCE(p.prompt_price_per_mtok, 0) / 1000000.0,
+                            CAST(s.output_tokens AS REAL) * COALESCE(p.completion_price_per_mtok, 0) / 1000000.0
+                     FROM daily_request_stats s
+                     LEFT JOIN model_pricing p
+                       ON s.model_name = p.model_name
+                       OR p.model_name LIKE '%/' || s.model_name
+                     WHERE s.day_start_unix >= ?1 AND s.day_start_unix < ?2
+                     ORDER BY s.day_start_unix",
+                )
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            let rows = stmt
+                .query_map(params![start_unix, end_unix], |row| {
+                    let input_cost: f64 = row.get(4)?;
+                    let output_cost: f64 = row.get(5)?;
+                    Ok(DailyStatRow {
+                        day_start_unix: row.get(0)?,
+                        requests: row.get(1)?,
+                        input_tokens: row.get(2)?,
+                        output_tokens: row.get(3)?,
+                        cost: input_cost + output_cost,
+                    })
+                })
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| AppError::Database(e.to_string()))
+        })
     }
 
     /// 今日 0..=23 的**成功请求**按小时时间序列（含 token 与费用）。
@@ -868,9 +992,9 @@ mod tests {
                 } else {
                     "5xx".into()
                 },
-            input_tokens: 0,
-                    output_tokens: 0,
-                })
+                input_tokens: 0,
+                output_tokens: 0,
+            })
             .unwrap();
     }
 
@@ -1005,6 +1129,37 @@ mod tests {
             .unwrap();
     }
 
+    /// 直接写聚合表一行（统计读聚合表后的事实来源；测试构造数据用）。
+    fn insert_stats_day(
+        stores: &Stores,
+        day_start_unix: i64,
+        model: &str,
+        requests: i64,
+        input_tokens: i64,
+        output_tokens: i64,
+        use_time_ms: i64,
+    ) {
+        stores
+            .with_conn(|conn| {
+                conn.execute(
+                    "INSERT INTO daily_request_stats
+                     (day_start_unix, model_name, requests, input_tokens, output_tokens, use_time_ms)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![
+                        day_start_unix,
+                        model,
+                        requests,
+                        input_tokens,
+                        output_tokens,
+                        use_time_ms
+                    ],
+                )
+                .map_err(|e| AppError::Database(e.to_string()))?;
+                Ok(())
+            })
+            .unwrap();
+    }
+
     #[test]
     fn insert_log_dual_writes_legacy_request_model_name_columns() {
         let dir = tempdir().unwrap();
@@ -1039,9 +1194,9 @@ mod tests {
                 failover_from: String::new(),
                 failover_to: String::new(),
                 failover_reason: String::new(),
-            input_tokens: 0,
-                    output_tokens: 0,
-                })
+                input_tokens: 0,
+                output_tokens: 0,
+            })
             .expect("legacy NOT NULL 列应被双写");
 
         let page = stores.list_logs(LogQuery::default()).unwrap();
@@ -1268,7 +1423,10 @@ mod tests {
         seed(&stores, "g", 200, "", "a", "b");
         let result = stores.request_daily_counts(365).unwrap();
         let total: i64 = result.days.iter().map(|d| d.count).sum();
-        assert_eq!(total, 2, "只计成功请求（2xx 且 error 空）；失败/故障转移不计");
+        assert_eq!(
+            total, 2,
+            "只计成功请求（2xx 且 error 空）；失败/故障转移不计"
+        );
         let today_bucket = local_day_start_unix(chrono::Local::now().timestamp());
         let bucket = result
             .days
@@ -1283,10 +1441,9 @@ mod tests {
     fn daily_counts_buckets_split_across_days() {
         let (_dir, stores) = setup();
         let today_start = local_day_start_unix(chrono::Local::now().timestamp());
-        // 今天 2 条、昨天 1 条：手插不同 time 绕过 insert_log 的 Utc::now。
-        insert_at(&stores, today_start + 10, 200, "", "", "");
-        insert_at(&stores, today_start + 20, 200, "", "", "");
-        insert_at(&stores, today_start - 86_400 + 10, 200, "", "", "");
+        // 今天 2 条、昨天 1 条：直接写聚合表（统计事实来源）。
+        insert_stats_day(&stores, today_start, "m", 2, 0, 0, 0);
+        insert_stats_day(&stores, today_start - 86_400, "m", 1, 0, 0, 0);
         let result = stores.request_daily_counts(365).unwrap();
         assert_eq!(result.days.len(), 2, "应有今天和昨天两个桶");
         // 升序：第一个是昨天，第二个是今天
@@ -1299,9 +1456,9 @@ mod tests {
     fn daily_counts_window_excludes_out_of_range() {
         let (_dir, stores) = setup();
         let today_start = local_day_start_unix(chrono::Local::now().timestamp());
-        insert_at(&stores, today_start + 10, 200, "", "", "");
-        // 400 天前，落在默认 365 天窗口之外
-        insert_at(&stores, today_start - 400 * 86_400, 200, "", "", "");
+        insert_stats_day(&stores, today_start, "m", 1, 0, 0, 0);
+        // 400 天前，落在默认 365 天窗口之外（聚合行也要被窗口过滤）
+        insert_stats_day(&stores, today_start - 400 * 86_400, "m", 5, 0, 0, 0);
         let result = stores.request_daily_counts(365).unwrap();
         let total: i64 = result.days.iter().map(|d| d.count).sum();
         assert_eq!(total, 1, "窗口外的记录不计入");
@@ -1391,14 +1548,10 @@ mod tests {
     fn overview_today_only_includes_local_day() {
         let (_dir, stores) = setup();
         let (start, end) = local_day_bounds_unix();
-        let now = chrono::Utc::now().timestamp();
-        // 今天（范围内）
-        insert_at(&stores, start + 60, 200, "", "", "");
-        // 昨天（范围外）
-        insert_at(&stores, start - 1, 200, "", "", "");
-        // 明天（范围外）
-        insert_at(&stores, end + 1, 200, "", "", "");
-        assert!(start <= now && now < end);
+        // 今天（范围内）、昨天与明天（范围外）：直接写聚合表。
+        insert_stats_day(&stores, start, "m", 1, 0, 0, 0);
+        insert_stats_day(&stores, start - 86_400, "m", 1, 0, 0, 0);
+        insert_stats_day(&stores, end, "m", 1, 0, 0, 0);
 
         let overview = stores.request_overview().unwrap();
         assert_eq!(overview.total.requests, 3);
@@ -1408,23 +1561,11 @@ mod tests {
     #[test]
     fn overview_costs_aggregate_by_model_price() {
         let (_dir, stores) = setup();
-        // 直接 SQL 造数：日志带 token 与模型名；单价表按模型配价。
+        // 直接写聚合表：token 与模型名；单价表按模型配价。
+        insert_stats_day(&stores, 1, "deepseek-chat", 1, 1_000_000, 500_000, 0);
+        insert_stats_day(&stores, 2, "unpriced-model", 1, 1000, 1000, 0);
         stores
             .with_conn(|conn| {
-                conn.execute(
-                    "INSERT INTO request_logs
-                     (time, group_name, provider_name, upstream_model, status_code, use_time_ms, input_tokens, output_tokens, error, failover_from, failover_to, failover_reason)
-                     VALUES (1, 'g', 'p', 'deepseek-chat', 200, 5, 1000000, 500000, '', '', '', '')",
-                    [],
-                )
-                .map_err(|e| AppError::Database(e.to_string()))?;
-                conn.execute(
-                    "INSERT INTO request_logs
-                     (time, group_name, provider_name, upstream_model, status_code, use_time_ms, input_tokens, output_tokens, error, failover_from, failover_to, failover_reason)
-                     VALUES (2, 'g', 'p', 'unpriced-model', 200, 5, 1000, 1000, '', '', '', '')",
-                    [],
-                )
-                .map_err(|e| AppError::Database(e.to_string()))?;
                 conn.execute(
                     "INSERT INTO model_pricing (model_name, prompt_price_per_mtok, completion_price_per_mtok, updated_at)
                      VALUES ('deepseek/deepseek-chat', 1.25, 4.25, 0)",
@@ -1437,8 +1578,16 @@ mod tests {
 
         let overview = stores.request_overview().unwrap();
         // deepseek-chat 别名匹配：输入 1M × 1.25/1M = 1.25；输出 0.5M × 4.25/1M = 2.125
-        assert!((overview.total.input_cost - 1.25).abs() < 1e-9, "input_cost={}", overview.total.input_cost);
-        assert!((overview.total.output_cost - 2.125).abs() < 1e-9, "output_cost={}", overview.total.output_cost);
+        assert!(
+            (overview.total.input_cost - 1.25).abs() < 1e-9,
+            "input_cost={}",
+            overview.total.input_cost
+        );
+        assert!(
+            (overview.total.output_cost - 2.125).abs() < 1e-9,
+            "output_cost={}",
+            overview.total.output_cost
+        );
         assert!((overview.total.cost - 3.375).abs() < 1e-9);
         // 无价模型贡献 0，但请求计入
         assert_eq!(overview.total.requests, 2);
@@ -1470,13 +1619,9 @@ mod tests {
     #[test]
     fn daily_counts_only_include_success_requests() {
         let (_dir, stores) = setup();
-        let now = chrono::Utc::now().timestamp();
-        // 成功请求 2 条（同日不同次）
-        insert_at(&stores, now - 3600, 200, "", "", "");
-        insert_at(&stores, now - 1800, 200, "", "", "");
-        // 失败请求（4xx / 5xx / 有 error）不应计入
-        insert_at(&stores, now - 900, 500, "", "", "");
-        insert_at(&stores, now - 450, 200, "bad", "", "");
+        // 聚合表只由 insert_log 按成功口径写入；直接写 2 行同天聚合（等价于 2 次成功写入）。
+        let today_start = local_day_start_unix(chrono::Local::now().timestamp());
+        insert_stats_day(&stores, today_start, "m", 2, 0, 0, 0);
 
         let result = stores.request_daily_counts(1).unwrap();
         assert_eq!(result.days.len(), 1);
@@ -1486,7 +1631,7 @@ mod tests {
     #[test]
     fn daily_stats_buckets_and_computes_cost() {
         let (_dir, stores) = setup();
-        // 单价表：deepseek-chat 别名匹配（log upstream_model 为 deepseek-chat）。
+        // 单价表：deepseek-chat 别名匹配（聚合表 model_name 为 deepseek-chat）。
         stores
             .replace_pricing(&[crate::domain::pricing::ModelPrice {
                 model_name: "deepseek/deepseek-chat".into(),
@@ -1494,12 +1639,10 @@ mod tests {
                 completion_price_per_mtok: 5.0,
             }])
             .unwrap();
-        let now = chrono::Utc::now().timestamp();
-        // 今天 2 条成功（不同时刻，同桶）：1 条 deepseek-chat（100 in / 200 out），1 条无价模型。
-        insert_at_ex(&stores, now - 3600, 200, "", "", "", "deepseek-chat", 100, 200);
-        insert_at_ex(&stores, now - 1800, 200, "", "", "", "free-model", 10, 20);
-        // 失败不计。
-        insert_at_ex(&stores, now - 900, 500, "", "", "", "deepseek-chat", 999, 999);
+        let today_start = local_day_start_unix(chrono::Local::now().timestamp());
+        // 今天 2 条成功（同桶）：1 条 deepseek-chat（100 in / 200 out），1 条无价模型。
+        insert_stats_day(&stores, today_start, "deepseek-chat", 1, 100, 200, 0);
+        insert_stats_day(&stores, today_start, "free-model", 1, 10, 20, 0);
 
         let stats = stores.request_daily_stats(30).unwrap();
         assert_eq!(stats.len(), 30, "恰好补全 30 天");
@@ -1529,5 +1672,233 @@ mod tests {
         assert_eq!(stats.iter().map(|h| h.requests).sum::<i64>(), 2, "失败不计");
         let local_hour = ((now - local_day_start_unix(now)) / 3600) as usize;
         assert_eq!(stats[local_hour].requests, 2);
+    }
+
+    #[test]
+    fn insert_log_accumulates_daily_stats_for_success_only() {
+        let (_dir, stores) = setup();
+        seed(&stores, "g", 200, "", "", "");
+        seed(&stores, "g", 200, "", "", "");
+        // 失败（5xx）与 2xx 带 error 不计入聚合。
+        seed(&stores, "g", 500, "bad", "", "");
+        seed(&stores, "g", 200, "structured-error", "", "");
+
+        stores
+            .with_conn(|conn| {
+                let (requests, input, output, use_time): (i64, i64, i64, i64) = conn
+                    .query_row(
+                        "SELECT requests, input_tokens, output_tokens, use_time_ms
+                         FROM daily_request_stats",
+                        [],
+                        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                    )
+                    .map_err(|e| AppError::Database(e.to_string()))?;
+                assert_eq!(requests, 2, "仅成功请求累计");
+                assert_eq!(input, 0);
+                assert_eq!(output, 0);
+                assert_eq!(use_time, 2, "每条 seed use_time_ms=1，两条共 2");
+                Ok(())
+            })
+            .unwrap();
+
+        // overview 与聚合一致：total=2。
+        let overview = stores.request_overview().unwrap();
+        assert_eq!(overview.total.requests, 2);
+        assert_eq!(overview.today.requests, 2);
+    }
+
+    #[test]
+    fn overview_total_survives_purge() {
+        let (_dir, stores) = setup();
+        // 核心回归：统计读聚合表，purge 删明细不影响总计。
+        let now = chrono::Utc::now().timestamp();
+        stores
+            .insert_log(NewRequestLog {
+                group_name: "g".into(),
+                provider_name: "p".into(),
+                upstream_model: "m".into(),
+                status_code: 200,
+                use_time_ms: 10,
+                input_tokens: 100,
+                output_tokens: 20,
+                ..Default::default()
+            })
+            .unwrap();
+        // 一条 8 天前（会被 purge 按时间窗口删除）的明细：走 insert_log 无法伪造时间，手插明细后回填。
+        insert_at(&stores, now - 8 * 86_400, 200, "", "", "");
+        // 清空聚合表（回填仅在表空时执行），让两条明细一起重建。
+        stores
+            .with_conn(|conn| {
+                conn.execute("DELETE FROM daily_request_stats", [])
+                    .map_err(|e| AppError::Database(e.to_string()))?;
+                Ok(())
+            })
+            .unwrap();
+        stores.backfill_daily_stats().unwrap();
+
+        let before = stores.request_overview().unwrap();
+        assert_eq!(before.total.requests, 2);
+        // insert_log 100 in / 10ms + 手插明细（insert_at 默认 10 in / 1ms）
+        assert_eq!(before.total.input_tokens, 110);
+        assert_eq!(before.total.use_time_ms, 11);
+
+        let purged = stores.purge_expired_logs().unwrap();
+        assert_eq!(purged.deleted, 1, "8 天前明细应被 purge 删除");
+
+        let after = stores.request_overview().unwrap();
+        assert_eq!(after.total.requests, 2, "purge 后总计不得减少");
+        assert_eq!(after.total.input_tokens, 110);
+        assert_eq!(after.total.use_time_ms, 11);
+    }
+
+    #[test]
+    fn backfill_rebuilds_from_details_and_is_idempotent() {
+        let (_dir, stores) = setup();
+        let now = chrono::Utc::now().timestamp();
+        let today_start = local_day_start_unix(now);
+        // 手插明细（绕过 insert_log，模拟旧库只有明细、聚合表为空）。
+        insert_at_ex(&stores, today_start + 60, 200, "", "", "", "m1", 100, 20);
+        insert_at_ex(&stores, today_start + 120, 200, "", "", "", "m2", 10, 5);
+        insert_at_ex(&stores, today_start + 180, 500, "", "", "", "m1", 999, 999);
+        insert_at_ex(
+            &stores,
+            today_start - 86_400 + 60,
+            200,
+            "",
+            "",
+            "",
+            "m1",
+            50,
+            10,
+        );
+        // 清空聚合表，模拟旧库首次升级（Stores::new 回填发生在数据写入之前）。
+        stores
+            .with_conn(|conn| {
+                conn.execute("DELETE FROM daily_request_stats", [])
+                    .map_err(|e| AppError::Database(e.to_string()))?;
+                Ok(())
+            })
+            .unwrap();
+
+        stores.backfill_daily_stats().unwrap();
+
+        // 成功口径：今天 2 条（m1 100/20 + m2 10/5）、昨天 1 条（m1 50/10）；失败不计。
+        let result = stores.request_daily_counts(365).unwrap();
+        let total: i64 = result.days.iter().map(|d| d.count).sum();
+        assert_eq!(total, 3);
+        let today = result
+            .days
+            .iter()
+            .find(|d| d.day_start_unix == today_start)
+            .expect("今天应有桶");
+        assert_eq!(today.count, 2);
+
+        // 幂等：再次回填（表非空）不重复累加。
+        stores.backfill_daily_stats().unwrap();
+        let again = stores.request_daily_counts(365).unwrap();
+        let total2: i64 = again.days.iter().map(|d| d.count).sum();
+        assert_eq!(total2, 3, "重复回填不得翻倍");
+
+        // 回填后增量写入共存：insert_log 的今日写入在回填行上继续累加。
+        stores
+            .insert_log(NewRequestLog {
+                group_name: "g".into(),
+                provider_name: "p".into(),
+                upstream_model: "m1".into(),
+                status_code: 200,
+                use_time_ms: 1,
+                ..Default::default()
+            })
+            .unwrap();
+        let final_total: i64 = stores
+            .request_daily_counts(365)
+            .unwrap()
+            .days
+            .iter()
+            .map(|d| d.count)
+            .sum();
+        assert_eq!(final_total, 4, "回填后增量写入继续累加");
+    }
+
+    #[test]
+    fn daily_counts_and_daily_stats_match_details() {
+        let (_dir, stores) = setup();
+        // insert_log 同时写明细与聚合；对账「聚合读」与「明细现算」。
+        stores
+            .insert_log(NewRequestLog {
+                group_name: "g".into(),
+                provider_name: "p".into(),
+                upstream_model: "m1".into(),
+                status_code: 200,
+                use_time_ms: 10,
+                input_tokens: 100,
+                output_tokens: 20,
+                ..Default::default()
+            })
+            .unwrap();
+        stores
+            .insert_log(NewRequestLog {
+                group_name: "g".into(),
+                provider_name: "p".into(),
+                upstream_model: "m2".into(),
+                status_code: 200,
+                use_time_ms: 5,
+                input_tokens: 30,
+                output_tokens: 7,
+                ..Default::default()
+            })
+            .unwrap();
+        stores
+            .insert_log(NewRequestLog {
+                group_name: "g".into(),
+                provider_name: "p".into(),
+                upstream_model: "m1".into(),
+                status_code: 404,
+                use_time_ms: 1,
+                ..Default::default()
+            })
+            .unwrap();
+
+        // 明细口径（成功）
+        let (detail_count, detail_in, detail_out): (i64, i64, i64) = stores
+            .with_conn(|conn| {
+                conn.query_row(
+                    "SELECT COUNT(*), COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0)
+                     FROM request_logs
+                     WHERE status_code BETWEEN 200 AND 299
+                       AND (error IS NULL OR length(error) = 0)",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )
+                .map_err(|e| AppError::Database(e.to_string()))
+            })
+            .unwrap();
+
+        // 聚合口径
+        let agg_count: i64 = stores
+            .request_daily_counts(365)
+            .unwrap()
+            .days
+            .iter()
+            .map(|d| d.count)
+            .sum();
+        let today = stores
+            .request_daily_stats(30)
+            .unwrap()
+            .last()
+            .unwrap()
+            .clone();
+
+        assert_eq!(detail_count, agg_count, "daily_counts 与明细成功口径一致");
+        assert_eq!(detail_count, today.requests);
+        assert_eq!(detail_in, today.input_tokens);
+        assert_eq!(detail_out, today.output_tokens);
+        assert_eq!(today.cost, 0.0, "无单价时费用为 0");
+
+        // overview 与明细口径一致
+        let overview = stores.request_overview().unwrap();
+        assert_eq!(overview.total.requests, detail_count);
+        assert_eq!(overview.total.input_tokens, detail_in);
+        assert_eq!(overview.total.output_tokens, detail_out);
     }
 }

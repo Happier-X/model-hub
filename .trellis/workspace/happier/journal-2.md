@@ -491,3 +491,33 @@ model_pricing 单价表 + OpenRouter 自动同步（后台 24h 到期检查 + �
 - ⚠️ 全量 cargo test 有 6 个失败全在 `domain::log::tests`（daily_counts/overview_costs），属**并发任务 stats-daily-aggregate**（聚合表改动未适配既有测试），与本任务无关，由该任务跟进。
 - 交叉引用 0 残留；工作区隔离确认（migrate.rs/log.rs/mod.rs 属并发任务，未混入）。
 - spec：database-guidelines.md model_pricing 行补充「无手动同步入口，仅自动同步，禁止重新引入手动命令/界面」。
+
+## session — 首页统计改按天聚合表（08-11-stats-daily-aggregate）
+
+### 需求与根因
+- 用户反馈：首页四卡片"不实时更新"，且请求次数过一会儿反而变少。
+- 根因（实测真实库）：`request_logs` 保留策略（`LOG_RETENTION_DAYS=7` 天 / `LOG_MAX_ROWS=10000` 条）与首页"全历史总计"统计口径冲突——真实库恰好 10000 条触顶，每写一条新日志 purge 就删最老一条，总计 +1/-1 相抵不涨；7 天窗口滚动导致老数据批量消失、数字下降。实测成功口径明细仅剩 465 条（10000 条明细中 95% 是失败请求）。
+- 历史背景：session 43/52 用户明确要"总计"卡片 + 事件驱动实时刷新；当时数据量小（482 条）未触顶，量级上来后暴露设计矛盾。
+
+### 方案（用户确认）
+- 新增按天聚合表 `daily_request_stats`（`(day_start_unix, model_name)` 复合主键：requests/input_tokens/output_tokens/use_time_ms，仅成功口径），**不落费用**（按 `model_pricing` 现算，改价可重算历史）。
+- `insert_log` 同事务 upsert 当日聚合（同日累加、跨日新建）；`Stores::new` 幂等回填（表空时锁内清空+从明细重建，失败仅 warn 下次重试）。
+- 统计读链路改聚合表：`overview_row`（total/today）、`request_daily_counts`、`request_daily_stats`；`request_hourly_stats`（今日小时）与 `request_stats_between`（日志页分类）保持明细现算（今日明细在 10000 上限下恒完整）。
+- 前端零改动（4 个接口形状不变）；保留策略与 purge 触发点不变。
+
+### 实施
+- migrate.rs：`ensure_daily_request_stats_table` + 幂等测试（migrate 15 测试全绿）。
+- log.rs：`is_success_log`、insert_log 聚合 upsert、`backfill_daily_stats`、3 个统计查询改聚合表；新增 5 测试（insert_log 成功口径累加、purge 后 total 不降、回填幂等+增量共存、明细对账、migrate 幂等），改造 6 个既有测试（统计事实来源改为聚合表直接构造 `insert_stats_day`）。
+- mod.rs：`Stores::new` 挂回填（best-effort）。
+- 修复过程中发现并修正：`request_daily_stats` 多模型行 HashMap insert 覆盖 → 改累加。
+
+### 验证结果
+- `cargo test --lib` 154/154 全绿；`cargo check` ✓；`cargo build` 因运行中的应用锁住 model-hub.exe 无法重链（OS error 5），代码编译已验证。
+- trellis-check 子代理独立检查：AC1-AC8 全部 PASS，规格契约零破坏，前端零改动确认；2 个 Minor（spec 未更新、fmt 一处）已补齐。
+- 真实库只读对账（%APPDATA%/com.modelhub.desktop/gateway/data/data.db）：成功口径现存明细 465 条 / 20,589,656 in / 104,555 out / 3,177,305ms，按日分布 08-11:292、08-10:68、08-07:5、08-06:100；回填预期 15 行（(日,模型) 分组）。
+- **待用户运行时验收**：重启应用（新 exe 回填后）→ 首页总计 = 现存成功口径累计（465 起步），之后只增不减。
+
+### 注意（交付说明）
+- ⚠️ 回填只能覆盖现存明细（7 天/1 万条），**已被 purge 吞掉的历史成功请求无法恢复**：升级后总计从 465 起步（而非真实全量历史），自回填时刻起只增不减。
+- `clear_logs` 只清明细，保留聚合历史（清空日志列表不抹统计）。
+- 并发任务 pricing-auto-sync-remove-settings 期间曾出现编译红（其半成品删除 PricingInfo），已由其自行收尾提交；本任务工作区隔离确认（只碰 migrate.rs/log.rs/mod.rs）。

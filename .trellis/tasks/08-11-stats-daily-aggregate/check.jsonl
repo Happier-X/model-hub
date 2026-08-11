@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "检查聚合表字段/保留策略不变项、purge 后统计不降、费用现算与 JOIN 语义未被改变"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查 cargo test 全绿（含既有统计/ purge 用例未回归）、cargo build 通过、无外部网络依赖"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "检查回填失败与聚合 upsert 失败的降级路径不阻断代理/启动主流程"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "检查明细 → 聚合 → overview/daily/timeseries → 前端四卡片/热力图/折线图的完整数据流与前端零改动"}

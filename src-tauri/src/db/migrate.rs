@@ -134,7 +134,9 @@ fn ensure_provider_columns(conn: &Connection) -> Result<(), AppError> {
     // 最后一次成功同步时间（unix 秒，可空；NULL = 从未同步）。跨重启累计 24h 倒计时用。
     if !columns.contains("last_sync_at") {
         conn.execute("ALTER TABLE providers ADD COLUMN last_sync_at INTEGER", [])
-            .map_err(|e| AppError::Database(format!("添加 providers.last_sync_at 字段失败: {e}")))?;
+            .map_err(|e| {
+                AppError::Database(format!("添加 providers.last_sync_at 字段失败: {e}"))
+            })?;
     }
     Ok(())
 }
@@ -153,6 +155,26 @@ CREATE TABLE IF NOT EXISTS provider_models (
 "#,
     )
     .map_err(|e| AppError::Database(format!("创建 provider_models 表失败: {e}")))?;
+    Ok(())
+}
+
+/// 按天聚合统计表：请求日志写入时同步累加（仅成功口径），统计查询改读此表，
+/// 不再受 request_logs 保留策略（7 天/1 万条）裁剪影响。费用不落表，按 model_pricing 现算。
+fn ensure_daily_request_stats_table(conn: &Connection) -> Result<(), AppError> {
+    conn.execute_batch(
+        r#"
+CREATE TABLE IF NOT EXISTS daily_request_stats (
+  day_start_unix INTEGER NOT NULL,
+  model_name TEXT NOT NULL DEFAULT '',
+  requests INTEGER NOT NULL DEFAULT 0,
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  use_time_ms INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (day_start_unix, model_name)
+);
+"#,
+    )
+    .map_err(|e| AppError::Database(format!("创建 daily_request_stats 表失败: {e}")))?;
     Ok(())
 }
 
@@ -411,6 +433,7 @@ pub fn migrate(conn: &Connection) -> Result<(), AppError> {
     ensure_provider_columns(conn)?;
     ensure_provider_models_table(conn)?;
     ensure_model_pricing_table(conn)?;
+    ensure_daily_request_stats_table(conn)?;
     apply_version(conn, 1)?;
     Ok(())
 }
@@ -425,7 +448,13 @@ mod tests {
         conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
         migrate(&conn).unwrap();
         migrate(&conn).unwrap();
-        for table in ["providers", "groups", "group_items", "request_logs", "provider_models"] {
+        for table in [
+            "providers",
+            "groups",
+            "group_items",
+            "request_logs",
+            "provider_models",
+        ] {
             let n: i64 = conn
                 .query_row(
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
@@ -958,10 +987,14 @@ mod tests {
             [],
         )
         .unwrap();
-        conn.execute("INSERT INTO provider_models (provider_id, model_name, sort_order) VALUES (1, 'm2', 1)", [])
-            .unwrap();
+        conn.execute(
+            "INSERT INTO provider_models (provider_id, model_name, sort_order) VALUES (1, 'm2', 1)",
+            [],
+        )
+        .unwrap();
 
-        conn.execute("DELETE FROM providers WHERE id = 1", []).unwrap();
+        conn.execute("DELETE FROM providers WHERE id = 1", [])
+            .unwrap();
         let n: i64 = conn
             .query_row("SELECT COUNT(*) FROM provider_models", [], |r| r.get(0))
             .unwrap();
@@ -988,5 +1021,43 @@ mod tests {
         assert_eq!(name, "a/x");
         assert_eq!(prompt, 1.5);
         assert_eq!(completion, 2.5);
+    }
+
+    #[test]
+    fn migrate_creates_daily_request_stats_table_idempotently() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        // 建表 + 幂等重跑
+        conn.execute(
+            "INSERT INTO daily_request_stats
+             (day_start_unix, model_name, requests, input_tokens, output_tokens, use_time_ms)
+             VALUES (1700000000, 'gpt-4o', 3, 100, 20, 45)",
+            [],
+        )
+        .unwrap();
+        migrate(&conn).unwrap();
+        let (day, model, requests, input, output, use_time): (i64, String, i64, i64, i64, i64) = conn
+            .query_row(
+                "SELECT day_start_unix, model_name, requests, input_tokens, output_tokens, use_time_ms
+                 FROM daily_request_stats",
+                [],
+                |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                    ))
+                },
+            )
+            .unwrap();
+        assert_eq!(day, 1700000000);
+        assert_eq!(model, "gpt-4o");
+        assert_eq!(requests, 3);
+        assert_eq!(input, 100);
+        assert_eq!(output, 20);
+        assert_eq!(use_time, 45);
     }
 }

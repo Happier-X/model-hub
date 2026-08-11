@@ -19,10 +19,15 @@ pub struct Stores {
 
 impl Stores {
     pub fn new(db: DbConn) -> Self {
-        Self {
+        let stores = Self {
             db,
             change_listeners: Arc::new(Mutex::new(Vec::new())),
+        };
+        // 旧库升级：聚合表为空时从现存明细幂等重建（失败仅告警，下次启动重试；不阻断启动）。
+        if let Err(error) = stores.backfill_daily_stats() {
+            tracing::warn!(%error, "回填 daily_request_stats 失败");
         }
+        stores
     }
 
     /// 注册变更回调，监听请求日志写入。锁异常时静默跳过，不影响业务主路径。

@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "request_logs 保留策略（7 天/10000 条）与费用按 model_pricing 现算的既有契约——本任务的核心冲突来源与不变项；实施后需更新该 spec 新增聚合表说明"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "质量门禁：cargo test 全量、cargo build、不依赖外网的单元测试要求"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "写入/回填失败的降级边界：insert_log_best_effort 不阻断代理主路径，backfill 失败仅 warn 不阻断启动"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "明细写入 → 聚合 upsert → 统计查询 → 前端卡片的跨层数据流契约"}
