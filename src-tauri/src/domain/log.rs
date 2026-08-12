@@ -587,7 +587,7 @@ impl Stores {
     }
 
     /// 首页统计总览：总计 + 今日（仅成功请求：2xx 且 error 为空）。
-    /// 费用字段本期恒 0，单价配置在后续任务引入。
+    /// 费用按 `model_pricing` 单价现算（token × 单价 / 1e6）。
     pub fn request_overview(&self) -> Result<RequestOverview, AppError> {
         let (start_ts, end_ts) = local_day_bounds_unix();
         let total = self.overview_row(None)?;
@@ -1705,6 +1705,46 @@ mod tests {
         let overview = stores.request_overview().unwrap();
         assert_eq!(overview.total.requests, 2);
         assert_eq!(overview.today.requests, 2);
+    }
+
+    #[test]
+    fn clear_logs_keeps_daily_stats() {
+        let (_dir, stores) = setup();
+        // 走 insert_log 写入一条成功请求（同事务累加聚合行）。
+        stores
+            .insert_log(NewRequestLog {
+                group_name: "g".into(),
+                provider_name: "p".into(),
+                upstream_model: "m".into(),
+                status_code: 200,
+                use_time_ms: 10,
+                input_tokens: 100,
+                output_tokens: 20,
+                ..Default::default()
+            })
+            .unwrap();
+        // 再补一条历史聚合行（模拟已被 purge 的旧明细累计），与明细无关。
+        let yesterday = local_day_start_unix(chrono::Local::now().timestamp()) - 86_400;
+        insert_stats_day(&stores, yesterday, "old-model", 5, 1000, 200, 50);
+
+        let before = stores.request_overview().unwrap();
+        assert_eq!(before.total.requests, 6, "明细 1 + 聚合历史 5");
+
+        stores.clear_logs().unwrap();
+
+        // 明细清空，但聚合表与累计统计保留。
+        let detail_count: i64 = stores
+            .with_conn(|conn| {
+                conn.query_row("SELECT COUNT(*) FROM request_logs", [], |r| r.get(0))
+                    .map_err(|e| AppError::Database(e.to_string()))
+            })
+            .unwrap();
+        assert_eq!(detail_count, 0, "clear_logs 只清明细");
+        let after = stores.request_overview().unwrap();
+        assert_eq!(after.total.requests, 6, "清空日志列表不得抹掉累计统计");
+        assert_eq!(after.total.input_tokens, 1100);
+        assert_eq!(after.total.output_tokens, 220);
+        assert_eq!(after.total.use_time_ms, 60);
     }
 
     #[test]
