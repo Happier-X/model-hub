@@ -447,7 +447,7 @@ onMounted(refresh);
               :total="items.length"
               :items-per-page="pageSize"
             >
-              <PaginationContent v-slot="{ items: pageItems }" class="gap-0.5">
+              <PaginationContent v-slot="{ items: pageItems, page }" class="gap-0.5">
                 <PaginationPrevious>
                   <span class="hidden sm:block">上一页</span>
                 </PaginationPrevious>
@@ -455,6 +455,7 @@ onMounted(refresh);
                   <PaginationItem
                     v-if="item.type === 'page'"
                     :value="item.value"
+                    :is-active="item.value === page"
                   >
                     {{ item.value }}
                   </PaginationItem>
