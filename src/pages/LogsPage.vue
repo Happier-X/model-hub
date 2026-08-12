@@ -164,8 +164,12 @@ onMounted(() => {
             @update:page="goPage"
           >
             <PaginationContent v-slot="{ items: pageItems }" class="gap-0.5">
-              <PaginationFirst class="hidden sm:inline-flex" @click="goPage(1)" />
-              <PaginationPrevious @click="goPage(page - 1)" />
+              <PaginationFirst class="hidden sm:inline-flex" @click="goPage(1)">
+                <span class="hidden sm:block">首页</span>
+              </PaginationFirst>
+              <PaginationPrevious @click="goPage(page - 1)">
+                <span class="hidden sm:block">上一页</span>
+              </PaginationPrevious>
               <template v-for="item in pageItems" :key="item.type + item.value">
                 <PaginationItem
                   v-if="item.type === 'page'"
@@ -177,8 +181,12 @@ onMounted(() => {
                 </PaginationItem>
                 <PaginationEllipsis v-else-if="item.type === 'ellipsis'" />
               </template>
-              <PaginationNext @click="goPage(page + 1)" />
-              <PaginationLast class="hidden sm:inline-flex" @click="goPage(totalPages)" />
+              <PaginationNext @click="goPage(page + 1)">
+                <span class="hidden sm:block">下一页</span>
+              </PaginationNext>
+              <PaginationLast class="hidden sm:inline-flex" @click="goPage(totalPages)">
+                <span class="hidden sm:block">末页</span>
+              </PaginationLast>
             </PaginationContent>
           </Pagination>
         </div>

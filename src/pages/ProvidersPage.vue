@@ -63,7 +63,6 @@ const defaultFormValues: ProviderFormValues = {
 const items = ref<Provider[]>([]);
 const page = ref(1);
 const pageSize = 10;
-const totalPages = computed(() => Math.max(1, Math.ceil(items.value.length / pageSize) || 1));
 const pagedItems = computed(() => items.value.slice((page.value - 1) * pageSize, page.value * pageSize));
 
 const providerColumns: { key: string; title: string }[] = [
@@ -194,10 +193,6 @@ async function remove(id: number) {
   } catch (e) {
     error.value = extractInvokeError(e);
   }
-}
-
-function goPage(next: number) {
-  page.value = Math.min(Math.max(1, next), totalPages.value);
 }
 
 /** 上次同步时间展示：null/0 → 「未同步」；否则本地时间格式化。 */
@@ -450,27 +445,33 @@ onMounted(refresh);
           <!-- 分页器：表格滚动区之后，不随表格滚动 -->
           <div v-if="items.length > pageSize" class="flex shrink-0 justify-end">
             <Pagination
-              :page="page"
+              v-model:page="page"
               :total="items.length"
               :page-size="pageSize"
-              @update:page="goPage"
+              :sibling-count="1"
             >
               <PaginationContent v-slot="{ items: pageItems }" class="gap-0.5">
-                <PaginationFirst class="hidden sm:inline-flex" @click="goPage(1)" />
-                <PaginationPrevious @click="goPage(page - 1)" />
+                <PaginationFirst class="hidden sm:inline-flex">
+                  <span class="hidden sm:block">首页</span>
+                </PaginationFirst>
+                <PaginationPrevious>
+                  <span class="hidden sm:block">上一页</span>
+                </PaginationPrevious>
                 <template v-for="item in pageItems" :key="item.type + item.value">
                   <PaginationItem
                     v-if="item.type === 'page'"
                     :value="item.value"
-                    :is-active="item.value === page"
-                    @click="goPage(item.value)"
                   >
                     {{ item.value }}
                   </PaginationItem>
                   <PaginationEllipsis v-else-if="item.type === 'ellipsis'" />
                 </template>
-                <PaginationNext @click="goPage(page + 1)" />
-                <PaginationLast class="hidden sm:inline-flex" @click="goPage(totalPages)" />
+                <PaginationNext>
+                  <span class="hidden sm:block">下一页</span>
+                </PaginationNext>
+                <PaginationLast class="hidden sm:inline-flex">
+                  <span class="hidden sm:block">末页</span>
+                </PaginationLast>
               </PaginationContent>
             </Pagination>
           </div>
