@@ -12,9 +12,7 @@ import {
   Pagination,
   PaginationContent,
   PaginationEllipsis,
-  PaginationFirst,
   PaginationItem,
-  PaginationLast,
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
@@ -451,9 +449,6 @@ onMounted(refresh);
               :sibling-count="1"
             >
               <PaginationContent v-slot="{ items: pageItems }" class="gap-0.5">
-                <PaginationFirst class="hidden sm:inline-flex">
-                  <span class="hidden sm:block">首页</span>
-                </PaginationFirst>
                 <PaginationPrevious>
                   <span class="hidden sm:block">上一页</span>
                 </PaginationPrevious>
@@ -469,9 +464,6 @@ onMounted(refresh);
                 <PaginationNext>
                   <span class="hidden sm:block">下一页</span>
                 </PaginationNext>
-                <PaginationLast class="hidden sm:inline-flex">
-                  <span class="hidden sm:block">末页</span>
-                </PaginationLast>
               </PaginationContent>
             </Pagination>
           </div>

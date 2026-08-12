@@ -1,14 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Pagination,
   PaginationContent,
   PaginationEllipsis,
-  PaginationFirst,
   PaginationItem,
-  PaginationLast,
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
@@ -164,9 +162,6 @@ onMounted(() => {
             @update:page="goPage"
           >
             <PaginationContent v-slot="{ items: pageItems }" class="gap-0.5">
-              <PaginationFirst class="hidden sm:inline-flex" @click="goPage(1)">
-                <span class="hidden sm:block">首页</span>
-              </PaginationFirst>
               <PaginationPrevious @click="goPage(page - 1)">
                 <span class="hidden sm:block">上一页</span>
               </PaginationPrevious>
@@ -184,9 +179,6 @@ onMounted(() => {
               <PaginationNext @click="goPage(page + 1)">
                 <span class="hidden sm:block">下一页</span>
               </PaginationNext>
-              <PaginationLast class="hidden sm:inline-flex" @click="goPage(totalPages)">
-                <span class="hidden sm:block">末页</span>
-              </PaginationLast>
             </PaginationContent>
           </Pagination>
         </div>
