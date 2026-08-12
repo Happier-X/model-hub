@@ -445,8 +445,7 @@ onMounted(refresh);
             <Pagination
               v-model:page="page"
               :total="items.length"
-              :page-size="pageSize"
-              :sibling-count="1"
+              :items-per-page="pageSize"
             >
               <PaginationContent v-slot="{ items: pageItems }" class="gap-0.5">
                 <PaginationPrevious>

@@ -157,7 +157,7 @@ onMounted(() => {
           <Pagination
             :page="page"
             :total="total"
-            :page-size="pageSize"
+            :items-per-page="pageSize"
             :disabled="loading"
             @update:page="goPage"
           >
