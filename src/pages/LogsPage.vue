@@ -106,11 +106,6 @@ onMounted(() => {
     <p v-if="error" class="shrink-0 text-sm text-destructive">{{ error }}</p>
 
     <Card class="min-h-0 flex-1 flex flex-col">
-      <CardHeader class="shrink-0 py-3">
-        <p class="text-sm text-muted-foreground">
-          共 {{ total }} 条 · 库内 {{ storedTotal }} 条 · 第 {{ page }} / {{ totalPages }} 页
-        </p>
-      </CardHeader>
       <CardContent class="flex min-h-0 flex-1 flex-col gap-3">
         <!-- 表格区：flex-1 min-h-0 overflow-y-auto 仅表格 body 滚动 -->
         <div class="min-h-0 flex-1 overflow-y-auto">
