@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, watch } from "vue";
+import { XIcon } from "@lucide/vue";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -62,6 +63,7 @@ function requestClose() {
         :class="size === 'wide' ? 'max-w-3xl' : 'max-w-lg'"
         :close-on-esc="!closeDisabled"
         :close-on-overlay="!closeDisabled"
+        :show-close-button="false"
       >
         <DialogHeader>
           <DialogTitle>
@@ -72,13 +74,18 @@ function requestClose() {
         </DialogHeader>
         <slot />
         <DialogClose
+          as-child
           :disabled="closeDisabled"
-          class="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
-          aria-label="关闭对话框"
           @click="requestClose"
         >
-          <Button variant="ghost" size="sm" type="button" class="h-6 w-6 p-0" aria-label="关闭对话框">
-            ×
+          <Button
+            variant="ghost"
+            size="sm"
+            type="button"
+            class="absolute right-4 top-4 size-7 rounded-sm p-0 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            aria-label="关闭对话框"
+          >
+            <XIcon class="size-4" />
           </Button>
         </DialogClose>
       </DialogContent>
