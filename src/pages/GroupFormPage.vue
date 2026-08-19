@@ -262,6 +262,8 @@ function resetFormToDefault() {
 
 onMounted(async () => {
   await refreshProviders();
+  // 预加载榜单，让编辑态打开即显示匹配分数（不阻塞页面渲染）
+  void loadLeaderboard(false);
   if (route.name !== "groups-edit") {
     // 新建：直接展示空表单
     resetFormToDefault();
