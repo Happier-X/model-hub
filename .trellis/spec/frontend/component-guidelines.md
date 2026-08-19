@@ -127,7 +127,8 @@
 
 ## 对话框合同
 
-- 通用外壳使用 `src/components/AppDialog.vue`（**内部**基于 shadcn `Dialog` 的薄封装），页面保留表单和领域保存逻辑，不引入页面专用遮罩实现。**当前仅供应商页使用**；分组新建/编辑已迁独立路由页（`GroupFormPage`，见 §17），不得回归对话框。
+- 通用外壳使用 `src/components/AppDialog.vue`（**内部**基于 shadcn `Dialog` 的薄封装），页面保留表单和领域保存逻辑，不引入页面专用遮罩实现。**当前用于供应商页「新建/编辑」与「删除二次确认」**；分组新建/编辑已迁独立路由页（`GroupFormPage`，见 §17），不得回归对话框；分组卡片删除走卡片内覆盖层（§16）。
+- 二次确认（非表单）也复用 `AppDialog`：标题用动作 + 名词（如「删除供应商」），正文一行说明 + 操作后果，文案保留原 `confirm()` 文案语义（如「确认删除该供应商？该操作不可撤销。」）；主操作按钮 `variant="destructive"` + loading 文案（例如「删除中…」），取消按钮 `variant="outline"`，删除中 `closeDisabled` + 主操作 `:disabled` 防止重复触发；异步删除失败走页面级 `error` 回显并关闭弹窗，避免重复请求。状态用 `deleteDialogOpen / pendingDeleteId / deleting` 三个 ref 驱动。**禁止** `window.confirm` / `window.alert`（§16 已约束分组卡片；供应商页同样适用）。
 - 对外 props 保持：`open` / `title` / `size`（`default`|`wide`）/ `closeDisabled`、`@close`。
 - 适配：`open` ↔ `Dialog v-model:open`；`closeDisabled` 时 `DialogContent` 的 `close-on-esc`/`close-on-overlay` 为 false 并忽略关闭更新；宽度由 `DialogContent` 的 class 控制（`max-w-lg` / `max-w-3xl`），关闭按钮用 `DialogClose` + `Button`（`@click` 里按 `closeDisabled` 守卫 `emit("close")`）；标题区用 `DialogHeader > DialogTitle`。
 - 必须 Teleport 到 `body`（`Dialog` 内部 `DialogPortal` 已默认 teleport 到 body，避免主区 `overflow` 裁切）；关闭后恢复焦点（`AppDialog` 用 watch 保存/恢复 `document.activeElement`）。焦点陷阱以 reka-ui `Dialog` 行为为准。

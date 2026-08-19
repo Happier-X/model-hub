@@ -75,6 +75,10 @@ const message = ref("");
 const editingProviderId = ref<number | null>(null);
 const dialogOpen = ref(false);
 const saving = ref(false);
+// 删除供应商二次确认对话框：pendingDeleteId 持有待删 id，deleting 防删除中重复操作/关闭
+const deleteDialogOpen = ref(false);
+const pendingDeleteId = ref<number | null>(null);
+const deleting = ref(false);
 const pasteText = ref("");
 // 行内启用开关进行中的 id 集合，用于 disabled 防重复点击
 const togglingIds = ref<Set<number>>(new Set());
@@ -183,14 +187,34 @@ function closeDialog() {
   resetForm();
 }
 
-async function remove(id: number) {
-  if (!confirm("确认删除该供应商？")) return;
+/** 点「删除」：打开二次确认对话框，不立即删除。 */
+function requestRemove(id: number) {
+  pendingDeleteId.value = id;
+  deleteDialogOpen.value = true;
+}
+
+/** 对话框确认：执行删除并刷新。 */
+async function confirmRemove() {
+  const id = pendingDeleteId.value;
+  if (id === null || deleting.value) return;
+  deleting.value = true;
+  error.value = "";
   try {
     await deleteProvider(id);
+    closeDeleteDialog();
     await refresh();
   } catch (e) {
     error.value = extractInvokeError(e);
+    closeDeleteDialog();
+  } finally {
+    deleting.value = false;
   }
+}
+
+/** 关闭删除确认对话框并清空待删 id。 */
+function closeDeleteDialog() {
+  deleteDialogOpen.value = false;
+  pendingDeleteId.value = null;
 }
 
 /** 上次同步时间展示：null/0 → 「未同步」；否则本地时间格式化。 */
@@ -354,6 +378,35 @@ onMounted(refresh);
       </section>
     </AppDialog>
 
+    <AppDialog
+      :open="deleteDialogOpen"
+      title="删除供应商"
+      :close-disabled="deleting"
+      @close="closeDeleteDialog"
+    >
+      <section class="app-delete-confirm-body">
+        <p class="text-sm text-foreground">确认删除该供应商？该操作不可撤销。</p>
+        <div class="mt-5 flex flex-wrap gap-2">
+          <Button
+            variant="destructive"
+            type="button"
+            :disabled="deleting"
+            @click="confirmRemove"
+          >
+            {{ deleting ? "删除中…" : "删除" }}
+          </Button>
+          <Button
+            variant="outline"
+            type="button"
+            :disabled="deleting"
+            @click="closeDeleteDialog"
+          >
+            取消
+          </Button>
+        </div>
+      </section>
+    </AppDialog>
+
     <Card class="min-h-0 flex-1 flex flex-col">
       <CardHeader class="shrink-0 py-3">
         <div class="flex items-center justify-between gap-2">
@@ -423,7 +476,7 @@ onMounted(refresh);
                           variant="destructive"
                           size="sm"
                           type="button"
-                          @click="remove(row.id)"
+                          @click="requestRemove(row.id)"
                         >
                           删除
                         </Button>
