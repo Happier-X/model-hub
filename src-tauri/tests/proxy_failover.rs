@@ -26,7 +26,7 @@ fn setup_with_policy(policy: ForwardPolicy) -> Env {
     let dir = tempfile::tempdir().unwrap();
     let db = open_db(&dir.path().join("t.db")).unwrap();
     let stores = Stores::new(db);
-    let clients = UpstreamClients::new();
+    let clients = UpstreamClients::new(None);
     let state = AppState {
         stores: stores.clone(),
         clients,

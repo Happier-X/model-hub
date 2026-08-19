@@ -1,0 +1,8 @@
+{"file": "src-tauri/Cargo.toml", "reason": "reqwest 需添加 proxy + socks feature 启用代理支持"}
+{"file": "src-tauri/src/settings.rs", "reason": "ShellConfig 加 upstream_proxy_enabled/url/user/pass 四个字段，serde default 保证向后兼容"}
+{"file": "src-tauri/src/proxy/forward.rs", "reason": "UpstreamClients::new() 改为接受代理配置，注入 reqwest::Proxy；新增 ProxyConfig 结构体"}
+{"file": "src-tauri/src/proxy/runtime.rs", "reason": "RuntimeInner 持有 proxy_config，start() 时按配置重建 UpstreamClients；新增 set_upstream_proxy 方法"}
+{"file": "src-tauri/src/commands.rs", "reason": "新增 set_upstream_proxy command；ShellPrefs 加代理字段（不暴露密码）"}
+{"file": "src-tauri/src/lib.rs", "reason": "generate_handler! 注册 set_upstream_proxy"}
+{"file": "src/api/tauri.ts", "reason": "ShellPrefs interface 加代理字段；新增 setUpstreamProxy 方法"}
+{"file": "src/pages/SettingsPage.vue", "reason": "代理配置卡片新增启用开关 + 地址 + 用户名 + 密码 + 保存按钮"}

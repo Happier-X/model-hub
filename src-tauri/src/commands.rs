@@ -53,6 +53,9 @@ pub struct ShellPrefs {
     pub gateway_port: u16,
     pub check_update_on_startup: bool,
     pub overlay_enabled: bool,
+    pub upstream_proxy_enabled: bool,
+    pub upstream_proxy_url: String,
+    pub upstream_proxy_user: String,
 }
 
 fn shell_prefs(config: &crate::settings::ShellConfig) -> ShellPrefs {
@@ -60,6 +63,9 @@ fn shell_prefs(config: &crate::settings::ShellConfig) -> ShellPrefs {
         gateway_port: config.gateway_port,
         check_update_on_startup: config.check_update_on_startup,
         overlay_enabled: config.overlay_enabled,
+        upstream_proxy_enabled: config.upstream_proxy_enabled,
+        upstream_proxy_url: config.upstream_proxy_url.clone(),
+        upstream_proxy_user: config.upstream_proxy_user.clone(),
     }
 }
 
@@ -102,6 +108,29 @@ pub async fn set_overlay_enabled(app: AppHandle, enabled: bool) -> Result<ShellP
         return Err(InvokeError::from(error));
     }
 
+    Ok(shell_prefs(&cfg))
+}
+
+#[tauri::command]
+pub fn set_upstream_proxy(
+    app: AppHandle,
+    proxy: State<'_, ProxyHandle>,
+    enabled: bool,
+    url: String,
+    username: String,
+    password: String,
+) -> Result<ShellPrefs, InvokeError> {
+    let paths = paths::resolve_paths(&app).map_err(InvokeError::from)?;
+    let config_dir = std::path::Path::new(&paths.config_dir);
+    let mut cfg = crate::settings::load_shell_config(config_dir).map_err(InvokeError::from)?;
+    cfg.upstream_proxy_enabled = enabled;
+    cfg.upstream_proxy_url = url;
+    cfg.upstream_proxy_user = username;
+    cfg.upstream_proxy_pass = password;
+    crate::settings::save_shell_config(config_dir, &cfg).map_err(InvokeError::from)?;
+    proxy
+        .set_upstream_proxy(config_dir, &cfg)
+        .map_err(InvokeError::from)?;
     Ok(shell_prefs(&cfg))
 }
 

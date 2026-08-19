@@ -26,6 +26,18 @@ pub struct ShellConfig {
     pub overlay_x: Option<i32>,
     #[serde(default)]
     pub overlay_y: Option<i32>,
+    /// 上游代理是否启用。
+    #[serde(default)]
+    pub upstream_proxy_enabled: bool,
+    /// 上游代理地址，如 "http://127.0.0.1:7890" 或 "socks5://127.0.0.1:1080"。
+    #[serde(default)]
+    pub upstream_proxy_url: String,
+    /// 代理认证用户名（可选）。
+    #[serde(default)]
+    pub upstream_proxy_user: String,
+    /// 代理认证密码（可选）。
+    #[serde(default)]
+    pub upstream_proxy_pass: String,
 }
 
 impl Default for ShellConfig {
@@ -36,6 +48,10 @@ impl Default for ShellConfig {
             overlay_enabled: false,
             overlay_x: None,
             overlay_y: None,
+            upstream_proxy_enabled: false,
+            upstream_proxy_url: String::new(),
+            upstream_proxy_user: String::new(),
+            upstream_proxy_pass: String::new(),
         }
     }
 }
@@ -160,6 +176,7 @@ mod tests {
                 overlay_enabled: true,
                 overlay_x: Some(1200),
                 overlay_y: Some(720),
+                ..Default::default()
             },
         )
         .unwrap();
@@ -206,6 +223,7 @@ mod tests {
                 overlay_enabled: true,
                 overlay_x: Some(1234),
                 overlay_y: Some(567),
+                ..Default::default()
             },
         )
         .unwrap();
@@ -226,6 +244,7 @@ mod tests {
                 overlay_enabled: true,
                 overlay_x: Some(100),
                 overlay_y: Some(200),
+                ..Default::default()
             },
         )
         .unwrap();

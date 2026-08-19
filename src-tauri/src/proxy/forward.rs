@@ -46,6 +46,13 @@ impl Default for ForwardPolicy {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ProxyConfig {
+    pub url: String,
+    pub username: String,
+    pub password: String,
+}
+
 #[derive(Clone)]
 pub struct UpstreamClients {
     non_stream: Client,
@@ -53,23 +60,36 @@ pub struct UpstreamClients {
 }
 
 impl UpstreamClients {
-    pub fn new() -> Self {
-        let non_stream = Client::builder()
+    pub fn new(proxy: Option<&ProxyConfig>) -> Self {
+        let mut non_stream_builder = Client::builder()
             .timeout(NON_STREAM_TIMEOUT)
-            .connect_timeout(CONNECT_TIMEOUT)
-            .build()
-            .expect("http client");
-        let stream = Client::builder()
-            .connect_timeout(CONNECT_TIMEOUT)
-            .build()
-            .expect("stream http client");
+            .connect_timeout(CONNECT_TIMEOUT);
+        let mut stream_builder = Client::builder()
+            .connect_timeout(CONNECT_TIMEOUT);
+
+        if let Some(cfg) = proxy {
+            if !cfg.url.is_empty() {
+                if let Ok(p) = reqwest::Proxy::all(&cfg.url) {
+                    let p = if !cfg.username.is_empty() {
+                        p.basic_auth(&cfg.username, &cfg.password)
+                    } else {
+                        p
+                    };
+                    non_stream_builder = non_stream_builder.proxy(p.clone());
+                    stream_builder = stream_builder.proxy(p);
+                }
+            }
+        }
+
+        let non_stream = non_stream_builder.build().expect("http client");
+        let stream = stream_builder.build().expect("stream http client");
         Self { non_stream, stream }
     }
 }
 
 impl Default for UpstreamClients {
     fn default() -> Self {
-        Self::new()
+        Self::new(None)
     }
 }
 
@@ -1774,5 +1794,41 @@ data: {\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5}}
         let body = serde_json::json!({"model":"g","stream":false});
         let out = rewrite_model(&body, "gpt-5", "off", false);
         assert!(out.get("stream_options").is_none());
+    }
+
+    #[test]
+    fn upstream_clients_no_proxy() {
+        // 无代理时应正常构建
+        let _clients = UpstreamClients::new(None);
+    }
+
+    #[test]
+    fn upstream_clients_with_http_proxy() {
+        let cfg = ProxyConfig {
+            url: "http://127.0.0.1:7890".into(),
+            username: String::new(),
+            password: String::new(),
+        };
+        let _clients = UpstreamClients::new(Some(&cfg));
+    }
+
+    #[test]
+    fn upstream_clients_with_socks5_proxy() {
+        let cfg = ProxyConfig {
+            url: "socks5://127.0.0.1:1080".into(),
+            username: String::new(),
+            password: String::new(),
+        };
+        let _clients = UpstreamClients::new(Some(&cfg));
+    }
+
+    #[test]
+    fn upstream_clients_with_proxy_auth() {
+        let cfg = ProxyConfig {
+            url: "http://127.0.0.1:7890".into(),
+            username: "user".into(),
+            password: "pass".into(),
+        };
+        let _clients = UpstreamClients::new(Some(&cfg));
     }
 }

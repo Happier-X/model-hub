@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "组件规范：Field 体系、AppDialog、语义 token、Button variant 等 UI 约定"}
+{"file": ".trellis/spec/backend/index.md", "reason": "后端架构：Tauri 2 + Rust 壳 + 内嵌代理，管理面 IPC，客户端面 HTTP"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端概览：技术栈、信息架构、路由"}

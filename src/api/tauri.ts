@@ -157,6 +157,9 @@ export interface ShellPrefs {
   gateway_port: number;
   check_update_on_startup: boolean;
   overlay_enabled: boolean;
+  upstream_proxy_enabled: boolean;
+  upstream_proxy_url: string;
+  upstream_proxy_user: string;
 }
 
 export const getPaths = () => invoke<AppPaths>("get_paths");
@@ -169,6 +172,12 @@ export const setCheckUpdateOnStartup = (enabled: boolean) =>
   invoke<ShellPrefs>("set_check_update_on_startup", { enabled });
 export const setOverlayEnabled = (enabled: boolean) =>
   invoke<ShellPrefs>("set_overlay_enabled", { enabled });
+export const setUpstreamProxy = (payload: {
+  enabled: boolean;
+  url: string;
+  username: string;
+  password: string;
+}) => invoke<ShellPrefs>("set_upstream_proxy", payload);
 export const saveOverlayPosition = (x: number, y: number) =>
   invoke<void>("save_overlay_position", { x, y });
 export const showMainWindow = () => invoke<void>("show_main_window");

@@ -128,6 +128,7 @@ pub fn run() {
             commands::get_shell_prefs,
             commands::set_check_update_on_startup,
             commands::set_overlay_enabled,
+            commands::set_upstream_proxy,
             commands::save_overlay_position,
             commands::show_main_window,
             commands::list_providers,

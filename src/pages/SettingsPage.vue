@@ -19,6 +19,7 @@ import {
   relaunchApp,
   setCheckUpdateOnStartup,
   setOverlayEnabled,
+  setUpstreamProxy,
   type AppPaths,
   type DownloadEvent,
   type ProxyStatus,
@@ -50,6 +51,12 @@ const downloadTotal = ref<number | null>(null);
 const checkUpdateOnStartup = ref(false);
 const overlayEnabled = ref(false);
 const prefsLoading = ref(false);
+// 上游代理配置
+const proxyEnabled = ref(false);
+const proxyUrl = ref("");
+const proxyUser = ref("");
+const proxyPass = ref("");
+const proxySaving = ref(false);
 
 const updateBusy = computed(
   () =>
@@ -212,6 +219,9 @@ async function refresh() {
       const prefs = await getShellPrefs();
       checkUpdateOnStartup.value = prefs.check_update_on_startup;
       overlayEnabled.value = prefs.overlay_enabled;
+      proxyEnabled.value = prefs.upstream_proxy_enabled;
+      proxyUrl.value = prefs.upstream_proxy_url;
+      proxyUser.value = prefs.upstream_proxy_user;
     } catch {
       /* 偏好读取失败不阻塞配置页 */
     }
@@ -223,6 +233,29 @@ async function refresh() {
     error.value = "";
   } catch (e) {
     error.value = extractInvokeError(e);
+  }
+}
+
+async function saveProxy() {
+  proxySaving.value = true;
+  message.value = "";
+  try {
+    const prefs = await setUpstreamProxy({
+      enabled: proxyEnabled.value,
+      url: proxyUrl.value.trim(),
+      username: proxyUser.value.trim(),
+      password: proxyPass.value,
+    });
+    proxyEnabled.value = prefs.upstream_proxy_enabled;
+    proxyUrl.value = prefs.upstream_proxy_url;
+    proxyUser.value = prefs.upstream_proxy_user;
+    proxyPass.value = "";
+    message.value = proxyEnabled.value ? "上游代理已更新" : "上游代理已关闭";
+    error.value = "";
+  } catch (e) {
+    error.value = extractInvokeError(e);
+  } finally {
+    proxySaving.value = false;
   }
 }
 
@@ -299,6 +332,61 @@ onUnmounted(() => {
       <p v-if="error || status?.last_error" class="mt-3 text-sm text-destructive">
         {{ error || status?.last_error }}
       </p>
+      <div class="mt-5 border-t border-border pt-4">
+        <h3 class="mb-3 text-sm font-medium">上游代理</h3>
+        <div class="mb-3">
+          <Field orientation="horizontal">
+            <Checkbox
+              id="proxy-enabled"
+              :model-value="proxyEnabled"
+              :disabled="proxySaving"
+              @update:model-value="proxyEnabled = $event === true"
+            />
+            <FieldLabel for="proxy-enabled">通过代理访问上游供应商</FieldLabel>
+          </Field>
+        </div>
+        <div v-if="proxyEnabled" class="flex flex-col gap-3">
+          <Field>
+            <FieldLabel>代理地址</FieldLabel>
+            <Input
+              v-model="proxyUrl"
+              :disabled="proxySaving"
+              placeholder="http://127.0.0.1:7890 或 socks5://127.0.0.1:1080"
+            />
+          </Field>
+          <div class="grid gap-3 md:grid-cols-2">
+            <Field>
+              <FieldLabel>用户名（可选）</FieldLabel>
+              <Input
+                v-model="proxyUser"
+                :disabled="proxySaving"
+                placeholder="留空则不认证"
+              />
+            </Field>
+            <Field>
+              <FieldLabel>密码（可选）</FieldLabel>
+              <Input
+                v-model="proxyPass"
+                type="password"
+                :disabled="proxySaving"
+                placeholder="留空则不认证"
+              />
+            </Field>
+          </div>
+        </div>
+        <Button
+          variant="default"
+          type="button"
+          class="mt-3"
+          :disabled="proxySaving"
+          @click="saveProxy"
+        >
+          {{ proxySaving ? "保存中…" : "保存代理设置" }}
+        </Button>
+        <p class="mt-2 text-xs text-muted-foreground">
+          修改后代理会自动重启以应用新配置。支持 HTTP/HTTPS 和 SOCKS5 协议。
+        </p>
+      </div>
       <p class="mt-2 text-xs text-muted-foreground">
         若首选端口被占用，会自动向后寻找可用端口并写入配置，不会结束占用进程。改口后若用
         Pi，请到「分组」页重新「配置到 Pi」。

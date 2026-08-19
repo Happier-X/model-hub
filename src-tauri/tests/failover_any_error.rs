@@ -25,7 +25,7 @@ fn setup() -> Env {
     let stores = Stores::new(open_db(&dir.path().join("t.db")).unwrap());
     let router = build_router(AppState {
         stores: stores.clone(),
-        clients: UpstreamClients::new(),
+        clients: UpstreamClients::new(None),
         forward_policy: ForwardPolicy::default(),
     });
     Env {

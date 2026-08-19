@@ -11,7 +11,7 @@ use tokio::sync::oneshot;
 use crate::db::{default_db_path, open_db};
 use crate::domain::Stores;
 use crate::error::AppError;
-use crate::proxy::forward::{ForwardPolicy, UpstreamClients};
+use crate::proxy::forward::{ForwardPolicy, ProxyConfig, UpstreamClients};
 use crate::proxy::server::{self, AppState};
 use crate::settings::{self, DEFAULT_PORT};
 
@@ -67,6 +67,8 @@ struct RuntimeInner {
     live: Option<LiveProxy>,
     stores: Option<Stores>,
     clients: UpstreamClients,
+    /// 上游代理配置快照（与 ShellConfig 同步）。
+    proxy_config: Option<ProxyConfig>,
     /// 请求日志变更回调（由壳层注入，把领域变更转成 tauri 全局事件；测试/未注入为 None）。
     /// 用 Arc 共享：listener 在 stores 创建时注册一次，之后可随时替换回调。
     change_callback: Arc<Mutex<Option<Box<dyn Fn() + Send + Sync>>>>,
@@ -105,6 +107,21 @@ impl ProxyHandle {
             .thread_name("model-hub-proxy")
             .build()
             .map_err(|e| AppError::ProxyStart(format!("创建 tokio runtime 失败: {e}")))?;
+        // 读取代理配置
+        let proxy_config = config_dir.as_ref().and_then(|dir| {
+            let cfg = settings::load_shell_config(dir).ok()?;
+            if cfg.upstream_proxy_enabled && !cfg.upstream_proxy_url.is_empty() {
+                Some(ProxyConfig {
+                    url: cfg.upstream_proxy_url,
+                    username: cfg.upstream_proxy_user,
+                    password: cfg.upstream_proxy_pass,
+                })
+            } else {
+                None
+            }
+        });
+        let clients = UpstreamClients::new(proxy_config.as_ref());
+
         Ok(Self {
             inner: Mutex::new(RuntimeInner {
                 host: DEFAULT_HOST.to_string(),
@@ -116,7 +133,8 @@ impl ProxyHandle {
                 port_note: None,
                 live: None,
                 stores: None,
-                clients: UpstreamClients::new(),
+                clients,
+                proxy_config,
                 change_callback: Arc::new(Mutex::new(None)),
             }),
             tokio_rt,
@@ -334,6 +352,34 @@ impl ProxyHandle {
             Ok(running)
         })?;
 
+        if was_running {
+            let _ = self.stop();
+            return self.start();
+        }
+        self.status_snapshot()
+    }
+
+    pub fn set_upstream_proxy(
+        &self,
+        config_dir: &std::path::Path,
+        cfg: &settings::ShellConfig,
+    ) -> Result<ProxyStatus, AppError> {
+        let proxy_config = if cfg.upstream_proxy_enabled && !cfg.upstream_proxy_url.is_empty() {
+            Some(ProxyConfig {
+                url: cfg.upstream_proxy_url.clone(),
+                username: cfg.upstream_proxy_user.clone(),
+                password: cfg.upstream_proxy_pass.clone(),
+            })
+        } else {
+            None
+        };
+        let clients = UpstreamClients::new(proxy_config.as_ref());
+        let was_running = self.with_inner(|inner| {
+            inner.proxy_config = proxy_config;
+            inner.clients = clients;
+            inner.config_dir = Some(config_dir.to_path_buf());
+            Ok(matches!(inner.state, ProxyState::Running))
+        })?;
         if was_running {
             let _ = self.stop();
             return self.start();
