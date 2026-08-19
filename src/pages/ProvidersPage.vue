@@ -288,7 +288,7 @@ onMounted(refresh);
     >
       <section>
         <p v-if="editingProviderId !== null" class="mb-4 text-sm text-info">正在编辑供应商</p>
-        <div class="mb-4 rounded-lg border border-dashed border-info/30 bg-info/5 p-3">
+        <div class="mb-4 rounded-lg bg-muted/50 p-3">
           <div class="mb-2 text-sm font-medium text-foreground">粘贴快速添加</div>
           <p class="mb-2 text-xs text-muted-foreground">
             支持 NewAPI 分享 JSON（含
